@@ -4,11 +4,7 @@
   "description": "Estadísticas del equipo: partidos, box score y clasificación",
   "start_url": "./index.html",
   "scope": "./",
-  "display": "fullscreen",
-  "display_override": [
-    "fullscreen",
-    "standalone"
-  ],
+  "display": "standalone",
   "orientation": "portrait",
   "background_color": "#100a06",
   "theme_color": "#241a12",
