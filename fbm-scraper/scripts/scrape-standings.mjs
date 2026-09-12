@@ -2,6 +2,13 @@
 // for a specific grupo and writes them into the app's `standings_entries` Supabase
 // table, replacing whatever was there before.
 //
+// Which Temporada / Categoría / Fase / Grupo to scrape is NOT hardcoded here anymore:
+// it's read every run from the `club_settings` table (columns fbm_temporada,
+// fbm_categoria, fbm_fase, fbm_grupo), which you edit from the app itself, in
+// "Mi Equipo" -> "Fuente de clasificación (FBM)". That way, changing phase or
+// rolling over to a new season is just editing those fields in the app -- no code
+// changes and no touching this file.
+//
 // Why Playwright and not a plain HTTP fetch: fbm.es's "Horarios y resultados" /
 // "Temporadas anteriores" page is a classic ASP.NET WebForms app. Selecting each
 // filter (Categoría, Grupo, ...) fires a real postback tied to server-side session
@@ -26,17 +33,18 @@ if (!SERVICE_KEY) {
   process.exit(1);
 }
 
-// --- FBM filter selections for this team's league. Update these if the category,
-// phase or group changes in a future season (e.g. she moves up an age group). ---
 const FBM_URL = 'https://www.fbm.es/es/temporadas-anteriores';
-const CATEGORIA_LABEL = 'Alv Fem 1ºaño LIGA MARCO ALDANY';
-const GRUPO_LABEL = 'GRUPO 2';
-// Fallback own-team name match if club_settings can't be read for any reason.
+
+// Used only if club_settings has no fbm_categoria / fbm_grupo / team_name configured
+// yet (e.g. right after installing this for the very first time). Fill in the real
+// values from the app as soon as you can -- these fallbacks are just a safety net.
+const FALLBACK_CATEGORIA = 'Alv Fem 1ºaño LIGA MARCO ALDANY';
+const FALLBACK_GRUPO = 'GRUPO 2';
 const FALLBACK_OWN_TEAM = 'DISTRITO OLIMPICO ARRANZ';
 
 function normalize(s) {
   return (s || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip accents
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
     .toUpperCase()
     .replace(/\s+/g, ' ')
     .trim();
@@ -60,38 +68,81 @@ async function supabaseRequest(path, opts = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-async function getOwnTeamName() {
+// Reads the club's own team name and the FBM target (temporada/categoria/fase/grupo)
+// from club_settings, falling back to hardcoded defaults for anything not set.
+async function getFbmTarget() {
+  const target = {
+    teamName: FALLBACK_OWN_TEAM,
+    temporada: '',
+    categoria: FALLBACK_CATEGORIA,
+    fase: '',
+    grupo: FALLBACK_GRUPO,
+    usedFallbackCategoria: true,
+    usedFallbackGrupo: true
+  };
   try {
-    const rows = await supabaseRequest('/rest/v1/club_settings?select=team_name&limit=1');
-    if (rows && rows[0] && rows[0].team_name) return rows[0].team_name;
+    const rows = await supabaseRequest('/rest/v1/club_settings?select=team_name,fbm_temporada,fbm_categoria,fbm_fase,fbm_grupo&limit=1');
+    const row = rows && rows[0];
+    if (row) {
+      if (row.team_name) target.teamName = row.team_name;
+      if (row.fbm_temporada) target.temporada = row.fbm_temporada;
+      if (row.fbm_categoria) { target.categoria = row.fbm_categoria; target.usedFallbackCategoria = false; }
+      if (row.fbm_fase) target.fase = row.fbm_fase;
+      if (row.fbm_grupo) { target.grupo = row.fbm_grupo; target.usedFallbackGrupo = false; }
+    }
   } catch (e) {
-    console.warn('Could not read club_settings.team_name, falling back to hardcoded name:', e.message);
+    console.warn('Could not read club_settings, falling back to hardcoded defaults:', e.message);
   }
-  return FALLBACK_OWN_TEAM;
+  return target;
 }
 
-async function scrapeStandings() {
+async function scrapeStandings(target) {
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined });
   const page = await browser.newPage();
   try {
     await page.goto(FBM_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(800);
 
+    // Temporada is optional: only touch it if configured, since changing it can
+    // reset the Categoría list below it. Leave it alone otherwise (defaults to
+    // whatever season the page loads with, normally the current one).
+    if (target.temporada) {
+      const temporadaSelect = page.locator('select[id$="DDLTemporadas"]');
+      if (await temporadaSelect.count()) {
+        await temporadaSelect.selectOption({ label: target.temporada });
+        await page.waitForTimeout(1800);
+      } else {
+        console.warn('fbm_temporada is configured ("' + target.temporada + '") but no Temporada dropdown was found on the page -- continuing with the page\'s default season.');
+      }
+    }
+
     // Select Categoría -- triggers a postback that also refreshes Fase/Grupo.
     const categoriaSelect = page.locator('select[id$="DDLCategorias"]');
-    await categoriaSelect.selectOption({ label: CATEGORIA_LABEL });
+    await categoriaSelect.selectOption({ label: target.categoria });
     await page.waitForTimeout(1800);
 
-    // Select Grupo (Fase resolves itself automatically when there's only one option).
+    // Fase is optional: most categories only have one, which the page resolves on
+    // its own. Only select it explicitly if configured (e.g. once a 2nd phase starts).
+    if (target.fase) {
+      const faseSelect = page.locator('select[id$="DDLFases"]');
+      if (await faseSelect.count()) {
+        await faseSelect.selectOption({ label: target.fase });
+        await page.waitForTimeout(1800);
+      } else {
+        console.warn('fbm_fase is configured ("' + target.fase + '") but no Fase dropdown was found on the page -- continuing.');
+      }
+    }
+
+    // Select Grupo.
     const grupoSelect = page.locator('select[id$="DDLGrupos"]');
-    await grupoSelect.selectOption({ label: GRUPO_LABEL });
+    await grupoSelect.selectOption({ label: target.grupo });
     await page.waitForTimeout(1800);
 
     // Sanity check we actually landed on the right filters before trusting the table.
     const categoriaSelected = await categoriaSelect.locator('option:checked').innerText();
     const grupoSelected = await grupoSelect.locator('option:checked').innerText();
-    if (!categoriaSelected.includes('Alv Fem 1') || !grupoSelected.includes('GRUPO 2')) {
-      throw new Error('Filters did not land where expected (categoria="' + categoriaSelected + '", grupo="' + grupoSelected + '"). The FBM site may have changed its layout -- check scripts/scrape-standings.mjs.');
+    if (!normalize(categoriaSelected).includes(normalize(target.categoria)) || !normalize(grupoSelected).includes(normalize(target.grupo))) {
+      throw new Error('Filters did not land where expected (categoria="' + categoriaSelected + '", grupo="' + grupoSelected + '"). Check that fbm_categoria/fbm_grupo in club_settings match the exact label text on fbm.es, or that the FBM site hasn\'t changed its layout.');
     }
 
     const rows = await page.evaluate(() => {
@@ -154,17 +205,21 @@ async function writeStandings(rows, ownTeamName) {
 }
 
 (async () => {
-  console.log('Fetching own team name from club_settings...');
-  const ownTeamName = await getOwnTeamName();
-  console.log('Own team:', ownTeamName);
+  console.log('Reading FBM target (temporada/categoria/fase/grupo) from club_settings...');
+  const target = await getFbmTarget();
+  if (target.usedFallbackCategoria || target.usedFallbackGrupo) {
+    console.warn('fbm_categoria/fbm_grupo are not fully configured in club_settings yet -- using the built-in fallback values. Fill them in from the app (Mi Equipo) so this stays correct season to season.');
+  }
+  console.log('Own team:', target.teamName);
+  console.log('Target -> temporada: ' + (target.temporada || '(por defecto de la página)') + ' | categoria: ' + target.categoria + ' | fase: ' + (target.fase || '(auto)') + ' | grupo: ' + target.grupo);
 
-  console.log('Scraping standings from FBM (' + CATEGORIA_LABEL + ' / ' + GRUPO_LABEL + ')...');
-  const rows = await scrapeStandings();
+  console.log('Scraping standings from FBM...');
+  const rows = await scrapeStandings(target);
   console.log('Scraped ' + rows.length + ' teams:');
   rows.forEach(r => console.log('  ' + r.position + '. ' + r.team_name + ' -- ' + r.pj + 'PJ ' + r.pg + 'PG ' + r.pp + 'PP ' + r.pts + 'PTS'));
 
   console.log('Writing to Supabase (standings_entries)...');
-  await writeStandings(rows, ownTeamName);
+  await writeStandings(rows, target.teamName);
   console.log('Done.');
 })().catch(err => {
   console.error('Scrape failed:', err.message);
