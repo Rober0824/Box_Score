@@ -1,0 +1,32 @@
+name: Actualizar clasificación FBM
+
+on:
+  schedule:
+    # 07:00 UTC todos los días (~09:00 hora de Madrid en horario de verano,
+    # 08:00 en horario de invierno). Ajusta si prefieres otra hora.
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias
+        working-directory: fbm-scraper
+        run: npm install
+
+      - name: Instalar Chromium para Playwright
+        working-directory: fbm-scraper
+        run: npx playwright install --with-deps chromium
+
+      - name: Ejecutar scraper
+        working-directory: fbm-scraper
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/scrape-standings.mjs
