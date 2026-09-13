@@ -1,13 +1,20 @@
 // Scrapes the official FBM (Federación de Baloncesto de Madrid) league standings
-// for a specific grupo and writes them into the app's `standings_entries` Supabase
-// table, replacing whatever was there before.
+// for one or more "fases" (phases) and writes them into the app's
+// `standings_entries` Supabase table, replacing whatever was there before for
+// each fase.
 //
-// Which Temporada / Categoría / Fase / Grupo to scrape is NOT hardcoded here anymore:
-// it's read every run from the `club_settings` table (columns fbm_temporada,
-// fbm_categoria, fbm_fase, fbm_grupo), which you edit from the app itself, in
-// "Mi Equipo" -> "Fuente de clasificación (FBM)". That way, changing phase or
-// rolling over to a new season is just editing those fields in the app -- no code
-// changes and no touching this file.
+// Which page / fases to scrape is NOT hardcoded here anymore: it's read every
+// run from the `club_settings` table (columns fbm_url, team_name, and the
+// fbm_fases jsonb array -- each entry: { id, label, temporada, categoria,
+// fase, grupo }), which you edit from the app itself, in "Mi Equipo" -> "Admin"
+// -> "Fuente de Clasificación FBM". That way, adding a new phase, rolling over
+// to a new season, or the FBM site moving its page to a new URL is just
+// editing those fields in the app -- no code changes and no touching this file.
+//
+// Each fase is scraped independently (its own Temporada/Categoría/Fase/Grupo
+// selection) and written to standings_entries tagged with that fase's id, so
+// rows from one fase never clobber another's -- only that fase's own rows are
+// replaced.
 //
 // Why Playwright and not a plain HTTP fetch: fbm.es's "Horarios y resultados" /
 // "Temporadas anteriores" page is a classic ASP.NET WebForms app. Selecting each
@@ -33,14 +40,16 @@ if (!SERVICE_KEY) {
   process.exit(1);
 }
 
-const FBM_URL = 'https://www.fbm.es/es/temporadas-anteriores';
-
-// Used only if club_settings has no fbm_categoria / fbm_grupo / team_name configured
-// yet (e.g. right after installing this for the very first time). Fill in the real
-// values from the app as soon as you can -- these fallbacks are just a safety net.
+// Used only if club_settings has no fbm_fases configured yet (e.g. right after
+// installing this for the very first time, or an old install that hasn't been
+// migrated to the multi-fase config). Fill in real fases from the app (Admin ->
+// Fuente de Clasificación FBM) as soon as you can -- this fallback is just a
+// safety net so the daily run doesn't hard-break meanwhile.
+const FALLBACK_URL = 'https://www.fbm.es/es/temporadas-anteriores';
 const FALLBACK_CATEGORIA = 'Alv Fem 1ºaño LIGA MARCO ALDANY';
 const FALLBACK_GRUPO = 'GRUPO 2';
 const FALLBACK_OWN_TEAM = 'DISTRITO OLIMPICO ARRANZ';
+const FALLBACK_FASE_ID = 'fase-1';
 
 function normalize(s) {
   return (s || '')
@@ -68,39 +77,54 @@ async function supabaseRequest(path, opts = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-// Reads the club's own team name and the FBM target (temporada/categoria/fase/grupo)
-// from club_settings, falling back to hardcoded defaults for anything not set.
-async function getFbmTarget() {
-  const target = {
+// Reads the club's own team name, the shared FBM page URL, and the list of
+// fases to scrape from club_settings. Falls back to a single hardcoded fase
+// (the pre-multi-fase behaviour) if fbm_fases is missing or empty, so an
+// install that hasn't configured any fases yet (or is mid-migration) doesn't
+// just stop updating.
+async function getFbmConfig() {
+  const config = {
     teamName: FALLBACK_OWN_TEAM,
-    temporada: '',
-    categoria: FALLBACK_CATEGORIA,
-    fase: '',
-    grupo: FALLBACK_GRUPO,
-    usedFallbackCategoria: true,
-    usedFallbackGrupo: true
+    url: FALLBACK_URL,
+    fases: [{
+      id: FALLBACK_FASE_ID,
+      label: 'Fase 1',
+      temporada: '',
+      categoria: FALLBACK_CATEGORIA,
+      fase: '',
+      grupo: FALLBACK_GRUPO
+    }],
+    usedFallbackUrl: true,
+    usedFallbackFases: true
   };
   try {
-    const rows = await supabaseRequest('/rest/v1/club_settings?select=team_name,fbm_temporada,fbm_categoria,fbm_fase,fbm_grupo&limit=1');
+    const rows = await supabaseRequest('/rest/v1/club_settings?select=team_name,fbm_url,fbm_fases&limit=1');
     const row = rows && rows[0];
     if (row) {
-      if (row.team_name) target.teamName = row.team_name;
-      if (row.fbm_temporada) target.temporada = row.fbm_temporada;
-      if (row.fbm_categoria) { target.categoria = row.fbm_categoria; target.usedFallbackCategoria = false; }
-      if (row.fbm_fase) target.fase = row.fbm_fase;
-      if (row.fbm_grupo) { target.grupo = row.fbm_grupo; target.usedFallbackGrupo = false; }
+      if (row.team_name) config.teamName = row.team_name;
+      if (row.fbm_url) { config.url = row.fbm_url; config.usedFallbackUrl = false; }
+      if (Array.isArray(row.fbm_fases) && row.fbm_fases.length) {
+        config.fases = row.fbm_fases.map((f, i) => ({
+          id: f.id || ('fase-' + (i + 1)),
+          label: f.label || ('Fase ' + (i + 1)),
+          temporada: f.temporada || '',
+          categoria: f.categoria || '',
+          fase: f.fase || '',
+          grupo: f.grupo || ''
+        }));
+        config.usedFallbackFases = false;
+      }
     }
   } catch (e) {
     console.warn('Could not read club_settings, falling back to hardcoded defaults:', e.message);
   }
-  return target;
+  return config;
 }
 
-async function scrapeStandings(target) {
-  const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined });
+async function scrapeStandings(browser, url, target) {
   const page = await browser.newPage();
   try {
-    await page.goto(FBM_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(800);
 
     // Temporada is optional: only touch it if configured, since changing it can
@@ -112,7 +136,7 @@ async function scrapeStandings(target) {
         await temporadaSelect.selectOption({ label: target.temporada });
         await page.waitForTimeout(1800);
       } else {
-        console.warn('fbm_temporada is configured ("' + target.temporada + '") but no Temporada dropdown was found on the page -- continuing with the page\'s default season.');
+        console.warn('temporada is configured ("' + target.temporada + '") but no Temporada dropdown was found on the page -- continuing with the page\'s default season.');
       }
     }
 
@@ -129,7 +153,7 @@ async function scrapeStandings(target) {
         await faseSelect.selectOption({ label: target.fase });
         await page.waitForTimeout(1800);
       } else {
-        console.warn('fbm_fase is configured ("' + target.fase + '") but no Fase dropdown was found on the page -- continuing.');
+        console.warn('fase is configured ("' + target.fase + '") but no Fase dropdown was found on the page -- continuing.');
       }
     }
 
@@ -142,7 +166,7 @@ async function scrapeStandings(target) {
     const categoriaSelected = await categoriaSelect.locator('option:checked').innerText();
     const grupoSelected = await grupoSelect.locator('option:checked').innerText();
     if (!normalize(categoriaSelected).includes(normalize(target.categoria)) || !normalize(grupoSelected).includes(normalize(target.grupo))) {
-      throw new Error('Filters did not land where expected (categoria="' + categoriaSelected + '", grupo="' + grupoSelected + '"). Check that fbm_categoria/fbm_grupo in club_settings match the exact label text on fbm.es, or that the FBM site hasn\'t changed its layout.');
+      throw new Error('Filters did not land where expected (categoria="' + categoriaSelected + '", grupo="' + grupoSelected + '"). Check that the categoria/grupo for this fase match the exact label text on fbm.es, or that the FBM site hasn\'t changed its layout.');
     }
 
     const rows = await page.evaluate(() => {
@@ -175,11 +199,11 @@ async function scrapeStandings(target) {
     }
     return rows;
   } finally {
-    await browser.close();
+    await page.close();
   }
 }
 
-async function writeStandings(rows, ownTeamName) {
+async function writeStandings(rows, ownTeamName, faseId) {
   const ownNormalized = normalize(ownTeamName);
   const payload = rows.map(r => ({
     position: r.position,
@@ -188,15 +212,17 @@ async function writeStandings(rows, ownTeamName) {
     pg: r.pg,
     pp: r.pp,
     pts: r.pts,
-    is_own_team: normalize(r.team_name) === ownNormalized
+    is_own_team: normalize(r.team_name) === ownNormalized,
+    fase_id: faseId
   }));
 
   if (!payload.some(r => r.is_own_team)) {
     console.warn('Warning: none of the scraped teams matched the club\'s own team name ("' + ownTeamName + '"). Writing anyway, but double check club_settings.team_name matches the FBM team name.');
   }
 
-  // Replace the whole table atomically-ish: delete everything, then insert the fresh set.
-  await supabaseRequest('/rest/v1/standings_entries?id=not.is.null', { method: 'DELETE' });
+  // Replace this fase's rows atomically-ish: delete only its previous rows,
+  // then insert the fresh set -- other fases' rows are left untouched.
+  await supabaseRequest('/rest/v1/standings_entries?fase_id=eq.' + encodeURIComponent(faseId), { method: 'DELETE' });
   await supabaseRequest('/rest/v1/standings_entries', {
     method: 'POST',
     headers: { Prefer: 'return=minimal' },
@@ -205,21 +231,43 @@ async function writeStandings(rows, ownTeamName) {
 }
 
 (async () => {
-  console.log('Reading FBM target (temporada/categoria/fase/grupo) from club_settings...');
-  const target = await getFbmTarget();
-  if (target.usedFallbackCategoria || target.usedFallbackGrupo) {
-    console.warn('fbm_categoria/fbm_grupo are not fully configured in club_settings yet -- using the built-in fallback values. Fill them in from the app (Mi Equipo) so this stays correct season to season.');
+  console.log('Reading FBM config (url + fases) from club_settings...');
+  const config = await getFbmConfig();
+  if (config.usedFallbackUrl || config.usedFallbackFases) {
+    console.warn('fbm_url/fbm_fases are not fully configured in club_settings yet -- using the built-in fallback values. Configure fases from the app (Mi Equipo -> Admin -> Fuente de Clasificación FBM) so this stays correct season to season, and if fbm.es ever moves its page to a new URL.');
   }
-  console.log('Own team:', target.teamName);
-  console.log('Target -> temporada: ' + (target.temporada || '(por defecto de la página)') + ' | categoria: ' + target.categoria + ' | fase: ' + (target.fase || '(auto)') + ' | grupo: ' + target.grupo);
+  console.log('Own team:', config.teamName);
+  console.log('Página: ' + config.url);
+  console.log('Fases a actualizar: ' + config.fases.length);
 
-  console.log('Scraping standings from FBM...');
-  const rows = await scrapeStandings(target);
-  console.log('Scraped ' + rows.length + ' teams:');
-  rows.forEach(r => console.log('  ' + r.position + '. ' + r.team_name + ' -- ' + r.pj + 'PJ ' + r.pg + 'PG ' + r.pp + 'PP ' + r.pts + 'PTS'));
+  const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined });
+  let anyFailed = false;
+  try {
+    for (const target of config.fases) {
+      console.log('--- ' + target.label + ' (id=' + target.id + ') ---');
+      console.log('Target -> temporada: ' + (target.temporada || '(por defecto de la página)') + ' | categoria: ' + target.categoria + ' | fase: ' + (target.fase || '(auto)') + ' | grupo: ' + target.grupo);
+      try {
+        console.log('Scraping standings from FBM...');
+        const rows = await scrapeStandings(browser, config.url, target);
+        console.log('Scraped ' + rows.length + ' teams:');
+        rows.forEach(r => console.log('  ' + r.position + '. ' + r.team_name + ' -- ' + r.pj + 'PJ ' + r.pg + 'PG ' + r.pp + 'PP ' + r.pts + 'PTS'));
 
-  console.log('Writing to Supabase (standings_entries)...');
-  await writeStandings(rows, target.teamName);
+        console.log('Writing to Supabase (standings_entries, fase_id=' + target.id + ')...');
+        await writeStandings(rows, config.teamName, target.id);
+        console.log(target.label + ': done.');
+      } catch (err) {
+        anyFailed = true;
+        console.error(target.label + ' failed: ' + err.message);
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+
+  if (anyFailed) {
+    console.error('One or more fases failed to update (see above). Fases that succeeded were still written.');
+    process.exit(1);
+  }
   console.log('Done.');
 })().catch(err => {
   console.error('Scrape failed:', err.message);
