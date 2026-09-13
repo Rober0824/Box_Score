@@ -1925,9 +1925,11 @@ function icon(name, size){
 
 function topbarHtml(g, opts){
   opts = opts||{};
-  var leftBtn = opts.backTo
-    ? '<button class="iconbtn" onclick="go(\''+opts.backTo+'\')">'+icon('back',18)+'</button>'
-    : '<button class="iconbtn" onclick="toggleMenu()">'+icon('menu',16)+'</button>';
+  // Antes el partido en curso abría aquí un menú (Continuar/Empezar nuevo/Volver a
+  // Partidos) que no aportaba nada: "Continuar" era lo mismo que cerrar el popup,
+  // y "Empezar partido nuevo" ya se hace de forma explícita (con su propio aviso
+  // de descartar) desde el "+" de la pantalla Partidos. Ahora es simplemente volver.
+  var leftBtn = '<button class="iconbtn" onclick="go(\''+(opts.backTo||'games')+'\')">'+icon('back',18)+'</button>';
   return ''+
   '<div class="topbar">'+
     leftBtn+
@@ -2044,7 +2046,7 @@ function renderSetup(){
   var roster = sortedRoster(g);
   var h = '';
   h += '<div class="header"><div class="header-row">'+
-        '<button class="iconbtn" onclick="toggleMenu()">'+icon('menu',16)+'</button>'+
+        '<button class="iconbtn" onclick="go(\'games\')">'+icon('back',18)+'</button>'+
         '<div class="htitles"><div class="title">Nuevo partido</div></div>'+
        '</div></div>';
   h += '<div class="content">';
@@ -2641,18 +2643,21 @@ function matchRowHtml(g, isLive){
   var d = matchDateObj(g);
   var kindLabel = {liga:'Liga', torneo:'Torneo', amistoso:'Amistoso'}[g.kind||'liga'];
   var onclick = isLive ? "resumeCurrent()" : "openArchivedGame('"+g.id+"')";
+  // Editar/borrar (incluido un partido en curso) es cosa solo del admin.
+  var canManage = isAdmin();
   return '<div class="gamerow" style="margin-top:8px;padding:0">'+
     '<div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;cursor:pointer" onclick="'+onclick+'">'+
     '<div><div class="gname">'+esc(g.teamName)+' vs '+esc(g.rivalName||'Rival')+'</div>'+
     '<div class="gdate">'+(isLive?'En curso &middot; ':'')+d.toLocaleDateString('es-ES')+' &middot; '+kindLabel+(g.jornada?(' J'+g.jornada):'')+'</div></div>'+
     '<div class="gscore">'+(isLive?'':(teamScore(g)+' – '+rivalScore(g)))+'</div>'+
     '</div>'+
-    (isLive?'':'<button class="editbtn" style="margin-right:2px;flex-shrink:0" onclick="event.stopPropagation();openEditMatch(\''+g.id+'\')">'+icon('pencil',14)+'</button>')+
-    (isLive?'':'<button class="rmbtn" style="margin-right:12px;flex-shrink:0" onclick="event.stopPropagation();confirmDeleteMatch(\''+g.id+'\')">'+icon('trash',15)+'</button>')+
+    (canManage?'<button class="editbtn" style="margin-right:2px;flex-shrink:0" onclick="event.stopPropagation();openEditMatch(\''+g.id+'\')">'+icon('pencil',14)+'</button>':'')+
+    (canManage?'<button class="rmbtn" style="margin-right:12px;flex-shrink:0" onclick="event.stopPropagation();confirmDeleteMatch(\''+g.id+'\')">'+icon('trash',15)+'</button>':'')+
     '</div>';
 }
 var editMatchDraft = null;
 function openEditMatch(id){
+  if(!isAdmin()) return;
   var g = getGameById(id);
   if(!g) return;
   editMatchDraft = { id:id, rivalName:g.rivalName||'', kind:g.kind||'liga', jornada:g.jornada||1, matchDate:matchDateStr(g) };
@@ -2668,6 +2673,7 @@ function edField(field, value){
 }
 async function saveEditMatch(){
   if(!editMatchDraft) return;
+  if(!isAdmin()){ editMatchDraft = null; render(); return; }
   var g = getGameById(editMatchDraft.id);
   if(!g){ editMatchDraft = null; render(); return; }
   g.rivalName = editMatchDraft.rivalName;
@@ -2706,12 +2712,17 @@ function editMatchOverlay(){
     '</div></div>';
 }
 function confirmDeleteMatch(id){
+  if(!isAdmin()) return;
   var g = getGameById(id);
   if(!g) return;
-  askConfirm('Borrar partido', 'Se borrará '+g.teamName+' vs '+(g.rivalName||'Rival')+' y todas sus estadísticas. Esta acción no se puede deshacer.', 'Borrar', function(){ deleteMatch(id); });
+  var isLive = !!(S.current && S.current.id===id);
+  var msg = 'Se borrará '+g.teamName+' vs '+(g.rivalName||'Rival')+(isLive?' (partido en curso)':'')+' y todas sus estadísticas. Esta acción no se puede deshacer.';
+  askConfirm('Borrar partido', msg, 'Borrar', function(){ deleteMatch(id); });
 }
 async function deleteMatch(id){
+  if(!isAdmin()){ showToast('Solo un administrador puede borrar partidos.'); return; }
   if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); return; }
+  if(S.current && S.current.id===id){ S.current = null; }
   S.games = S.games.filter(function(g){ return g.id!==id; });
   saveState();
   render();
