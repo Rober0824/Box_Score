@@ -337,11 +337,25 @@
   .printsectitle{ font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-dim); margin-bottom:10px; }
 
   @media print{
-    html, body{ background:#fff !important; }
-    body *{ visibility:hidden; }
-    #printArea, #printArea *{ visibility:visible; }
+    html, body{ background:#fff !important; height:auto !important; overflow:visible !important; }
+    /* El body normal es position:fixed + inset:0 (para que la app se comporte
+       como una pantalla de móvil) -- eso por sí solo ya recorta cualquier
+       contenido a la altura de la pantalla aunque #app esté oculto y el resto
+       tenga overflow:visible, porque "fixed + inset:0" fija el tamaño de la
+       caja al viewport. Hay que anularlo explícitamente para imprimir. */
+    body{ position:static !important; inset:auto !important; display:block !important; }
+    /* Antes se ocultaba todo con visibility:hidden y #printArea se sacaba del
+       flujo con position:absolute -- en el "Compartir" -> "Imprimir"/PDF del
+       iPhone (WKWebView) eso recorta el documento a una sola página: todo lo
+       que quede más abajo de esa primera pantalla (la tabla de jugadoras)
+       simplemente no llega a exportarse, no es que pase a una página 2.
+       Ahora en su lugar se oculta #app entero (que es donde vive TODA la app,
+       incluida cualquier ventana abierta) con display:none y #printArea se
+       queda en flujo normal (position:static), para que la paginación real
+       a varias páginas funcione como en cualquier documento HTML normal. */
+    #app{ display:none !important; }
     #printArea{
-      display:block; position:absolute; top:0; left:0; width:100%; padding:10px 14px 30px;
+      display:block; position:static; width:100%; padding:10px 14px 30px;
       --bg:#ffffff; --surface:#ffffff; --surface-2:#f2efe9; --border:#d9d3c9; --text:#221a14; --text-dim:#6c6259; --accent:#c2410c; --accent-ink:#ffffff; --good:#15803d; --bad:#b91c1c;
       background:#fff; color:#221a14;
     }
@@ -2985,6 +2999,7 @@ function openRenameSeason(seasonId){
   var s = byIdArr(seasons, seasonId);
   if(!s) return;
   seasonRenameDraft = { id:s.id, label:s.label||'' };
+  seasonSwitcherOpen = false; // si no, el sheet de temporadas (encima, más z-index) tapa este modal
   render();
 }
 function closeRenameSeason(){ seasonRenameDraft = null; render(); }
