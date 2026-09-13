@@ -62,6 +62,7 @@
   .rowcard .k{ color:var(--text-dim); font-size:13px; font-weight:600; flex-shrink:0; }
   .rowcard input[type=text]{ background:none; border:none; color:var(--text); font-weight:800; font-size:14px; text-align:right; flex:1; font-family:inherit; outline:none; }
   .rowcard input::placeholder{ color:var(--text-dim); font-weight:600; }
+  .rowcard input[type=date]{ background:none; border:none; color:var(--text); font-weight:800; font-size:14px; text-align:right; flex:1; font-family:inherit; outline:none; color-scheme:dark; }
 
   .chiprow{ display:flex; flex-wrap:wrap; gap:8px; }
   .chip{ padding:10px 14px; border-radius:10px; border:1px solid var(--border); background:var(--surface); font-size:13px; font-weight:700; color:var(--text-dim); }
@@ -865,7 +866,7 @@ async function pushMatch(g){
     kind: g.kind || 'liga',
     jornada: g.jornada || null,
     rival_name: g.rivalName || null,
-    played_at: new Date(g.createdAt||Date.now()).toISOString().slice(0,10),
+    played_at: matchDateStr(g),
     finished: !!g.finished,
     team_score: (typeof teamScore==='function') ? teamScore(g) : 0,
     rival_score: (typeof rivalScore==='function') ? rivalScore(g) : 0,
@@ -1094,6 +1095,23 @@ function renderStandingsEditor(){
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function byId(arr, id){ return arr.filter(function(x){return x.id===id;})[0]; }
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function pad2(n){ return (n<10?'0':'')+n; }
+function todayISO(){ var d = new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+// Fecha del partido: usa el campo explícito "matchDate" (yyyy-mm-dd, editable desde
+// la app) si existe; si no (partidos creados antes de que existiera este campo),
+// se deduce de cuándo se creó/terminó el partido, como se hacía antes.
+function matchDateStr(g){
+  if(g.matchDate) return g.matchDate;
+  var d = new Date(g.finishedAt||g.createdAt||Date.now());
+  return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+}
+// Devuelve un Date en hora LOCAL a partir de "yyyy-mm-dd" -- construirlo con
+// "new Date('yyyy-mm-dd')" lo interpreta como UTC y puede mostrar el día anterior
+// según la zona horaria del dispositivo.
+function matchDateObj(g){
+  var parts = matchDateStr(g).split('-');
+  return new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
+}
 
 function defaultRoster(){
   return [
@@ -1120,6 +1138,7 @@ function newGame(){
     id: uuidv4(),
     season_id: currentSeasonId,
     createdAt: Date.now(),
+    matchDate: todayISO(),
     teamName: clubSettings.team_name || 'Distrito Olímpico Arranz',
     rivalName: '',
     kind: 'liga',
@@ -1371,6 +1390,7 @@ function setRivalMode(full){
 }
 function setTeamName(v){ S.current.teamName = v; saveState(); }
 function setRivalName(v){ S.current.rivalName = v; saveState(); }
+function setMatchDate(v){ if(!v) return; S.current.matchDate = v; saveState(); render(); }
 function setGameKind(k){
   var g = S.current;
   g.kind = k;
@@ -2030,8 +2050,12 @@ function renderSetup(){
   h += '<div class="content">';
 
   h += '<div class="section"><div class="label">Equipos</div>'+
-       '<div class="rowcard"><div class="k">Tu equipo</div><input type="text" value="'+esc(g.teamName)+'" oninput="setTeamName(this.value)"></div>'+
+       '<div class="rowcard" style="cursor:pointer" onclick="openTeamSwitcher()"><div class="k">Tu equipo</div>'+
+         '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:6px;color:var(--text);font-weight:700;overflow:hidden">'+
+           '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(clubSettings.team_name||g.teamName||'Tu equipo')+'</span>'+icon('chevronRight',16)+
+         '</div></div>'+
        '<div class="rowcard"><div class="k">Rival</div><input type="text" placeholder="Nombre del rival" value="'+esc(g.rivalName)+'" oninput="setRivalName(this.value)"></div>'+
+       '<div class="rowcard"><div class="k">Fecha</div><input type="date" value="'+esc(g.matchDate||todayISO())+'" onchange="setMatchDate(this.value)"></div>'+
        '</div>';
 
   h += '<div class="section"><div class="label">Tipo de partido</div>'+
@@ -2444,7 +2468,7 @@ function buildPrintHtml(g){
   });
   rows.sort(function(a,b){return a.p.dorsal-b.p.dorsal;});
   var teamTotal = teamScore(g);
-  var d = new Date(g.finishedAt||g.createdAt);
+  var d = matchDateObj(g);
   var h = '';
   h += '<div class="printhead">';
   h += '<div class="printtitle">Box score</div>';
@@ -2614,7 +2638,7 @@ function renderGames(){
   return h;
 }
 function matchRowHtml(g, isLive){
-  var d = new Date(g.finishedAt||g.createdAt||Date.now());
+  var d = matchDateObj(g);
   var kindLabel = {liga:'Liga', torneo:'Torneo', amistoso:'Amistoso'}[g.kind||'liga'];
   var onclick = isLive ? "resumeCurrent()" : "openArchivedGame('"+g.id+"')";
   return '<div class="gamerow" style="margin-top:8px;padding:0">'+
@@ -2631,7 +2655,7 @@ var editMatchDraft = null;
 function openEditMatch(id){
   var g = getGameById(id);
   if(!g) return;
-  editMatchDraft = { id:id, rivalName:g.rivalName||'', kind:g.kind||'liga', jornada:g.jornada||1 };
+  editMatchDraft = { id:id, rivalName:g.rivalName||'', kind:g.kind||'liga', jornada:g.jornada||1, matchDate:matchDateStr(g) };
   render();
 }
 function closeEditMatch(){ editMatchDraft = null; render(); }
@@ -2640,6 +2664,7 @@ function edField(field, value){
   if(field==='kind'){ editMatchDraft.kind = value; if(value==='amistoso') editMatchDraft.jornada = null; else if(!editMatchDraft.jornada) editMatchDraft.jornada = 1; render(); }
   else if(field==='jornadaStep'){ editMatchDraft.jornada = Math.max(1, (editMatchDraft.jornada||1)+value); render(); }
   else if(field==='rivalName'){ editMatchDraft.rivalName = value; } // typed via oninput -- no render() here, or the input loses focus/closes the mobile keyboard on every keystroke
+  else if(field==='matchDate'){ if(value) editMatchDraft.matchDate = value; render(); }
 }
 async function saveEditMatch(){
   if(!editMatchDraft) return;
@@ -2648,6 +2673,7 @@ async function saveEditMatch(){
   g.rivalName = editMatchDraft.rivalName;
   g.kind = editMatchDraft.kind;
   g.jornada = editMatchDraft.kind==='amistoso' ? null : (editMatchDraft.jornada||1);
+  g.matchDate = editMatchDraft.matchDate;
   editMatchDraft = null;
   saveState(); render();
   if(sb){ try{ var res = await pushMatch(g); if(res && res.error) showToast('No se ha podido guardar el cambio.'); }catch(e){ showToast('No se ha podido guardar el cambio.'); } }
@@ -2659,6 +2685,9 @@ function editMatchOverlay(){
     '<div class="mhead"><div class="mtitle">Editar partido</div></div>'+
     '<div class="section"><div class="label">Rival</div>'+
       '<div class="rowcard"><div class="k">Nombre</div><input type="text" placeholder="Nombre del rival" value="'+esc(d.rivalName)+'" oninput="edField(\'rivalName\',this.value)"></div>'+
+    '</div>'+
+    '<div class="section"><div class="label">Fecha</div>'+
+      '<div class="rowcard"><div class="k">Fecha</div><input type="date" value="'+esc(d.matchDate)+'" onchange="edField(\'matchDate\',this.value)"></div>'+
     '</div>'+
     '<div class="section"><div class="label">Tipo de partido</div>'+
       '<div class="chiprow">'+
