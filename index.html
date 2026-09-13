@@ -455,6 +455,27 @@
   .rname{ font-weight:800; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .rmeta{ font-size:11px; color:var(--text-dim); font-weight:600; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ractions{ display:flex; gap:10px; }
+  .pastbadge{ font-size:9.5px; font-weight:800; letter-spacing:0.03em; text-transform:uppercase; padding:3px 8px; border-radius:999px; background:var(--surface-2); color:var(--text-dim); flex-shrink:0; }
+
+  /* ---------- selector de equipo / temporada, Nueva Temporada ---------- */
+  .teamrow{ display:flex; align-items:center; gap:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:13px 14px; cursor:pointer; }
+  .teamrow.on{ border-color:var(--accent); background:oklch(72% 0.18 45 / 12%); }
+  .teamavatar{ width:44px; height:44px; border-radius:999px; background:var(--surface); border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-family:'Oswald',sans-serif; font-weight:700; font-size:13px; flex-shrink:0; overflow:hidden; }
+  .teaminfo{ flex:1; min-width:0; }
+  .teaminfoname{ font-weight:700; font-size:14.5px; }
+  .teaminfosub{ font-size:11.5px; color:var(--text-dim); margin-top:2px; }
+  .badge{ font-size:9.5px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; padding:4px 9px; border-radius:999px; background:var(--accent); color:var(--accent-ink); flex-shrink:0; }
+  .badge.past{ background:var(--surface); color:var(--text-dim); border:1px solid var(--border); }
+  .seasonrow{ display:flex; align-items:center; justify-content:space-between; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:14px 16px; cursor:pointer; }
+  .seasonrow.on{ border-color:var(--accent); background:oklch(72% 0.18 45 / 12%); }
+  .seasonname{ font-family:'Oswald',sans-serif; font-weight:700; font-size:16px; }
+  .seasonsub{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+  .steplabel{ text-align:center; font-size:10.5px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-dim); padding:14px 0 4px; }
+  .inforow{ display:flex; align-items:flex-start; gap:10px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:12px 13px; }
+  .inforow svg{ flex-shrink:0; margin-top:1px; color:var(--accent); }
+  .inforowtxt{ font-size:12.5px; font-weight:600; color:var(--text); line-height:1.45; }
+  .inforowtxt b{ font-weight:800; }
+  .tag{ display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:800; letter-spacing:0.03em; text-transform:uppercase; color:var(--good); background:oklch(70% 0.17 145 / 14%); padding:4px 9px; border-radius:999px; align-self:flex-start; }
 </style>
 </head>
 <body>
@@ -472,7 +493,7 @@ function loadState(){
     var raw = localStorage.getItem(STORE_KEY);
     if(raw) return JSON.parse(raw);
   }catch(e){}
-  return { games: [], current: null, route: 'boot', routeParams: {} };
+  return { games: [], current: null, route: 'boot', routeParams: {}, currentTeamId: null, currentSeasonId: null };
 }
 function saveState(game){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }catch(e){}
@@ -485,6 +506,10 @@ var S = loadState();
    popup (ver maybeOfferResume) en lugar de navegar directamente a él. */
 S.route = 'home';
 S.routeParams = {};
+// el equipo/temporada que se estaban viendo se recuerdan entre sesiones (se
+// confirman o se corrigen en cuanto vuelve a cargar la lista real desde la nube)
+currentTeamId = S.currentTeamId || null;
+currentSeasonId = S.currentSeasonId || null;
 var resumePromptShown = false;
 
 /* ---------- Supabase (cloud backend) ---------- */
@@ -501,13 +526,33 @@ var authProfile = null;
 var authChecked = false;
 var authBusy = false;
 var authError = '';
-var pendingProfiles = [];
-var clubSettings = { team_name:'', category:'', logo_url:'', photo_url:'', fbm_url:'', fbm_temporada:'', fbm_categoria:'', fbm_fase:'', fbm_grupo:'', fbm_fases:[] };
+var clubSettings = { team_name:'', category:'', logo_url:'', photo_url:'', fbm_url:'', fbm_fases:[] };
 var selectedFaseId = null;
 var standings = [];
 var teamRoster = [];
 var cloudSaveTimer = null;
 var assetUploadBusy = false;
+
+/* ---------- equipos y temporadas ---------- */
+// "teams" y "seasons" son las filas reales de Supabase visibles para esta persona
+// (RLS ya se encarga de que solo aparezcan los equipos/temporadas a los que tiene
+// algún tipo de relación). "clubSettings" (arriba) sigue existiendo tal cual para
+// no tocar toda la pantalla de Inicio/Equipo/AdminFbm: se recalcula a partir del
+// equipo+temporada actuales cada vez que cambian (ver recomputeClubSettingsView).
+var teams = [];
+var seasons = [];
+var currentTeamId = null;
+var currentSeasonId = null;
+var currentTeam = null;
+var currentSeason = null;
+var myAccessRows = [];           // filas de team_season_access de esta persona (todas, cualquier estado)
+var pendingAccessRequests = [];  // solicitudes pendientes de la temporada actual (para la campanita de Inicio)
+var teamSwitcherOpen = false;
+var seasonSwitcherOpen = false;
+var nuevaTemporadaStep = 0;      // 0 = cerrado, 1 = paso 1, 2 = paso 2
+var nuevaTemporadaDraft = null;
+var usersFilterSeasonId = null;
+var usersScreenData = { pending:[], approved:[], others:[] };
 
 function uuidv4(){
   if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -528,14 +573,14 @@ async function bootAuth(){
     }
   }catch(e){}
   authChecked = true;
-  decideRouteAfterAuth();
+  await decideRouteAfterAuth();
   render();
   try{
     sb.auth.onAuthStateChange(function(_evt, session){
       var wasUser = authUser;
       authUser = (session && session.user) ? session.user : null;
       if(authUser && (!wasUser || wasUser.id!==authUser.id)){
-        loadProfile().then(function(){ decideRouteAfterAuth(); render(); });
+        loadProfile().then(function(){ return decideRouteAfterAuth(); }).then(function(){ render(); });
       } else if(!authUser){
         authProfile = null; S.route = 'login'; render();
       }
@@ -561,17 +606,51 @@ async function loadProfile(){
     }catch(e){ /* no se pudo crear el perfil; se reintentará en el siguiente acceso */ }
   }
 }
-function decideRouteAfterAuth(){
+var AUTH_ROUTES = ['login','register','pending','rejected','confirm','boot','pickTeam'];
+async function decideRouteAfterAuth(){
   if(!SUPABASE_CONFIGURED) return;
   if(!authUser){ S.route = 'login'; return; }
-  if(!authProfile || authProfile.status==='pending'){ S.route = 'pending'; return; }
-  if(authProfile.status==='rejected'){ S.route = 'rejected'; return; }
-  if(['login','register','pending','rejected','confirm','boot'].indexOf(S.route)!==-1 || !S.route){
-    S.route = 'home';
+  if(!authProfile){ S.route = 'pending'; return; }
+  await loadTeamsAndAccess();
+  if(isAdmin()){
+    if(AUTH_ROUTES.indexOf(S.route)!==-1 || !S.route) S.route = 'home';
+    loadPendingAccessRequests();
+    if(S.route==='home') maybeOfferResume();
+    return;
   }
-  syncFromCloud();
-  if(authProfile.role==='admin') loadPendingProfiles();
-  if(S.route==='home') maybeOfferResume();
+  var approved = myAccessRows.filter(function(r){ return r.status==='approved'; });
+  var pending = myAccessRows.filter(function(r){ return r.status==='pending'; });
+  if(approved.length){
+    if(AUTH_ROUTES.indexOf(S.route)!==-1 || !S.route) S.route = 'home';
+    if(S.route==='home') maybeOfferResume();
+    return;
+  }
+  if(pending.length){ S.route = 'pending'; return; }
+  if(myAccessRows.length){ S.route = 'rejected'; return; } // todas sus solicitudes fueron rechazadas
+  // cuenta recién creada, sin ninguna solicitud todavía: hace falta elegir a qué equipo pertenece
+  if(!teams.length){ S.route = 'pending'; return; }
+  if(teams.length===1){
+    await requestAccessToTeam(teams[0].id);
+    S.route = 'pending';
+    return;
+  }
+  S.route = 'pickTeam';
+}
+async function requestAccessToTeam(teamId){
+  if(!sb || !authUser || !teamId) return;
+  try{
+    var sr = await sb.from('seasons').select('id').eq('team_id', teamId).eq('is_current', true).maybeSingle();
+    var seasonId = sr && sr.data && sr.data.id;
+    if(!seasonId) return;
+    var ins = await sb.from('team_season_access').insert({ user_id: authUser.id, season_id: seasonId, status:'pending' });
+    if(!ins || !ins.error){
+      myAccessRows.push({ id:null, user_id:authUser.id, season_id:seasonId, status:'pending' });
+    }
+  }catch(e){}
+}
+function choosePickTeam(teamId){
+  authBusy = true; render();
+  requestAccessToTeam(teamId).then(function(){ authBusy=false; S.route='pending'; render(); });
 }
 
 async function doRegister(){
@@ -593,7 +672,7 @@ async function doRegister(){
       // el proyecto no exige confirmar el correo: ya hay sesión activa, creamos el perfil ya mismo
       authUser = user;
       await loadProfile();
-      S.route = 'pending';
+      await decideRouteAfterAuth();
     } else if(user){
       // el proyecto exige confirmar el correo antes de tener sesión;
       // el perfil se creará automáticamente en el primer inicio de sesión tras confirmarlo
@@ -616,7 +695,7 @@ async function doLogin(){
     if(res.error) throw res.error;
     authUser = res.data.user;
     await loadProfile();
-    decideRouteAfterAuth();
+    await decideRouteAfterAuth();
   }catch(e){
     authError = 'Correo o contraseña incorrectos.';
   }
@@ -624,59 +703,140 @@ async function doLogin(){
 }
 async function doLogout(){
   if(sb){ try{ await sb.auth.signOut(); }catch(e){} }
-  authUser = null; authProfile = null; menuOpen=false; S.route = 'login'; render();
+  authUser = null; authProfile = null; menuOpen=false; teams=[]; seasons=[]; myAccessRows=[];
+  currentTeamId=null; currentSeasonId=null; currentTeam=null; currentSeason=null;
+  S.route = 'login'; render();
 }
 
-async function loadPendingProfiles(){
-  if(!sb) return;
+/* ---------- equipos, temporadas y acceso ---------- */
+async function loadTeamsAndAccess(){
+  if(!sb || !authUser) return;
   try{
-    var res = await sb.from('profiles').select('*').eq('status','pending').order('created_at',{ascending:true});
-    pendingProfiles = (res && res.data) || [];
-  }catch(e){ pendingProfiles = []; }
+    var tr = await sb.from('teams').select('*').order('created_at',{ascending:true});
+    teams = (tr && tr.data) || [];
+  }catch(e){ teams = []; }
+  try{
+    var ar = await sb.from('team_season_access').select('*').eq('user_id', authUser.id);
+    myAccessRows = (ar && ar.data) || [];
+  }catch(e){ myAccessRows = []; }
+  await pickCurrentTeamAndSeason();
+}
+function byIdArr(arr, id){ return (arr||[]).filter(function(x){ return x.id===id; })[0] || null; }
+function saveSelectionLocally(){
+  S.currentTeamId = currentTeamId; S.currentSeasonId = currentSeasonId;
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }catch(e){}
+}
+async function pickCurrentTeamAndSeason(){
+  if(!teams.length){ currentTeamId=null; currentTeam=null; seasons=[]; currentSeasonId=null; currentSeason=null; recomputeClubSettingsView(); return; }
+  if(!currentTeamId || !teams.some(function(t){ return t.id===currentTeamId; })){
+    currentTeamId = teams[0].id;
+  }
+  currentTeam = byIdArr(teams, currentTeamId);
+  await loadSeasonsForCurrentTeam();
+}
+async function loadSeasonsForCurrentTeam(){
+  seasons = [];
+  if(!currentTeamId){ currentSeasonId=null; currentSeason=null; recomputeClubSettingsView(); return; }
+  try{
+    var sr = await sb.from('seasons').select('*').eq('team_id', currentTeamId).order('created_at',{ascending:false});
+    seasons = (sr && sr.data) || [];
+  }catch(e){ seasons = []; }
+  if(!currentSeasonId || !seasons.some(function(s){ return s.id===currentSeasonId; })){
+    var cur = seasons.filter(function(s){ return s.is_current; })[0];
+    currentSeasonId = cur ? cur.id : (seasons[0] ? seasons[0].id : null);
+  }
+  currentSeason = byIdArr(seasons, currentSeasonId);
+  saveSelectionLocally();
+  recomputeClubSettingsView();
+  await loadSeasonScopedData();
+}
+function recomputeClubSettingsView(){
+  clubSettings = {
+    team_name: (currentTeam && currentTeam.name) || '',
+    category: (currentTeam && currentTeam.category) || '',
+    logo_url: (currentTeam && currentTeam.logo_url) || '',
+    photo_url: (currentTeam && currentTeam.photo_url) || '',
+    fbm_url: (currentSeason && currentSeason.fbm_url) || '',
+    fbm_fases: (currentSeason && currentSeason.fbm_fases) || []
+  };
+}
+function switchTeam(teamId){
+  if(teamId===currentTeamId){ teamSwitcherOpen=false; render(); return; }
+  if(S.current && S.current.started && !S.current.finished){ showToast('Termina el partido en curso antes de cambiar de equipo.'); return; }
+  currentTeamId = teamId;
+  currentSeasonId = null; // se recalcula a la temporada actual de ese equipo
+  teamSwitcherOpen = false;
+  render();
+  pickCurrentTeamAndSeason().then(function(){ if(isAdmin()) loadPendingAccessRequests(); });
+}
+function switchSeason(seasonId){
+  if(seasonId===currentSeasonId){ seasonSwitcherOpen=false; render(); return; }
+  if(S.current && S.current.started && !S.current.finished){ showToast('Termina el partido en curso antes de cambiar de temporada.'); return; }
+  currentSeasonId = seasonId;
+  seasonSwitcherOpen = false;
+  render();
+  loadSeasonsForCurrentTeam().then(function(){ if(isAdmin()) loadPendingAccessRequests(); });
+}
+function openTeamSwitcher(){ teamSwitcherOpen = true; seasonSwitcherOpen=false; render(); }
+function closeTeamSwitcher(){ teamSwitcherOpen = false; render(); }
+function openSeasonSwitcher(){ seasonSwitcherOpen = true; teamSwitcherOpen=false; render(); }
+function closeSeasonSwitcher(){ seasonSwitcherOpen = false; render(); }
+
+async function loadPendingAccessRequests(){
+  if(!sb || !currentSeasonId){ pendingAccessRequests = []; render(); return; }
+  try{
+    var res = await sb.from('team_season_access').select('*, profiles(name,email)').eq('season_id', currentSeasonId).eq('status','pending').order('created_at',{ascending:true});
+    pendingAccessRequests = (res && res.data) || [];
+  }catch(e){ pendingAccessRequests = []; }
   render();
 }
-async function decideOnProfile(id, approve){
+async function decideOnAccessRequest(id, approve){
   if(!sb) return;
-  try{ await sb.from('profiles').update({ status: approve?'approved':'rejected' }).eq('id', id); }catch(e){}
-  loadPendingProfiles();
+  try{ await sb.from('team_season_access').update({ status: approve?'approved':'rejected', decided_at: new Date().toISOString() }).eq('id', id); }catch(e){}
+  loadPendingAccessRequests();
 }
 
-async function syncFromCloud(){
-  if(!sb) return;
+function hasApprovedAccessTo(seasonId){
+  if(isAdmin()) return true;
+  return myAccessRows.some(function(r){ return r.season_id===seasonId && r.status==='approved'; });
+}
+function canWriteCurrentSeason(){
+  return !!(currentSeason && currentSeason.is_current && hasApprovedAccessTo(currentSeasonId));
+}
+
+async function loadSeasonScopedData(){
+  if(!sb || !currentSeasonId){ standings=[]; teamRoster=[]; S.games=[]; S.current=null; render(); return; }
   try{
-    var cs = await sb.from('club_settings').select('*').eq('id',1).maybeSingle();
-    if(cs && cs.data) clubSettings = cs.data;
-  }catch(e){}
-  try{
-    var st = await sb.from('standings_entries').select('*').order('position',{ascending:true});
+    var st = await sb.from('standings_entries').select('*').eq('season_id', currentSeasonId).order('position',{ascending:true});
     standings = (st && st.data) || [];
-  }catch(e){}
+  }catch(e){ standings = []; }
   try{
-    var pl = await sb.from('players').select('*').eq('active',true).order('dorsal',{ascending:true});
+    var pl = await sb.from('players').select('*').eq('season_id', currentSeasonId).eq('active',true).order('dorsal',{ascending:true});
     teamRoster = (pl && pl.data) || [];
-  }catch(e){}
+  }catch(e){ teamRoster = []; }
   try{
-    var ms = await sb.from('matches').select('*').order('played_at',{ascending:false});
+    var ms = await sb.from('matches').select('*').eq('season_id', currentSeasonId).order('played_at',{ascending:false});
+    S.games = []; S.current = null;
     if(ms && ms.data && ms.data.length){
       S.games = ms.data.filter(function(row){ return row.finished; }).map(function(row){
         var g = row.data || {};
-        g.id = row.id; g.kind = row.kind; g.jornada = row.jornada;
+        g.id = row.id; g.kind = row.kind; g.jornada = row.jornada; g.season_id = row.season_id;
         return g;
       });
       var liveRow = ms.data.filter(function(row){ return !row.finished; })[0];
-      if(liveRow && (!S.current || S.current.id!==liveRow.id)){
+      if(liveRow){
         var g2 = liveRow.data || {};
-        g2.id = liveRow.id; g2.kind = liveRow.kind; g2.jornada = liveRow.jornada;
+        g2.id = liveRow.id; g2.kind = liveRow.kind; g2.jornada = liveRow.jornada; g2.season_id = liveRow.season_id;
         S.current = g2;
       }
-      try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }catch(e){}
     }
   }catch(e){}
+  saveSelectionLocally();
   render();
 }
 
 function scheduleCloudSave(game){
-  if(!sb || !authProfile || authProfile.status!=='approved') return;
+  if(!sb || !canWriteCurrentSeason()) return;
   if(!game) return;
   if(cloudSaveTimer) clearTimeout(cloudSaveTimer);
   cloudSaveTimer = setTimeout(function(){ pushMatch(game); }, 900);
@@ -685,6 +845,7 @@ async function pushMatch(g){
   if(!sb || !g) return;
   var row = {
     id: g.id,
+    season_id: g.season_id || currentSeasonId,
     kind: g.kind || 'liga',
     jornada: g.jornada || null,
     rival_name: g.rivalName || null,
@@ -695,48 +856,57 @@ async function pushMatch(g){
     data: g,
     created_by: authProfile ? authProfile.id : null
   };
+  if(!row.season_id) return { error: 'sin temporada seleccionada' };
   try{ return await sb.from('matches').upsert(row); }catch(e){ return { error: e }; }
 }
-// Two or more saveClubSettings() calls can overlap in flight (e.g. typing a field
-// while a photo upload is still saving, or adding a Fase right after editing the
-// Página FBM field). Each call merges its own patch into `clubSettings` right away
-// (so the UI/local state is always correct and instant), but the actual write to
-// Supabase is queued on `clubSettingsSaveChain` so the upserts always land in the
-// order they were called AND each one uploads the FULL, latest `clubSettings` at
-// the time it actually runs -- not a stale snapshot captured back when it was
-// queued. Without this, two overlapping upserts could finish out of order and the
-// later-queued (but earlier-finishing) one would silently overwrite a just-saved
-// change (a Fase, an uploaded photo, etc.) the next time the app reloaded.
-var clubSettingsSaveChain = Promise.resolve();
+// "clubSettings" (la copia local que usan las pantallas de Inicio/Equipo/AdminFbm)
+// junta campos que en Supabase viven en dos tablas distintas: el nombre/categoría/
+// escudo/foto pertenecen al EQUIPO ("teams"), mientras que la página y las fases de
+// la FBM pertenecen a la TEMPORADA actual ("seasons"). saveClubSettings reparte cada
+// patch a la tabla que corresponda. Sigue usando update() y no upsert() -- igual que
+// antes con club_settings.id=1 -- porque el equipo y la temporada actuales siempre
+// existen ya (se crean al darlos de alta), así que nunca hace falta el camino de
+// INSERT y no dependemos de que esa política esté bien configurada. Y como cada
+// llamada solo toca los campos concretos del patch (no la fila entera), dos guardados
+// que se solapen en vuelo ya no pueden pisarse el uno al otro como sí podía pasar
+// con el upsert() de la fila completa que usaba club_settings.
+var TEAM_SETTINGS_FIELDS = { team_name:'name', category:'category', logo_url:'logo_url', photo_url:'photo_url' };
+var SEASON_SETTINGS_FIELDS = { fbm_url:'fbm_url', fbm_fases:'fbm_fases' };
 async function saveClubSettings(patch){
   clubSettings = Object.assign({}, clubSettings, patch);
   render();
   if(!sb) return;
-  clubSettingsSaveChain = clubSettingsSaveChain.then(function(){
-    // update(), not upsert(): upsert() is implemented by Postgres as
-    // INSERT ... ON CONFLICT DO UPDATE, which means it always has to pass the
-    // table's INSERT row-level-security policy too -- even when the row
-    // already exists and only the UPDATE half actually runs. club_settings.id=1
-    // is a fixed singleton row that's always already there (see syncFromCloud
-    // above, which only ever reads it), so a plain update() covers every real
-    // case and avoids depending on an INSERT policy that may not be configured.
-    return sb.from('club_settings').update(clubSettings).eq('id', 1);
-  }).then(function(res){
-    if(res && res.error) showToast('No se ha podido guardar el equipo.');
-  }).catch(function(){
-    showToast('No se ha podido guardar el equipo.');
+  var teamPatch = {}, seasonPatch = {}, hasTeam=false, hasSeason=false;
+  Object.keys(patch).forEach(function(k){
+    if(TEAM_SETTINGS_FIELDS.hasOwnProperty(k)){ teamPatch[TEAM_SETTINGS_FIELDS[k]] = patch[k]; hasTeam = true; }
+    else if(SEASON_SETTINGS_FIELDS.hasOwnProperty(k)){ seasonPatch[SEASON_SETTINGS_FIELDS[k]] = patch[k]; hasSeason = true; }
   });
-  return clubSettingsSaveChain;
+  var jobs = [];
+  if(hasTeam && currentTeamId){
+    jobs.push(sb.from('teams').update(teamPatch).eq('id', currentTeamId).then(function(res){
+      if(res && res.error) showToast('No se ha podido guardar el equipo.');
+      else if(currentTeam) Object.assign(currentTeam, teamPatch);
+    }));
+  }
+  if(hasSeason && currentSeasonId){
+    jobs.push(sb.from('seasons').update(seasonPatch).eq('id', currentSeasonId).then(function(res){
+      if(res && res.error) showToast('No se ha podido guardar la temporada.');
+      else if(currentSeason) Object.assign(currentSeason, seasonPatch);
+    }));
+  }
+  try{ await Promise.all(jobs); }catch(e){ showToast('No se ha podido guardar el cambio.'); }
 }
 async function addTeamPlayer(dorsal, name){
-  if(!name) return;
-  var row = { id: uuidv4(), dorsal: dorsal||0, name: name, active: true };
+  if(!name || !currentSeasonId) return;
+  if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); return; }
+  var row = { id: uuidv4(), season_id: currentSeasonId, dorsal: dorsal||0, name: name, active: true };
   teamRoster.push(row);
   teamRoster.sort(function(a,b){ return a.dorsal-b.dorsal; });
   render();
   if(sb){ try{ await sb.from('players').insert(row); }catch(e){} }
 }
 async function removeTeamPlayer(id){
+  if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); return; }
   teamRoster = teamRoster.filter(function(p){ return p.id!==id; });
   render();
   if(sb){ try{ await sb.from('players').delete().eq('id', id); }catch(e){} }
@@ -744,6 +914,7 @@ async function removeTeamPlayer(id){
 async function updateTeamPlayer(id, field, value){
   var p = teamRoster.filter(function(x){ return x.id===id; })[0];
   if(!p) return;
+  if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); render(); return; }
   var patch = {};
   if(field==='dorsal'){ patch.dorsal = parseInt(value,10)||0; }
   else if(field==='name'){ value = (value||'').trim(); if(!value) { render(); return; } patch.name = value; }
@@ -815,9 +986,10 @@ async function uploadClubAsset(file, field){
   assetUploadBusy = false; render();
 }
 async function saveStandingsRow(row){
-  if(!sb) return;
+  if(!sb || !currentSeasonId) return;
+  row = Object.assign({}, row, { season_id: currentSeasonId });
   try{ await sb.from('standings_entries').upsert(row); }catch(e){}
-  var st = await sb.from('standings_entries').select('*').order('position',{ascending:true});
+  var st = await sb.from('standings_entries').select('*').eq('season_id', currentSeasonId).order('position',{ascending:true});
   standings = (st && st.data) || [];
   render();
 }
@@ -853,17 +1025,19 @@ function sdRemoveRow(i){
   render();
 }
 async function saveAllStandings(){
+  if(!currentSeasonId) return;
+  if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); go('home'); return; }
   standingsSaving = true; render();
   for(var i=0;i<standingsRemoved.length;i++){ await deleteStandingsRowSilent(standingsRemoved[i]); }
   for(var j=0;j<standingsDraft.length;j++){
     var row = standingsDraft[j];
     if(!row.team_name){ continue; }
-    var payload = { position:row.position, team_name:row.team_name, pj:row.pj, pg:row.pg, pp:row.pp, pts:row.pts, is_own_team:!!row.is_own_team };
+    var payload = { position:row.position, team_name:row.team_name, pj:row.pj, pg:row.pg, pp:row.pp, pts:row.pts, is_own_team:!!row.is_own_team, season_id: currentSeasonId };
     if(row.id) payload.id = row.id; else payload.id = uuidv4();
     try{ await sb.from('standings_entries').upsert(payload); }catch(e){}
   }
   try{
-    var st = await sb.from('standings_entries').select('*').order('position',{ascending:true});
+    var st = await sb.from('standings_entries').select('*').eq('season_id', currentSeasonId).order('position',{ascending:true});
     standings = (st && st.data) || [];
   }catch(e){}
   standingsSaving = false;
@@ -928,6 +1102,7 @@ function newGame(){
   var roster = baseRoster ? baseRoster.map(function(p){ return {id:uid(), dorsal:p.dorsal, name:p.name}; }) : defaultRoster();
   return {
     id: uuidv4(),
+    season_id: currentSeasonId,
     createdAt: Date.now(),
     teamName: clubSettings.team_name || 'Distrito Olímpico Arranz',
     rivalName: '',
@@ -1518,6 +1693,7 @@ function confirmFinishGame(){
   askConfirm('Finalizar partido', '¿Seguro que quieres finalizar el partido? No podrás seguir anotando.', 'Finalizar', finishGame);
 }
 function startNewGame(){
+  if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); return; }
   if(S.current && !S.current.finished){
     askConfirm('Nuevo partido', 'Tienes un partido en curso sin terminar. ¿Quieres descartarlo y empezar uno nuevo?', 'Descartar y empezar', function(){
       S.current = newGame();
@@ -1702,7 +1878,11 @@ function icon(name, size){
     bell:'<path d="M12 3a4 4 0 00-4 4v2.2c0 1.25-.42 2.46-1.2 3.44L5.5 15h13l-1.3-2.36c-.78-.98-1.2-2.19-1.2-3.44V7a4 4 0 00-4-4z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 18a2.5 2.5 0 005 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
     camera:'<path d="M4 8h3.3L8.7 6h6.6L16.7 8H20v11H4z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.3" stroke="currentColor" stroke-width="1.7"/>',
     arrowUp:'<path d="M12 19V5M6 11l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
-    arrowDown:'<path d="M12 5v14M6 13l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+    arrowDown:'<path d="M12 5v14M6 13l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    chevronDown:'<path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+    chevronRight:'<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+    users:'<path d="M17 20v-1.5a3.5 3.5 0 00-3.5-3.5h-5A3.5 3.5 0 005 18.5V20M9.5 11a3 3 0 100-6 3 3 0 000 6zM19 20v-1.5a3 3 0 00-2-2.83M15 4.2a3 3 0 010 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+    calendar:'<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M3 9h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none">'+(icons[name]||'')+'</svg>';
 }
@@ -1767,11 +1947,12 @@ function render(){
   var html = '';
   if(SUPABASE_CONFIGURED && !authChecked){
     html = renderBoot();
-  } else if(SUPABASE_CONFIGURED && ['login','register','pending','rejected','confirm'].indexOf(S.route)!==-1){
+  } else if(SUPABASE_CONFIGURED && ['login','register','pending','rejected','confirm','pickTeam'].indexOf(S.route)!==-1){
     if(S.route==='login') html = renderLogin();
     else if(S.route==='register') html = renderRegister();
     else if(S.route==='pending') html = renderPending();
     else if(S.route==='confirm') html = renderConfirmEmail();
+    else if(S.route==='pickTeam') html = renderPickTeam();
     else html = renderRejected();
   } else if(S.route==='approvals'){
     html = renderApprovals();
@@ -1787,6 +1968,7 @@ function render(){
       case 'team': html = renderTeamScreen(); break;
       case 'admin': html = renderAdminMenu(); break;
       case 'adminFbm': html = renderAdminFbmSource(); break;
+      case 'adminUsuarios': html = renderAdminUsuarios(); break;
       case 'diag': html = renderDiagnostics(); break;
       case 'stats': html = renderStats(); break;
       case 'setup': html = renderSetup(); break;
@@ -1808,6 +1990,10 @@ function render(){
   html += editMatchOverlay();
   html += editPlayerOverlay();
   html += faseModalOverlay();
+  html += teamSwitcherOverlay();
+  html += seasonSwitcherOverlay();
+  html += createTeamOverlay();
+  html += nuevaTemporadaOverlay();
   html += toastHtml();
   app.innerHTML = html;
 }
@@ -2415,6 +2601,7 @@ function confirmDeleteMatch(id){
   askConfirm('Borrar partido', 'Se borrará '+g.teamName+' vs '+(g.rivalName||'Rival')+' y todas sus estadísticas. Esta acción no se puede deshacer.', 'Borrar', function(){ deleteMatch(id); });
 }
 async function deleteMatch(id){
+  if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); return; }
   S.games = S.games.filter(function(g){ return g.id!==id; });
   saveState();
   render();
@@ -2502,6 +2689,10 @@ function renderAdminMenu(){
   h += '<div class="section">'+
     '<div class="navrow" style="cursor:pointer" onclick="go(\'adminFbm\')">'+
       '<div><div class="navlabel">Fuente de Clasificación FBM</div><div class="navsub">Página, temporada, categoría y fases</div></div>'+
+      '<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
+    '</div>'+
+    '<div class="navrow" style="cursor:pointer;margin-top:10px" onclick="openAdminUsuarios()">'+
+      '<div><div class="navlabel">Usuarios</div><div class="navsub">Solicitudes y accesos, por temporada</div></div>'+
       '<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
     '</div>'+
     '</div>';
@@ -2636,6 +2827,292 @@ async function forceRefreshFbm(){
   if(btn){ btn.disabled = false; btn.style.opacity = '1'; }
 }
 
+/* ---------- selector de equipo ---------- */
+function teamSwitcherOverlay(){
+  if(!teamSwitcherOpen) return '';
+  var h = '<div class="veilfull" onclick="if(event.target===this) closeTeamSwitcher()"><div class="sheet">';
+  h += '<div class="sheethead"><div><div class="shtitle">Cambiar de equipo</div></div>'+
+    '<button class="iconbtn" onclick="closeTeamSwitcher()">'+icon('x',14)+'</button></div>';
+  h += '<div class="sheetlist">';
+  teams.forEach(function(t){
+    var initials = (t.name||'?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+    h += '<div class="teamrow'+(t.id===currentTeamId?' on':'')+'" onclick="switchTeam(\''+t.id+'\')">'+
+      '<div class="teamavatar">'+(t.logo_url?('<img src="'+esc(t.logo_url)+'" style="width:100%;height:100%;object-fit:cover">'):esc(initials))+'</div>'+
+      '<div class="teaminfo"><div class="teaminfoname">'+esc(t.name||'Equipo')+'</div><div class="teaminfosub">'+esc(t.category||'')+'</div></div>'+
+      (t.id===currentTeamId ? '<div class="badge">Actual</div>' : icon('chevronRight',18))+
+      '</div>';
+  });
+  if(isAdmin()){
+    h += '<button class="addfase" onclick="openCreateTeam()">'+icon('plus',15)+' Añadir equipo</button>';
+  }
+  h += '</div></div></div>';
+  return h;
+}
+var createTeamDraft = null;
+function openCreateTeam(){
+  if(!isAdmin()) return;
+  createTeamDraft = { name:'', category:'', seasonLabel:'' };
+  teamSwitcherOpen = false;
+  render();
+}
+function closeCreateTeam(){ createTeamDraft = null; render(); }
+function ctField(field, value){ if(!createTeamDraft) return; createTeamDraft[field] = value; }
+async function saveCreateTeam(){
+  if(!createTeamDraft || !sb) return;
+  var name = (createTeamDraft.name||'').trim();
+  var seasonLabel = (createTeamDraft.seasonLabel||'').trim() || 'Temporada actual';
+  if(!name){ showToast('Ponle un nombre al equipo.'); return; }
+  try{
+    var tr = await sb.from('teams').insert({ name:name, category:(createTeamDraft.category||'').trim() }).select().maybeSingle();
+    if(tr.error || !tr.data) throw (tr.error || new Error('sin datos'));
+    var newTeamId = tr.data.id;
+    var sr = await sb.from('seasons').insert({ team_id:newTeamId, label:seasonLabel, is_current:true }).select().maybeSingle();
+    if(sr.error) throw sr.error;
+    createTeamDraft = null;
+    currentTeamId = newTeamId; currentSeasonId = null;
+    await loadTeamsAndAccess();
+    showToast('Equipo creado.');
+    go('team');
+  }catch(e){ showToast('No se ha podido crear el equipo.'); }
+}
+function createTeamOverlay(){
+  if(!createTeamDraft) return '';
+  var d = createTeamDraft;
+  return '<div class="veil"><div class="modal">'+
+    '<div class="mhead"><div class="mtitle">Nuevo equipo</div></div>'+
+    '<div class="section">'+
+      '<div class="rowcard"><div class="k">Nombre</div><input type="text" placeholder="Ej. Distrito Olímpico Arranz" value="'+esc(d.name)+'" oninput="ctField(\'name\',this.value)"></div>'+
+      '<div class="rowcard"><div class="k">Categoría</div><input type="text" placeholder="Ej. Infantil Femenino 2013" value="'+esc(d.category)+'" oninput="ctField(\'category\',this.value)"></div>'+
+      '<div class="rowcard"><div class="k">Temporada</div><input type="text" placeholder="Ej. 2025/26" value="'+esc(d.seasonLabel)+'" oninput="ctField(\'seasonLabel\',this.value)"></div>'+
+    '</div>'+
+    '<button class="fullbtn" onclick="saveCreateTeam()">Crear equipo</button>'+
+    '<div class="cancel" onclick="closeCreateTeam()">Cancelar</div>'+
+    '</div></div>';
+}
+
+/* ---------- selector de temporada + Nueva Temporada ---------- */
+function seasonSwitcherOverlay(){
+  if(!seasonSwitcherOpen) return '';
+  var h = '<div class="veilfull" onclick="if(event.target===this) closeSeasonSwitcher()"><div class="sheet">';
+  h += '<div class="sheethead"><div><div class="shtitle">Temporadas</div><div class="shsub">'+esc(currentTeam?currentTeam.name:'')+'</div></div>'+
+    '<button class="iconbtn" onclick="closeSeasonSwitcher()">'+icon('x',14)+'</button></div>';
+  h += '<div class="sheetlist">';
+  seasons.forEach(function(s){
+    h += '<div class="seasonrow'+(s.id===currentSeasonId?' on':'')+'" onclick="switchSeason(\''+s.id+'\')">'+
+      '<div><div class="seasonname">'+esc(s.label||'Temporada')+'</div><div class="seasonsub">'+(s.is_current?'Temporada actual':'Cerrada · solo consulta')+'</div></div>'+
+      '<div class="badge'+(s.is_current?'':' past')+'">'+(s.is_current?'Actual':'Cerrada')+'</div>'+
+      '</div>';
+  });
+  if(isAdmin() && currentSeason && currentSeason.is_current){
+    h += '<button class="addfase" style="margin-top:4px" onclick="openNuevaTemporada()">'+icon('plus',15)+' Nueva Temporada</button>'+
+      '<div class="caption" style="text-align:center">Cierra '+esc(currentSeason.label||'')+' y empieza una temporada nueva con la plantilla en blanco.</div>';
+  }
+  h += '</div></div></div>';
+  return h;
+}
+function openNuevaTemporada(){
+  if(!isAdmin() || !currentTeam || !currentSeason) return;
+  nuevaTemporadaDraft = {
+    fromSeasonId: currentSeason.id,
+    fromLabel: currentSeason.label,
+    newLabel: '',
+    fbm_url: currentSeason.fbm_url || '',
+    fbm_fases: JSON.parse(JSON.stringify(currentSeason.fbm_fases || []))
+  };
+  nuevaTemporadaStep = 1;
+  seasonSwitcherOpen = false;
+  render();
+}
+function closeNuevaTemporada(){ nuevaTemporadaStep = 0; nuevaTemporadaDraft = null; render(); }
+function ntField(field, value){ if(!nuevaTemporadaDraft) return; nuevaTemporadaDraft[field] = value; }
+function confirmNuevaTemporadaStep1(){
+  if(!nuevaTemporadaDraft) return;
+  nuevaTemporadaStep = 2;
+  render();
+}
+async function saveNuevaTemporada(){
+  if(!nuevaTemporadaDraft || !sb || !currentTeamId) return;
+  var d = nuevaTemporadaDraft;
+  var label = (d.newLabel||'').trim();
+  if(!label){ showToast('Ponle un nombre a la nueva temporada.'); nuevaTemporadaStep = 1; render(); return; }
+  try{
+    // la temporada que se cierra deja de ser "is_current" (solo puede haber una por
+    // equipo) y queda marcada como congelada: a partir de aquí el robot de la FBM
+    // deja de tocarla, así que su clasificación se queda tal cual para siempre.
+    await sb.from('seasons').update({ is_current:false, closed_at:new Date().toISOString(), standings_frozen:true }).eq('id', d.fromSeasonId);
+    var ins = await sb.from('seasons').insert({
+      team_id: currentTeamId,
+      label: label,
+      is_current: true,
+      fbm_url: d.fbm_url || '',
+      fbm_fases: d.fbm_fases || []
+    }).select().maybeSingle();
+    if(ins.error || !ins.data) throw (ins.error || new Error('sin datos'));
+    nuevaTemporadaStep = 0; nuevaTemporadaDraft = null;
+    currentSeasonId = ins.data.id;
+    await loadSeasonsForCurrentTeam();
+    showToast('Nueva temporada creada.');
+    go('team');
+  }catch(e){ showToast('No se ha podido crear la temporada nueva.'); }
+}
+function nuevaTemporadaOverlay(){
+  if(!nuevaTemporadaStep || !nuevaTemporadaDraft) return '';
+  var d = nuevaTemporadaDraft;
+  if(nuevaTemporadaStep===1){
+    return '<div class="veil"><div class="modal">'+
+      '<div class="mhead"><div class="mtitle">Nueva Temporada</div>'+
+      '<div class="msub">Vas a cerrar <b>'+esc(d.fromLabel)+'</b> de '+esc(currentTeam?currentTeam.name:'')+'. La categoría, la plantilla y quién tiene acceso pueden cambiar por completo — nada se da por hecho.</div></div>'+
+      '<div class="section" style="gap:10px">'+
+        '<div class="rowcard"><div class="k">Nombre de la nueva temporada</div><input type="text" placeholder="Ej. 2026/27" oninput="ntField(\'newLabel\',this.value)" value="'+esc(d.newLabel)+'"></div>'+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;gap:10px">'+
+        '<div class="inforow">'+icon('history',18)+'<div class="inforowtxt">'+esc(d.fromLabel)+' queda guardada — podrás <b>consultarla</b> luego desde el selector de temporadas, en modo solo lectura.</div></div>'+
+        '<div class="inforow">'+icon('users',18)+'<div class="inforowtxt">La <b>plantilla empieza vacía</b> — la reconstruyes en Mi Equipo, con la categoría que le toque a este grupo esta temporada.</div></div>'+
+        '<div class="inforow">'+icon('users',18)+'<div class="inforowtxt">El <b>acceso de las familias también empieza vacío</b> — apruebas de nuevo a quien deba ver esta temporada; quien tenía acceso a '+esc(d.fromLabel)+' no ve la nueva automáticamente, ni al revés.</div></div>'+
+        '<div class="inforow">'+icon('calendar',18)+'<div class="inforowtxt">La <b>configuración de la FBM se copia</b> de '+esc(d.fromLabel)+' como punto de partida, para que solo ajustes lo que cambie.</div></div>'+
+      '</div>'+
+      '<button class="fullbtn" onclick="confirmNuevaTemporadaStep1()">Confirmar y crear temporada</button>'+
+      '<div class="cancel" onclick="closeNuevaTemporada()">Cancelar</div>'+
+      '</div></div>';
+  }
+  var fasesResumen = (d.fbm_fases||[]).length ? (d.fbm_fases.length+' fase(s) copiada(s) de '+esc(d.fromLabel)) : 'Sin fases configuradas todavía';
+  return '<div class="veil"><div class="modal">'+
+    '<div class="mhead"><div class="mtitle">Configuración FBM</div>'+
+    '<div class="msub">Copiada de '+esc(d.fromLabel)+' — ajusta lo que haya cambiado esta temporada. Podrás editar cada fase con más detalle luego, desde Admin.</div></div>'+
+    '<div class="section" style="gap:10px">'+
+      '<div class="rowcard"><div class="k">Página FBM</div><input type="text" placeholder="https://www.fbm.es/es/..." value="'+esc(d.fbm_url)+'" oninput="ntField(\'fbm_url\',this.value)"></div>'+
+    '</div>'+
+    '<div class="tag">'+icon('check',11)+' '+esc(fasesResumen)+'</div>'+
+    '<button class="fullbtn" onclick="saveNuevaTemporada()">Guardar y continuar</button>'+
+    '<div class="cancel" onclick="nuevaTemporadaStep=1;render()">Atrás</div>'+
+    '<div class="caption" style="text-align:center">Al continuar, entras directamente en Mi Equipo para empezar a añadir la plantilla de la nueva temporada.</div>'+
+    '</div></div>';
+}
+
+/* ---------- elegir equipo al registrarse (cuando hay más de uno) ---------- */
+function renderPickTeam(){
+  var h = '<div class="authwrap">';
+  h += '<div class="header" style="padding:20px 0 8px"><div class="header-row">'+
+       '<div class="htitles"><div class="title">¿A qué equipo perteneces?</div></div></div></div>';
+  teams.forEach(function(t){
+    h += '<div class="rowcard" style="cursor:pointer;margin-bottom:10px" onclick="choosePickTeam(\''+t.id+'\')">'+
+      '<div><div style="font-weight:800;font-size:14.5px">'+esc(t.name||'Equipo')+'</div>'+
+      (t.category?('<div style="color:var(--text-dim);font-size:12px;margin-top:2px">'+esc(t.category)+'</div>'):'')+'</div>'+
+      icon('chevronRight',18)+
+      '</div>';
+  });
+  h += '<div class="caption" style="margin-top:6px">Pedirás acceso a la temporada actual de ese equipo. El administrador debe aprobarte antes de que puedas entrar.</div>';
+  h += '</div>';
+  return h;
+}
+
+/* ---------- Admin > Usuarios ---------- */
+async function openAdminUsuarios(){
+  if(!isAdmin()) return;
+  usersFilterSeasonId = currentSeasonId;
+  go('adminUsuarios');
+  await loadUsersScreenData();
+}
+function selectUsersFilterSeason(id){ usersFilterSeasonId = id; loadUsersScreenData(); }
+async function loadUsersScreenData(){
+  if(!sb || !usersFilterSeasonId || !seasons.length){ usersScreenData = {pending:[],approved:[],others:[]}; render(); return; }
+  try{
+    var teamSeasonIds = seasons.map(function(s){ return s.id; });
+    var allRes = await sb.from('team_season_access').select('*, profiles(id,name,email,role)').in('season_id', teamSeasonIds);
+    var allRows = (allRes && allRes.data) || [];
+    var thisSeasonRows = allRows.filter(function(r){ return r.season_id===usersFilterSeasonId; });
+    var pending = thisSeasonRows.filter(function(r){ return r.status==='pending'; });
+    var approved = thisSeasonRows.filter(function(r){ return r.status==='approved'; });
+    var idsInThisSeason = thisSeasonRows.map(function(r){ return r.user_id; });
+    var byUser = {};
+    allRows.forEach(function(r){
+      if(idsInThisSeason.indexOf(r.user_id)!==-1) return;
+      if(!r.profiles || r.profiles.role==='admin') return;
+      if(!byUser[r.user_id] || new Date(r.created_at) > new Date(byUser[r.user_id].created_at)) byUser[r.user_id] = r;
+    });
+    var others = Object.keys(byUser).map(function(uid){
+      var r = byUser[uid];
+      var s = byIdArr(seasons, r.season_id);
+      return { profile:r.profiles, seasonLabel: s ? s.label : '' };
+    });
+    usersScreenData = { pending:pending, approved:approved, others:others };
+  }catch(e){ usersScreenData = {pending:[],approved:[],others:[]}; }
+  render();
+}
+async function grantAccessToSeason(userId){
+  if(!sb || !usersFilterSeasonId) return;
+  try{ await sb.from('team_season_access').insert({ user_id:userId, season_id:usersFilterSeasonId, status:'approved', decided_at:new Date().toISOString() }); }catch(e){}
+  loadUsersScreenData();
+  if(usersFilterSeasonId===currentSeasonId) loadPendingAccessRequests();
+}
+async function revokeAccessRow(id){
+  if(!sb) return;
+  try{ await sb.from('team_season_access').delete().eq('id', id); }catch(e){}
+  loadUsersScreenData();
+  loadPendingAccessRequests();
+}
+function seasonLabelFor(id){ var s = byIdArr(seasons, id); return s ? s.label : ''; }
+function renderAdminUsuarios(){
+  if(!isAdmin()){ S.route='team'; S.routeParams={}; saveState(); return renderTeamScreen(); }
+  var h = '<div class="header"><div class="header-row">'+
+    '<button class="iconbtn" onclick="go(\'admin\')">'+icon('back',18)+'</button>'+
+    '<div class="htitles"><div class="title">Usuarios</div><div class="subtitle">'+esc(currentTeam?currentTeam.name:'')+'</div></div></div></div>';
+  h += '<div class="content">';
+
+  h += '<div class="section" style="gap:0"><div class="fasechips">';
+  seasons.forEach(function(s){
+    h += '<div class="chip'+(s.id===usersFilterSeasonId?' on':'')+'" onclick="selectUsersFilterSeason(\''+s.id+'\')">'+esc(s.label||'Temporada')+'</div>';
+  });
+  h += '</div></div>';
+
+  var d = usersScreenData;
+  var lbl = esc(seasonLabelFor(usersFilterSeasonId));
+
+  h += '<div class="section"><div class="label">Solicitudes pendientes · '+lbl+'</div>';
+  if(!d.pending.length){ h += '<div class="empty" style="padding:12px 0">No hay solicitudes pendientes.</div>'; }
+  d.pending.forEach(function(r){
+    var p = r.profiles || {};
+    var initials = (p.name||'?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+    h += '<div class="reqcard"><div class="rtop"><div class="avatar">'+esc(initials)+'</div>'+
+      '<div class="rinfo"><div class="rname">'+esc(p.name||'')+'</div><div class="rmeta">'+esc(p.email||'')+'</div></div></div>'+
+      '<div class="ractions">'+
+      '<button class="abtn" style="background:var(--good);color:oklch(18% 0.02 55);border-color:var(--good)" onclick="decideOnAccessRequest(\''+r.id+'\',true)">'+icon('check',14)+' Aprobar</button>'+
+      '<button class="abtn" onclick="decideOnAccessRequest(\''+r.id+'\',false)">'+icon('x',14)+' Rechazar</button>'+
+      '</div></div>';
+  });
+  h += '</div>';
+
+  h += '<div class="section"><div class="label">Con acceso · '+lbl+'</div>';
+  if(!d.approved.length){ h += '<div class="empty" style="padding:12px 0">Todavía no hay nadie con acceso.</div>'; }
+  d.approved.forEach(function(r){
+    var p = r.profiles || {};
+    var initials = (p.name||'?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+    h += '<div class="reqcard"><div class="rtop"><div class="avatar">'+esc(initials)+'</div>'+
+      '<div class="rinfo"><div class="rname">'+esc(p.name||'')+'</div><div class="rmeta">'+esc(p.email||'')+(p.role==='admin'?' · admin':'')+'</div></div></div>'+
+      (p.role!=='admin' ? ('<div class="ractions"><button class="abtn" onclick="revokeAccessRow(\''+r.id+'\')">Quitar acceso a '+lbl+'</button></div>') : '')+
+      '</div>';
+  });
+  h += '</div>';
+
+  if(d.others.length){
+    h += '<div class="section"><div class="label">Otras personas registradas</div>';
+    d.others.forEach(function(o){
+      var p = o.profile;
+      var initials = (p.name||'?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+      h += '<div class="reqcard"><div class="rtop"><div class="avatar">'+esc(initials)+'</div>'+
+        '<div class="rinfo"><div class="rname">'+esc(p.name||'')+'</div><div class="rmeta">'+esc(p.email||'')+'</div></div>'+
+        '<div class="pastbadge">'+esc(o.seasonLabel)+'</div></div>'+
+        '<div class="ractions"><button class="abtn" onclick="grantAccessToSeason(\''+p.id+'\')">'+icon('plus',14)+' Dar acceso a '+lbl+'</button></div>'+
+        '</div>';
+    });
+    h += '<div class="caption">Ya tienen cuenta de una temporada anterior con este equipo. Les das acceso a la temporada seleccionada sin que tengan que registrarse otra vez — no ven ninguna otra temporada hasta que se la concedas.</div>';
+    h += '</div>';
+  }
+
+  h += '</div>';
+  return h;
+}
+
 /* ---------- Inicio ---------- */
 var RANK_STATS = [
   {key:'pts', label:'Puntos'},
@@ -2701,11 +3178,21 @@ function renderHome(){
   h += '<div class="hometop">'+
     '<label class="uploadlabel"><div class="clublogo">'+(clubSettings.logo_url ? '<img src="'+esc(clubSettings.logo_url)+'">' : icon('plus',16))+'</div>'+
     '<input type="file" accept="image/*" style="display:none" onchange="uploadClubAsset(this.files[0],\'logo_url\')"></label>'+
-    '<div class="toptitles"><div class="teamname">'+esc(teamName)+'</div><div class="teamcat">'+esc(clubSettings.category||'Toca para poner categoría')+'</div></div>'+
-    (authProfile && authProfile.role==='admin' ? '<button class="bellwrap" onclick="openApprovals()">'+icon('bell',17)+(pendingProfiles.length?('<div class="belldot">'+(pendingProfiles.length>9?'9+':pendingProfiles.length)+'</div>'):'')+'</button>' : '')+
+    '<div class="toptitles" style="cursor:pointer" onclick="openTeamSwitcher()"><div style="min-width:0"><div class="teamname">'+esc(teamName)+'</div><div class="teamcat">'+esc(clubSettings.category||'Toca para poner categoría')+'</div></div>'+
+    (teams.length>1 ? icon('chevronDown',15) : '')+
+    '</div>'+
+    (authProfile && authProfile.role==='admin' ? '<button class="bellwrap" onclick="openApprovals()">'+icon('bell',17)+(pendingAccessRequests.length?('<div class="belldot">'+(pendingAccessRequests.length>9?'9+':pendingAccessRequests.length)+'</div>'):'')+'</button>' : '')+
     '</div>';
 
   h += '<div class="content">';
+
+  if(currentSeason){
+    h += '<div class="section" style="gap:0"><div class="rowcard" style="cursor:pointer" onclick="openSeasonSwitcher()">'+
+      '<div style="display:flex;align-items:center;gap:10px">'+icon('history',16)+
+      '<div style="font-weight:700;font-size:13.5px">Temporada '+esc(currentSeason.label||'')+(!currentSeason.is_current?' <span style="color:var(--text-dim);font-weight:600">· solo consulta</span>':'')+'</div></div>'+
+      icon('chevronDown',15)+
+      '</div></div>';
+  }
 
   h += '<label class="uploadlabel"><div class="teamphoto">'+(clubSettings.photo_url?('<img src="'+esc(clubSettings.photo_url)+'">'):'')+
     (clubSettings.photo_url?'':icon('camera',26))+'<div class="tp-label">'+(clubSettings.photo_url?'':'Añadir foto de equipo')+'</div>'+
@@ -3098,23 +3585,24 @@ function renderRejected(){
     '<div class="cta ghost" style="cursor:pointer;margin-top:12px" onclick="doLogout()">Cerrar sesión</div>'+
     '</div>';
 }
-function openApprovals(){ loadPendingProfiles(); go('approvals'); }
+function openApprovals(){ loadPendingAccessRequests(); go('approvals'); }
 function renderApprovals(){
   var h = '<div class="header" style="padding-bottom:8px"><div class="header-row">'+
     '<button class="iconbtn" onclick="go(\'home\')">'+icon('back',18)+'</button>'+
-    '<div class="htitles"><div class="title">Solicitudes de acceso</div><div class="subtitle">'+pendingProfiles.length+' pendientes</div></div>'+
+    '<div class="htitles"><div class="title">Solicitudes de acceso</div><div class="subtitle">'+pendingAccessRequests.length+' pendientes · '+esc(currentSeason?currentSeason.label:'')+'</div></div>'+
     '</div></div>';
   h += '<div class="content">';
-  if(!pendingProfiles.length){
+  if(!pendingAccessRequests.length){
     h += '<div class="empty">No hay solicitudes pendientes.</div>';
   } else {
-    pendingProfiles.forEach(function(p){
+    pendingAccessRequests.forEach(function(r){
+      var p = r.profiles || {};
       var initials = (p.name||'?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
       h += '<div class="reqcard"><div class="rtop"><div class="avatar">'+esc(initials)+'</div>'+
-        '<div class="rinfo"><div class="rname">'+esc(p.name)+'</div><div class="rmeta">'+esc(p.email)+'</div></div></div>'+
+        '<div class="rinfo"><div class="rname">'+esc(p.name||'')+'</div><div class="rmeta">'+esc(p.email||'')+'</div></div></div>'+
         '<div class="ractions">'+
-        '<button class="abtn approve" style="background:var(--good);color:oklch(18% 0.02 55);flex:1;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;font-size:12.5px" onclick="decideOnProfile(\''+p.id+'\',true)">'+icon('check',14)+'Aprobar</button>'+
-        '<button class="abtn reject" style="flex:1;height:40px;border-radius:11px;border:1px solid var(--border);color:var(--text-dim);display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;font-size:12.5px" onclick="decideOnProfile(\''+p.id+'\',false)">'+icon('x',14)+'Rechazar</button>'+
+        '<button class="abtn approve" style="background:var(--good);color:oklch(18% 0.02 55);flex:1;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;font-size:12.5px" onclick="decideOnAccessRequest(\''+r.id+'\',true)">'+icon('check',14)+'Aprobar</button>'+
+        '<button class="abtn reject" style="flex:1;height:40px;border-radius:11px;border:1px solid var(--border);color:var(--text-dim);display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;font-size:12.5px" onclick="decideOnAccessRequest(\''+r.id+'\',false)">'+icon('x',14)+'Rechazar</button>'+
         '</div></div>';
     });
   }
