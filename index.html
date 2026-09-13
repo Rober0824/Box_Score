@@ -353,6 +353,7 @@
     #printArea .tcell-player{ min-width:0; gap:5px; }
     #printArea .tcell-player span:last-child{ max-width:80px; }
     #printArea .minbtn{ display:none; }
+    #printArea .printsection{ page-break-inside:avoid; break-inside:avoid; }
     @page{ size:landscape; margin:10mm; }
   }
 
@@ -466,7 +467,8 @@
   .teaminfosub{ font-size:11.5px; color:var(--text-dim); margin-top:2px; }
   .badge{ font-size:9.5px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; padding:4px 9px; border-radius:999px; background:var(--accent); color:var(--accent-ink); flex-shrink:0; }
   .badge.past{ background:var(--surface); color:var(--text-dim); border:1px solid var(--border); }
-  .seasonrow{ display:flex; align-items:center; justify-content:space-between; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:14px 16px; cursor:pointer; }
+  .seasonrow{ display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:14px 16px; cursor:pointer; }
+  .seasonrow > div:first-child{ flex:1; min-width:0; }
   .seasonrow.on{ border-color:var(--accent); background:oklch(72% 0.18 45 / 12%); }
   .seasonname{ font-family:'Oswald',sans-serif; font-weight:700; font-size:16px; }
   .seasonsub{ font-size:11px; color:var(--text-dim); margin-top:2px; }
@@ -1994,6 +1996,7 @@ function render(){
   html += faseModalOverlay();
   html += teamSwitcherOverlay();
   html += seasonSwitcherOverlay();
+  html += seasonRenameOverlay();
   html += createTeamOverlay();
   html += nuevaTemporadaOverlay();
   html += toastHtml();
@@ -2434,7 +2437,7 @@ function buildPrintHtml(g){
   h += '<div class="printmatch"><span>'+esc(g.teamName)+'</span><span class="printscore">'+teamTotal+' – '+rivalScore(g)+'</span><span>'+esc(g.rivalName||'Rival')+'</span></div>';
   h += '<div class="printmeta">'+(g.finished?'Partido finalizado':'En curso')+' · '+g.periodsCount+' '+esc(g.periodLabel.toLowerCase())+(g.periodsCount!==1?'s':'')+' · '+d.toLocaleDateString('es-ES')+'</div>';
   h += '</div>';
-  h += '<div class="printsection"><div class="printsectitle">Estadísticas de equipo</div>'+renderTeamPanel(g)+'</div>';
+  h += '<div class="printsection"><div class="printsectitle">Estadísticas de equipo</div>'+renderTeamPanel(g, {forPrint:true})+'</div>';
   h += '<div class="printsection"><div class="printsectitle">Estadísticas de jugadoras</div>'+renderPlayersTable(g, rows, teamTotal)+'</div>';
   return h;
 }
@@ -2474,7 +2477,8 @@ function shareBoxScore(gid){
 }
 
 /* ---- team stats panel (Equipo view of the box score) ---- */
-function renderTeamPanel(g){
+function renderTeamPanel(g, opts){
+  opts = opts || {};
   var team = teamAggregates(g, 'team');
   var rivalKnown = !!g.trackRivalFull;
   var rival = rivalKnown ? rivalAggAsTeamShape(g) : null;
@@ -2513,7 +2517,9 @@ function renderTeamPanel(g){
   if(!rivalKnown){
     h += '<div class="rivalnote" style="margin-top:10px"><div class="ic">'+icon('info',16)+'</div><div class="tx">Activa "Completas" en la configuración del rival para comparar también sus estadísticas de equipo. De momento solo tienes su marcador: <b>'+rivalScore(g)+' pts</b>.</div></div>';
   }
-  h += '<div class="shotmapcard" style="margin-top:16px"><div class="label shotmaptitle">Mapa de tiro</div>'+renderShotMap(teamZoneStats([g]))+'</div>';
+  if(!opts.forPrint){
+    h += '<div class="shotmapcard" style="margin-top:16px"><div class="label shotmaptitle">Mapa de tiro</div>'+renderShotMap(teamZoneStats([g]))+'</div>';
+  }
   return h;
 }
 
@@ -2921,8 +2927,9 @@ function ctField(field, value){ if(!createTeamDraft) return; createTeamDraft[fie
 async function saveCreateTeam(){
   if(!createTeamDraft || !sb) return;
   var name = (createTeamDraft.name||'').trim();
-  var seasonLabel = (createTeamDraft.seasonLabel||'').trim() || 'Temporada actual';
+  var seasonLabel = (createTeamDraft.seasonLabel||'').trim();
   if(!name){ showToast('Ponle un nombre al equipo.'); return; }
+  if(!seasonLabel){ showToast('Ponle un nombre a la temporada (ej. 2025/26).'); return; }
   try{
     var tr = await sb.from('teams').insert({ name:name, category:(createTeamDraft.category||'').trim() }).select().maybeSingle();
     if(tr.error || !tr.data) throw (tr.error || new Error('sin datos'));
@@ -2961,6 +2968,7 @@ function seasonSwitcherOverlay(){
   seasons.forEach(function(s){
     h += '<div class="seasonrow'+(s.id===currentSeasonId?' on':'')+'" onclick="switchSeason(\''+s.id+'\')">'+
       '<div><div class="seasonname">'+esc(s.label||'Temporada')+'</div><div class="seasonsub">'+(s.is_current?'Temporada actual':'Cerrada · solo consulta')+'</div></div>'+
+      (isAdmin() ? '<button class="ibtn" onclick="event.stopPropagation();openRenameSeason(\''+s.id+'\')">'+icon('pencil',14)+'</button>' : '')+
       '<div class="badge'+(s.is_current?'':' past')+'">'+(s.is_current?'Actual':'Cerrada')+'</div>'+
       '</div>';
   });
@@ -2970,6 +2978,43 @@ function seasonSwitcherOverlay(){
   }
   h += '</div></div></div>';
   return h;
+}
+var seasonRenameDraft = null;
+function openRenameSeason(seasonId){
+  if(!isAdmin()) return;
+  var s = byIdArr(seasons, seasonId);
+  if(!s) return;
+  seasonRenameDraft = { id:s.id, label:s.label||'' };
+  render();
+}
+function closeRenameSeason(){ seasonRenameDraft = null; render(); }
+function srField(value){ if(seasonRenameDraft) seasonRenameDraft.label = value; }
+async function saveRenameSeason(){
+  if(!seasonRenameDraft || !sb) return;
+  var label = (seasonRenameDraft.label||'').trim();
+  if(!label){ showToast('Ponle un nombre a la temporada.'); return; }
+  var id = seasonRenameDraft.id;
+  try{
+    var res = await sb.from('seasons').update({label:label}).eq('id', id);
+    if(res && res.error){ showToast('No se ha podido guardar el nombre.'); }
+    else {
+      var s = byIdArr(seasons, id);
+      if(s) s.label = label;
+      if(currentSeason && currentSeason.id===id) currentSeason.label = label;
+    }
+  }catch(e){ showToast('No se ha podido guardar el nombre.'); }
+  seasonRenameDraft = null;
+  render();
+}
+function seasonRenameOverlay(){
+  if(!seasonRenameDraft) return '';
+  var d = seasonRenameDraft;
+  return '<div class="veil"><div class="modal">'+
+    '<div class="mhead"><div class="mtitle">Nombre de la temporada</div></div>'+
+    '<div class="section"><div class="rowcard"><div class="k">Nombre</div><input type="text" placeholder="Ej. 2025/26" value="'+esc(d.label)+'" oninput="srField(this.value)"></div></div>'+
+    '<button class="fullbtn" onclick="saveRenameSeason()">Guardar</button>'+
+    '<div class="cancel" onclick="closeRenameSeason()">Cancelar</div>'+
+    '</div></div>';
 }
 function openNuevaTemporada(){
   if(!isAdmin() || !currentTeam || !currentSeason) return;
@@ -3250,7 +3295,7 @@ function renderHome(){
   if(currentSeason){
     h += '<div class="section" style="gap:0"><div class="rowcard" style="cursor:pointer" onclick="openSeasonSwitcher()">'+
       '<div style="display:flex;align-items:center;gap:10px">'+icon('history',16)+
-      '<div style="font-weight:700;font-size:13.5px">Temporada '+esc(currentSeason.label||'')+(!currentSeason.is_current?' <span style="color:var(--text-dim);font-weight:600">· solo consulta</span>':'')+'</div></div>'+
+      '<div style="font-weight:700;font-size:13.5px">'+esc(currentSeason.label||'Temporada')+(!currentSeason.is_current?' <span style="color:var(--text-dim);font-weight:600">· solo consulta</span>':'')+'</div></div>'+
       icon('chevronDown',15)+
       '</div></div>';
   }
