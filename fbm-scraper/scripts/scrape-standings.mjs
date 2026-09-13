@@ -1,3 +1,4 @@
+
 // Scrapes the official FBM (Federación de Baloncesto de Madrid) league standings
 // for one or more "fases" (phases) and writes them into the app's
 // `standings_entries` Supabase table, replacing whatever was there before for
@@ -29,17 +30,17 @@
 //   SUPABASE_SERVICE_ROLE_KEY=... node scripts/scrape-standings.mjs
 // (SUPABASE_URL is not secret -- the app already ships it client-side -- but you
 // can override it via env too if needed.)
-
+ 
 import { chromium } from 'playwright';
-
+ 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://amgmlsdbllknvwuixozc.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
+ 
 if (!SERVICE_KEY) {
   console.error('Missing SUPABASE_SERVICE_ROLE_KEY env var (needed to bypass RLS and write standings_entries).');
   process.exit(1);
 }
-
+ 
 // Used only if club_settings has no fbm_fases configured yet (e.g. right after
 // installing this for the very first time, or an old install that hasn't been
 // migrated to the multi-fase config). Fill in real fases from the app (Admin ->
@@ -50,7 +51,7 @@ const FALLBACK_CATEGORIA = 'Alv Fem 1ºaño LIGA MARCO ALDANY';
 const FALLBACK_GRUPO = 'GRUPO 2';
 const FALLBACK_OWN_TEAM = 'DISTRITO OLIMPICO ARRANZ';
 const FALLBACK_FASE_ID = 'fase-1';
-
+ 
 function normalize(s) {
   return (s || '')
     .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
@@ -58,7 +59,7 @@ function normalize(s) {
     .replace(/\s+/g, ' ')
     .trim();
 }
-
+ 
 async function supabaseRequest(path, opts = {}) {
   const res = await fetch(SUPABASE_URL + path, {
     ...opts,
@@ -76,7 +77,7 @@ async function supabaseRequest(path, opts = {}) {
   const text = await res.text();
   return text ? JSON.parse(text) : null;
 }
-
+ 
 // Reads the club's own team name, the shared FBM page URL, and the list of
 // fases to scrape from club_settings. Falls back to a single hardcoded fase
 // (the pre-multi-fase behaviour) if fbm_fases is missing or empty, so an
@@ -120,55 +121,96 @@ async function getFbmConfig() {
   }
   return config;
 }
-
+ 
+// Selects an option by label, matched flexibly (case/accent-insensitive, via
+// the same normalize() used for the own-team check) instead of Playwright's
+// default exact-text match -- so a small case difference typed into the app's
+// Admin screen (e.g. "Grupo 1" vs the site's real "GRUPO 1") doesn't silently
+// retry-until-timeout with no useful error. Also triggers this site's real
+// postback (a full page navigation, confirmed by hand -- this is a classic
+// ASP.NET WebForms page, not an AJAX UpdatePanel) and waits for that
+// navigation to actually finish, instead of a fixed sleep that can be too
+// short under CI/runner network conditions and race the next dropdown's
+// options not being in the DOM yet.
+async function selectByFlexibleLabel(page, locator, wantedLabel, fieldName) {
+  const options = await locator.locator('option').allTextContents();
+  const wanted = normalize(wantedLabel);
+  const match = options.find(o => normalize(o) === wanted);
+  if (!match) {
+    throw new Error(
+      fieldName + ' "' + wantedLabel + '" does not match any option on the page. ' +
+      'Available options: ' + options.filter(o => o.trim()).join(' | ')
+    );
+  }
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {}),
+    locator.selectOption({ label: match })
+  ]);
+  // Small settle buffer for any late client-side rendering after the navigation
+  // itself has already resolved -- not relied on for correctness, just courtesy.
+  await page.waitForTimeout(400);
+}
+ 
+// Waits for a dropdown to actually be attached to the page (retrying, not a
+// single instant check) before deciding it's genuinely absent -- a fixed sleep
+// followed by one .count() check is a race: on a slower run the element can
+// simply not have re-rendered yet from the previous postback.
+async function waitForSelect(page, idSuffix, timeoutMs) {
+  const locator = page.locator('select[id$="' + idSuffix + '"]');
+  try {
+    await locator.waitFor({ state: 'attached', timeout: timeoutMs || 8000 });
+    return locator;
+  } catch (e) {
+    return null;
+  }
+}
+ 
 async function scrapeStandings(browser, url, target) {
   const page = await browser.newPage();
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(800);
-
+ 
     // Temporada is optional: only touch it if configured, since changing it can
     // reset the Categoría list below it. Leave it alone otherwise (defaults to
     // whatever season the page loads with, normally the current one).
     if (target.temporada) {
-      const temporadaSelect = page.locator('select[id$="DDLTemporadas"]');
-      if (await temporadaSelect.count()) {
-        await temporadaSelect.selectOption({ label: target.temporada });
-        await page.waitForTimeout(1800);
+      const temporadaSelect = await waitForSelect(page, 'DDLTemporadas');
+      if (temporadaSelect) {
+        await selectByFlexibleLabel(page, temporadaSelect, target.temporada, 'temporada');
       } else {
         console.warn('temporada is configured ("' + target.temporada + '") but no Temporada dropdown was found on the page -- continuing with the page\'s default season.');
       }
     }
-
+ 
     // Select Categoría -- triggers a postback that also refreshes Fase/Grupo.
-    const categoriaSelect = page.locator('select[id$="DDLCategorias"]');
-    await categoriaSelect.selectOption({ label: target.categoria });
-    await page.waitForTimeout(1800);
-
+    const categoriaSelect = await waitForSelect(page, 'DDLCategorias');
+    if (!categoriaSelect) throw new Error('Categoría dropdown not found on the page -- the FBM site may have changed its markup.');
+    await selectByFlexibleLabel(page, categoriaSelect, target.categoria, 'categoria');
+ 
     // Fase is optional: most categories only have one, which the page resolves on
     // its own. Only select it explicitly if configured (e.g. once a 2nd phase starts).
     if (target.fase) {
-      const faseSelect = page.locator('select[id$="DDLFases"]');
-      if (await faseSelect.count()) {
-        await faseSelect.selectOption({ label: target.fase });
-        await page.waitForTimeout(1800);
+      const faseSelect = await waitForSelect(page, 'DDLFases');
+      if (faseSelect) {
+        await selectByFlexibleLabel(page, faseSelect, target.fase, 'fase');
       } else {
         console.warn('fase is configured ("' + target.fase + '") but no Fase dropdown was found on the page -- continuing.');
       }
     }
-
+ 
     // Select Grupo.
-    const grupoSelect = page.locator('select[id$="DDLGrupos"]');
-    await grupoSelect.selectOption({ label: target.grupo });
-    await page.waitForTimeout(1800);
-
+    const grupoSelect = await waitForSelect(page, 'DDLGrupos');
+    if (!grupoSelect) throw new Error('Grupo dropdown not found on the page -- the FBM site may have changed its markup.');
+    await selectByFlexibleLabel(page, grupoSelect, target.grupo, 'grupo');
+ 
     // Sanity check we actually landed on the right filters before trusting the table.
     const categoriaSelected = await categoriaSelect.locator('option:checked').innerText();
     const grupoSelected = await grupoSelect.locator('option:checked').innerText();
     if (!normalize(categoriaSelected).includes(normalize(target.categoria)) || !normalize(grupoSelected).includes(normalize(target.grupo))) {
       throw new Error('Filters did not land where expected (categoria="' + categoriaSelected + '", grupo="' + grupoSelected + '"). Check that the categoria/grupo for this fase match the exact label text on fbm.es, or that the FBM site hasn\'t changed its layout.');
     }
-
+ 
     const rows = await page.evaluate(() => {
       const heading = Array.from(document.querySelectorAll('h4, h3, h2'))
         .find(el => el.textContent.trim() === 'CLASIFICACIÓN');
@@ -193,7 +235,7 @@ async function scrapeStandings(browser, url, target) {
         };
       });
     });
-
+ 
     if (!rows || !rows.length) {
       throw new Error('Found the filters but no CLASIFICACIÓN table/rows on the page. The FBM site may have changed its markup.');
     }
@@ -202,7 +244,7 @@ async function scrapeStandings(browser, url, target) {
     await page.close();
   }
 }
-
+ 
 async function writeStandings(rows, ownTeamName, faseId) {
   const ownNormalized = normalize(ownTeamName);
   const payload = rows.map(r => ({
@@ -215,11 +257,11 @@ async function writeStandings(rows, ownTeamName, faseId) {
     is_own_team: normalize(r.team_name) === ownNormalized,
     fase_id: faseId
   }));
-
+ 
   if (!payload.some(r => r.is_own_team)) {
     console.warn('Warning: none of the scraped teams matched the club\'s own team name ("' + ownTeamName + '"). Writing anyway, but double check club_settings.team_name matches the FBM team name.');
   }
-
+ 
   // Replace this fase's rows atomically-ish: delete only its previous rows,
   // then insert the fresh set -- other fases' rows are left untouched.
   await supabaseRequest('/rest/v1/standings_entries?fase_id=eq.' + encodeURIComponent(faseId), { method: 'DELETE' });
@@ -229,7 +271,7 @@ async function writeStandings(rows, ownTeamName, faseId) {
     body: JSON.stringify(payload)
   });
 }
-
+ 
 (async () => {
   console.log('Reading FBM config (url + fases) from club_settings...');
   const config = await getFbmConfig();
@@ -239,7 +281,7 @@ async function writeStandings(rows, ownTeamName, faseId) {
   console.log('Own team:', config.teamName);
   console.log('Página: ' + config.url);
   console.log('Fases a actualizar: ' + config.fases.length);
-
+ 
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined });
   let anyFailed = false;
   try {
@@ -251,7 +293,7 @@ async function writeStandings(rows, ownTeamName, faseId) {
         const rows = await scrapeStandings(browser, config.url, target);
         console.log('Scraped ' + rows.length + ' teams:');
         rows.forEach(r => console.log('  ' + r.position + '. ' + r.team_name + ' -- ' + r.pj + 'PJ ' + r.pg + 'PG ' + r.pp + 'PP ' + r.pts + 'PTS'));
-
+ 
         console.log('Writing to Supabase (standings_entries, fase_id=' + target.id + ')...');
         await writeStandings(rows, config.teamName, target.id);
         console.log(target.label + ': done.');
@@ -263,7 +305,7 @@ async function writeStandings(rows, ownTeamName, faseId) {
   } finally {
     await browser.close();
   }
-
+ 
   if (anyFailed) {
     console.error('One or more fases failed to update (see above). Fases that succeeded were still written.');
     process.exit(1);
@@ -273,3 +315,4 @@ async function writeStandings(rows, ownTeamName, faseId) {
   console.error('Scrape failed:', err.message);
   process.exit(1);
 });
+ 
