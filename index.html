@@ -1962,6 +1962,8 @@ function render(){
     html = renderStandingsEditor();
   } else if(S.route==='playerRadar'){
     html = renderPlayerRadarPopup();
+  } else if(S.route==='matchPlayer'){
+    html = renderMatchPlayerPopup();
   } else {
     switch(S.route){
       case 'home': html = renderHome(); break;
@@ -2290,11 +2292,12 @@ function renderPlayersTable(g, rows, teamTotal){
 
   function fg(m,a){ return m+'-'+a; }
 
+  var fromGamesFlag = S.routeParams.fromGames ? 'true' : 'false';
   rows.forEach(function(r){
     var st = r.st;
     var pm = st.plusMinus;
     h += '<tr>';
-    h += '<td class="stickycol"><div class="tcell-player"><span class="dorsal" style="width:22px;height:22px;font-size:11px">'+r.p.dorsal+'</span><span>'+esc(r.p.name)+'</span></div></td>';
+    h += '<td class="stickycol" style="cursor:pointer" onclick="openMatchPlayerPopup(\''+g.id+'\',\''+r.p.id+'\','+fromGamesFlag+')"><div class="tcell-player"><span class="dorsal" style="width:22px;height:22px;font-size:11px">'+r.p.dorsal+'</span><span>'+esc(r.p.name)+'</span></div></td>';
     h += '<td class="numcell">'+r.min+'\' <button class="minbtn" onclick="openMinutes(\''+r.p.id+'\')">'+icon('pencil',10)+'</button></td>';
     h += '<td class="numcell">'+fg(st.fg2m+st.fg3m, st.fg2a+st.fg3a)+'</td>';
     h += '<td class="numcell">'+fg(st.fg2m,st.fg2a)+'</td>';
@@ -2354,6 +2357,63 @@ function renderPlayersTable(g, rows, teamTotal){
   }
 
   h += '</tbody></table></div>';
+  return h;
+}
+
+/* ---- estadística de una jugadora en un partido concreto (popup) ---- */
+function openMatchPlayerPopup(gameId, playerId, fromGames){
+  go('matchPlayer', {gameId:gameId, playerId:playerId, fromGames: !!fromGames});
+}
+function renderMatchPlayerStatLine(st, effVal){
+  function row(l,label){ return '<div class="teamstatrow"><div class="tsval">'+l+'</div><div class="tslabel">'+label+'</div><div class="tsval right">—</div></div>'; }
+  function pctRow(l,label){ return '<div class="teamstatrow pct"><div class="tsval">'+l+'</div><div class="tslabel">'+label+'</div><div class="tsval right">—</div></div>'; }
+  var fgm = st.fg2m+st.fg3m, fga = st.fg2a+st.fg3a;
+  var h = '<div class="teamstat-card">';
+  h += '<div class="tsheadrow"><div class="tsteam">Este partido</div><div class="tscaption">Estadísticas de la jugadora</div><div class="tsteam right"></div></div>';
+  h += row(st.pts,'Puntos');
+  h += row(fgm+'/'+fga, 'Tiros de campo');
+  h += pctRow(pct(fgm,fga), '% de tiros de campo');
+  h += row(st.fg2m+'/'+st.fg2a, 'Tiros de 2');
+  h += pctRow(pct(st.fg2m,st.fg2a), '% de 2');
+  h += row(st.fg3m+'/'+st.fg3a, 'Triples');
+  h += pctRow(pct(st.fg3m,st.fg3a), '% de triples');
+  h += row(st.ftm+'/'+st.fta, 'Tiros libres');
+  h += pctRow(pct(st.ftm,st.fta), '% de tiros libres');
+  h += '<div class="teamstat-divider"></div>';
+  h += row(st.rebO+st.rebD, 'Rebotes totales');
+  h += row(st.rebO, 'Rebotes ofensivos');
+  h += row(st.rebD, 'Rebotes defensivos');
+  h += '<div class="teamstat-divider"></div>';
+  h += row(st.ast,'Asistencias'); h += row(st.stl,'Balones robados'); h += row(st.blk,'Bloqueos'); h += row(st.to,'Balones perdidos'); h += row(st.foulC,'Faltas personales'); h += row(effVal,'Eficiencia (EFF)');
+  h += '</div>';
+  return h;
+}
+function renderMatchPlayerPopup(){
+  var gid = S.routeParams.gameId;
+  var pid = S.routeParams.playerId;
+  var fromGames = S.routeParams.fromGames;
+  var g = getGameById(gid);
+  var backDest = "go('box',{gameId:'"+gid+"',fromGames:"+(fromGames?'true':'false')+"})";
+  if(!g){
+    return '<div class="veilfull"><div class="sheet"><div class="sheethead"><div><div class="shtitle">Partido</div></div>'+
+      '<button class="iconbtn" onclick="go(\'games\')">'+icon('x',15)+'</button></div>'+
+      '<div class="content"><div class="empty">No se ha encontrado este partido.</div></div></div></div>';
+  }
+  var p = byId(g.roster, pid);
+  if(!p){
+    return '<div class="veilfull"><div class="sheet"><div class="sheethead"><div><div class="shtitle">Jugadora</div></div>'+
+      '<button class="iconbtn" onclick="'+backDest+'">'+icon('x',15)+'</button></div>'+
+      '<div class="content"><div class="empty">No se ha encontrado esta jugadora en este partido.</div></div></div></div>';
+  }
+  var st = playerStats(g, pid);
+  var mf = minutesFor(g, pid);
+  var h = '<div class="veilfull"><div class="sheet">';
+  h += '<div class="sheethead"><div><div class="shtitle">'+esc(p.name)+'</div><div class="shsub">Dorsal '+p.dorsal+' &middot; '+mf.total+'\' jugados en este partido</div></div>'+
+    '<button class="iconbtn" onclick="'+backDest+'">'+icon('x',15)+'</button></div>';
+  h += '<div class="content">';
+  h += renderShotMap(playerZoneStats([g], p.dorsal, p.name));
+  h += renderMatchPlayerStatLine(st, eff(st));
+  h += '</div></div></div>';
   return h;
 }
 
@@ -2453,6 +2513,7 @@ function renderTeamPanel(g){
   if(!rivalKnown){
     h += '<div class="rivalnote" style="margin-top:10px"><div class="ic">'+icon('info',16)+'</div><div class="tx">Activa "Completas" en la configuración del rival para comparar también sus estadísticas de equipo. De momento solo tienes su marcador: <b>'+rivalScore(g)+' pts</b>.</div></div>';
   }
+  h += '<div class="shotmapcard" style="margin-top:16px"><div class="label shotmaptitle">Mapa de tiro</div>'+renderShotMap(teamZoneStats([g]))+'</div>';
   return h;
 }
 
