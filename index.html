@@ -410,8 +410,58 @@
   .strow.me{ background:oklch(72% 0.18 45 / 12%); }
   .st-pos{ width:20px; color:var(--text-dim); }
   .st-team{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .st-val{ width:26px; text-align:center; color:var(--text-dim); font-weight:600; }
+  .st-val{ width:28px; text-align:center; color:var(--text-dim); font-weight:600; font-size:11px; }
   .st-pts{ width:30px; text-align:center; font-family:'Oswald',sans-serif; font-weight:700; color:var(--text); }
+
+  /* ---- clasificación manual (editor) ---- */
+  .teamcard{ background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
+  .teamhead{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .teamname-input{ flex:1; min-width:0; background:none; border:none; color:var(--text); font-weight:800; font-size:14px; font-family:inherit; outline:none; border-bottom:1px dashed var(--border); padding-bottom:3px; }
+  .rankbadge{ width:22px; height:22px; border-radius:999px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:var(--text-dim); flex-shrink:0; }
+  .inputsrow{ display:flex; gap:6px; }
+  .fld{ flex:1; min-width:0; text-align:center; }
+  .fldlabel{ font-size:9px; color:var(--text-dim); margin-bottom:4px; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; }
+  .fldinput{ width:100%; text-align:center; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:8px 2px; color:var(--text); font-weight:700; font-size:13px; }
+  .fldauto{ width:100%; text-align:center; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:8px 2px; color:var(--text-dim); font-weight:700; font-size:13px; }
+  .fldpts{ color:var(--accent); }
+  .ownrow{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-dim); font-weight:600; margin-top:10px; }
+  .addteambtn{ width:100%; padding:13px; border-radius:14px; border:1.5px dashed var(--border); background:none; color:var(--accent); font-weight:700; font-size:13.5px; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:4px; }
+
+  /* ---- bracket / cuadro de eliminatorias ---- */
+  .bracketempty{ display:flex; flex-direction:column; }
+  .bracketlegend{ display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--text-dim); font-weight:700; margin-bottom:8px; }
+  .bracketlegend svg{ flex-shrink:0; color:var(--accent); }
+  .bracketwrap{ position:relative; height:340px; background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+  .bracketzoomcontrols{ position:absolute; top:8px; right:8px; z-index:2; display:flex; flex-direction:column; gap:6px; }
+  .zbtn{ width:26px; height:26px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:14px; font-weight:800; display:flex; align-items:center; justify-content:center; line-height:1; }
+  .bracketzoomouter{ position:absolute; inset:0; overflow:hidden; touch-action:none; }
+  .bracketzoominner{ position:absolute; top:0; left:0; width:max-content; will-change:transform; }
+  .rounds{ display:flex; gap:20px; padding:10px; }
+  .round{ display:flex; flex-direction:column; justify-content:space-around; gap:16px; width:148px; flex-shrink:0; }
+  .roundlabel{ font-size:9px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-dim); text-align:center; margin-bottom:4px; }
+  .matchup{ background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:7px 9px; }
+  .mrow{ display:flex; align-items:center; justify-content:space-between; padding:4px 0; gap:6px; }
+  .mrow:first-child{ border-bottom:1px solid var(--border); }
+  .mteam{ font-size:11.5px; font-weight:700; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .mteam.win{ color:var(--good); }
+  .mteam.me{ padding-left:12px; position:relative; }
+  .mteam.me::before{ content:"★"; color:var(--accent); font-size:8px; position:absolute; left:0; top:1px; }
+  .mscore{ font-size:11.5px; font-weight:800; color:var(--text-dim); flex-shrink:0; }
+  .mscore.win{ color:var(--good); }
+  .mempty{ font-size:10.5px; color:var(--text-dim); opacity:0.55; font-style:italic; text-align:center; padding:10px 0; }
+
+  /* ---- resultado de un cruce del bracket ---- */
+  .matchupteams{ display:flex; align-items:center; justify-content:center; gap:14px; padding:4px 0 14px; }
+  .mt-name{ font-family:'Oswald',sans-serif; font-weight:700; font-size:14px; text-transform:uppercase; text-align:center; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mt-name.me{ color:var(--accent); }
+  .mt-vs{ font-size:11px; color:var(--text-dim); font-weight:700; flex-shrink:0; }
+  .leg{ background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; gap:10px; }
+  .legnum{ font-size:9.5px; font-weight:800; color:var(--text-dim); letter-spacing:0.05em; text-transform:uppercase; width:56px; flex-shrink:0; }
+  .legscore{ display:flex; align-items:center; gap:6px; flex:1; justify-content:center; }
+  .legscore input{ width:48px; text-align:center; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:8px 2px; color:var(--text); font-weight:800; font-size:14px; }
+  .legscore span{ color:var(--text-dim); font-weight:700; }
+  .addlegbtn{ width:100%; padding:11px; border-radius:12px; border:1.5px dashed var(--border); background:none; color:var(--accent); font-weight:700; font-size:12.5px; display:flex; align-items:center; justify-content:center; gap:6px; margin:2px 0 14px; }
+  .result{ background:oklch(70% 0.17 145 / 12%); border:1px solid var(--good); border-radius:12px; padding:12px 14px; text-align:center; font-size:12.5px; font-weight:700; color:var(--good); margin-bottom:4px; }
 
   .rankgrid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
   .ranktile{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:13px 14px; display:flex; flex-direction:column; gap:6px; text-align:left; }
@@ -2103,11 +2153,15 @@ function render(){
   html += rankFilterSheetOverlay();
   html += statsFilterSheetOverlay();
   html += zonePopupOverlay();
+  html += manualClasifOverlay();
+  html += bracketSetupOverlay();
+  html += bracketMatchOverlay();
   html += toastHtml();
   app.innerHTML = html;
   var newScroller = app.querySelector('.content, .playlist, .livecontent, .boxcontent');
   if(newScroller && scrollPositions[S.route]){ newScroller.scrollTop = scrollPositions[S.route]; }
   lastRenderedRoute = S.route;
+  setupBracketZoom();
 }
 
 /* ---- setup ---- */
@@ -2983,27 +3037,40 @@ function renderAdminFbmSource(){
 
 var faseDraft = null;
 function openAddFase(){
-  faseDraft = { id:null, label:'', temporada:'', categoria:'', fase:'', grupo:'', isNew:true };
+  faseDraft = { id:null, label:'', temporada:'', categoria:'', fase:'', grupo:'', modo:'auto', manualTipo:'clasificacion', isNew:true };
   render();
 }
 function openEditFase(id){
   var f = (clubSettings.fbm_fases||[]).filter(function(x){ return x.id===id; })[0];
   if(!f) return;
-  faseDraft = { id:f.id, label:f.label||'', temporada:f.temporada||'', categoria:f.categoria||'', fase:f.fase||'', grupo:f.grupo||'', isNew:false };
+  faseDraft = { id:f.id, label:f.label||'', temporada:f.temporada||'', categoria:f.categoria||'', fase:f.fase||'', grupo:f.grupo||'', modo:f.modo||'auto', manualTipo:f.manualTipo||'clasificacion', isNew:false };
   render();
 }
 function closeFaseModal(){ faseDraft = null; render(); }
 function fdField(field, value){ if(!faseDraft) return; faseDraft[field] = value; }
+function fdSetModo(m){ if(!faseDraft) return; faseDraft.modo = m; render(); }
+function fdSetManualTipo(t){ if(!faseDraft) return; faseDraft.manualTipo = t; render(); }
 async function saveFaseModal(){
   if(!faseDraft) return;
   var d = faseDraft;
   if(!(d.label||'').trim()){ showToast('Ponle un nombre a la fase.'); return; }
   var fases = (clubSettings.fbm_fases||[]).slice();
-  var clean = { id: d.isNew ? uuidv4() : d.id, label: d.label.trim(), temporada: (d.temporada||'').trim(), categoria: (d.categoria||'').trim(), fase: (d.fase||'').trim(), grupo: (d.grupo||'').trim() };
+  var existing = d.isNew ? null : fases.filter(function(f){ return f.id===d.id; })[0];
+  var clean = { id: d.isNew ? uuidv4() : d.id, label: d.label.trim(), temporada: (d.temporada||'').trim(), categoria: (d.categoria||'').trim(), fase: (d.fase||'').trim(), grupo: (d.grupo||'').trim(), modo: d.modo||'auto', manualTipo: d.manualTipo||'clasificacion' };
+  // El bracket (equipos/resultados) se guarda dentro de la propia fase -- se
+  // conserva aunque cambie de modo/tipo temporalmente (por si vuelve a bracket),
+  // y se crea vacío la primera vez que una fase pasa a modo bracket.
+  if(existing && existing.bracket) clean.bracket = existing.bracket;
+  var needsBracketWizard = false;
+  if(clean.modo==='manual' && clean.manualTipo==='bracket' && !(clean.bracket && (clean.bracket.teams||[]).length)){
+    clean.bracket = clean.bracket || { sides:1, teams:[], results:{}, ownTeamId:null };
+    needsBracketWizard = true;
+  }
   if(d.isNew){ fases.push(clean); }
   else { fases = fases.map(function(f){ return f.id===d.id ? clean : f; }); }
   faseDraft = null;
   await saveClubSettings({ fbm_fases: fases });
+  if(needsBracketWizard) openBracketSetup(clean.id);
 }
 function confirmDeleteFase(id){
   var f = (clubSettings.fbm_fases||[]).filter(function(x){ return x.id===id; })[0];
@@ -3031,11 +3098,22 @@ function faseModalOverlay(){
     '<div class="mhead"><div class="mtitle">'+(d.isNew?'Añadir Fase':'Editar Fase')+'</div></div>'+
     '<div class="section">'+
       '<div class="rowcard"><div class="k">Etiqueta</div><input type="text" placeholder="Ej. 1ª Fase" value="'+esc(d.label)+'" oninput="fdField(\'label\',this.value)"></div>'+
-      '<div class="rowcard"><div class="k">Temporada</div><input type="text" placeholder="Ej. 2025/2026" value="'+esc(d.temporada)+'" oninput="fdField(\'temporada\',this.value)"></div>'+
-      '<div class="rowcard"><div class="k">Categoría FBM</div><input type="text" placeholder="Tal cual en fbm.es" value="'+esc(d.categoria)+'" oninput="fdField(\'categoria\',this.value)"></div>'+
-      '<div class="rowcard"><div class="k">Fase FBM</div><input type="text" placeholder="Opcional" value="'+esc(d.fase)+'" oninput="fdField(\'fase\',this.value)"></div>'+
-      '<div class="rowcard"><div class="k">Grupo</div><input type="text" placeholder="Ej. GRUPO 2" value="'+esc(d.grupo)+'" oninput="fdField(\'grupo\',this.value)"></div>'+
     '</div>'+
+    '<div class="label" style="margin:0 0 8px">Modo de esta fase</div>'+
+    '<div class="seg2"><button class="opt'+(d.modo!=='manual'?' on':'')+'" onclick="fdSetModo(\'auto\')">Automática (FBM)</button><button class="opt'+(d.modo==='manual'?' on':'')+'" onclick="fdSetModo(\'manual\')">Manual</button></div>'+
+    '<div class="caption">Automática: la app se sincroniza sola con fbm.es. Manual: la creas y editas tú -- para fases que no tienen tabla de clasificación en la FBM.</div>'+
+    (d.modo==='manual' ? (
+      '<div class="label" style="margin:14px 0 8px">Tipo de clasificación manual</div>'+
+      '<div class="seg2"><button class="opt'+(d.manualTipo!=='bracket'?' on':'')+'" onclick="fdSetManualTipo(\'clasificacion\')">Tabla de clasificación</button><button class="opt'+(d.manualTipo==='bracket'?' on':'')+'" onclick="fdSetManualTipo(\'bracket\')">Bracket / Cuadro</button></div>'+
+      '<div class="caption">Bracket: eliminatoria directa (octavos, cuartos...). Tabla: liguilla o grupo -- se ordena sola por puntos; tú metes P.J, P.P, P.E, P.F y P.C.</div>'
+    ) : (
+      '<div class="section" style="margin-top:14px">'+
+        '<div class="rowcard"><div class="k">Temporada</div><input type="text" placeholder="Ej. 2025/2026" value="'+esc(d.temporada)+'" oninput="fdField(\'temporada\',this.value)"></div>'+
+        '<div class="rowcard"><div class="k">Categoría FBM</div><input type="text" placeholder="Tal cual en fbm.es" value="'+esc(d.categoria)+'" oninput="fdField(\'categoria\',this.value)"></div>'+
+        '<div class="rowcard"><div class="k">Fase FBM</div><input type="text" placeholder="Opcional" value="'+esc(d.fase)+'" oninput="fdField(\'fase\',this.value)"></div>'+
+        '<div class="rowcard"><div class="k">Grupo</div><input type="text" placeholder="Ej. GRUPO 2" value="'+esc(d.grupo)+'" oninput="fdField(\'grupo\',this.value)"></div>'+
+      '</div>'
+    ))+
     '<button class="fullbtn" onclick="saveFaseModal()">Guardar</button>'+
     '<div class="cancel" onclick="closeFaseModal()">Cancelar</div>'+
     (!d.isNew ? '<div class="cancel" style="margin-top:6px" onclick="closeFaseModal();confirmDeleteFase(\''+d.id+'\')">Eliminar fase</div>' : '')+
@@ -3526,6 +3604,579 @@ function visibleStandings(){
   return standings.filter(function(r){ return r.fase_id===selectedFaseId; });
 }
 function selectFase(id){ selectedFaseId = id; render(); }
+
+/* =====================================================================
+   MODO MANUAL POR FASE (clasificación manual con auto-orden estilo FBM, o
+   bracket/cuadro de eliminatorias) + tabla de clasificación con TODAS las
+   columnas de la FBM. Todo lo del bracket (equipos, resultados) vive dentro
+   del propio objeto de la fase (clubSettings.fbm_fases[i].bracket), como un
+   jsonb más -- no hace falta ninguna tabla nueva en Supabase para esto.
+   ===================================================================== */
+
+function standingsForFase(faseId){
+  if(!faseId) return standings;
+  return standings.filter(function(r){ return r.fase_id===faseId; });
+}
+// P.G y Puntos se derivan siempre de P.J/P.P/P.E (nunca se piden a mano):
+// P.G = P.J - P.P - P.E ; Puntos = P.G*2 + P.E*1 (victoria=2, empate=1).
+function deriveClasifRow(r){
+  var pj = parseInt(r.pj,10)||0, pp = parseInt(r.pp,10)||0, pe = parseInt(r.pe,10)||0;
+  var pg = Math.max(0, pj - pp - pe);
+  return { pg: pg, pts: pg*2 + pe };
+}
+// Reordena y renumera igual que hace la FBM: primero por Puntos, y en caso de
+// empate por el mejor promedio/ratio entre P.F y P.C (si P.C es 0 con P.F>0 se
+// considera el mejor promedio posible). Último desempate, por si el ratio
+// también coincide: la diferencia de puntos a favor/en contra.
+function sortedStandingsForDisplay(rows){
+  var withDerived = rows.map(function(r){ return Object.assign({}, r); });
+  withDerived.sort(function(a,b){
+    if((b.pts||0) !== (a.pts||0)) return (b.pts||0) - (a.pts||0);
+    var ra = (a.pc>0) ? (a.pf/a.pc) : ((a.pf>0) ? Infinity : 0);
+    var rb = (b.pc>0) ? (b.pf/b.pc) : ((b.pf>0) ? Infinity : 0);
+    if(rb !== ra) return rb - ra;
+    return ((b.pf||0)-(b.pc||0)) - ((a.pf||0)-(a.pc||0));
+  });
+  withDerived.forEach(function(r,i){ r.position = i+1; });
+  return withDerived;
+}
+// Tabla compartida (auto y manual) con TODAS las columnas de la FBM -- ancho
+// pensado a propósito para que quepan las 9 columnas sin recortar nada ni
+// necesitar scroll horizontal en un móvil normal (ver .st-val en el CSS).
+function renderStandingsTable(rows){
+  var h = '<div class="standings"><div class="strow head"><span class="st-pos">#</span><span class="st-team">Equipo</span><span class="st-val">PJ</span><span class="st-val">PG</span><span class="st-val">PP</span><span class="st-val">PE</span><span class="st-val">PF</span><span class="st-val">PC</span><span class="st-pts">Pts</span></div>';
+  rows.forEach(function(r){
+    h += '<div class="strow'+(r.is_own_team?' me':'')+'">'+
+      '<span class="st-pos">'+(r.position||'')+'</span>'+
+      '<span class="st-team">'+esc(r.team_name)+'</span>'+
+      '<span class="st-val">'+(r.pj||0)+'</span>'+
+      '<span class="st-val">'+(r.pg||0)+'</span>'+
+      '<span class="st-val">'+(r.pp||0)+'</span>'+
+      '<span class="st-val">'+(r.pe||0)+'</span>'+
+      '<span class="st-val">'+(r.pf||0)+'</span>'+
+      '<span class="st-val">'+(r.pc||0)+'</span>'+
+      '<span class="st-pts">'+(r.pts||0)+'</span>'+
+      '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+/* ---------- Editor de clasificación manual (por fase) ---------- */
+var manualClasifOpen = false;
+var manualClasifFaseId = null;
+var manualClasifDraft = [];
+var manualClasifRemoved = [];
+var manualClasifSaving = false;
+function openManualClasifEditor(faseId){
+  manualClasifFaseId = faseId;
+  manualClasifDraft = standingsForFase(faseId).map(function(r){ return Object.assign({}, r); });
+  manualClasifRemoved = [];
+  manualClasifOpen = true;
+  render();
+}
+function closeManualClasifEditor(){ manualClasifOpen = false; manualClasifFaseId = null; render(); }
+function mcField(i, field, value){
+  if(!manualClasifDraft[i]) return;
+  if(field==='team_name') manualClasifDraft[i][field] = value;
+  else if(field==='is_own_team') manualClasifDraft[i][field] = !!value;
+  else manualClasifDraft[i][field] = parseInt(value,10) || 0;
+  render();
+}
+function mcAddRow(){
+  manualClasifDraft.push({ id:null, team_name:'', pj:0, pp:0, pe:0, pf:0, pc:0, is_own_team:false, fase_id: manualClasifFaseId });
+  render();
+}
+function mcRemoveRow(i){
+  var row = manualClasifDraft[i];
+  if(row && row.id) manualClasifRemoved.push(row.id);
+  manualClasifDraft.splice(i,1);
+  render();
+}
+async function saveManualClasif(){
+  if(!manualClasifFaseId || !currentSeasonId) return;
+  if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); manualClasifOpen=false; render(); return; }
+  manualClasifSaving = true; render();
+  for(var i=0;i<manualClasifRemoved.length;i++){ try{ await sb.from('standings_entries').delete().eq('id', manualClasifRemoved[i]); }catch(e){} }
+  var rowsToSave = manualClasifDraft.filter(function(r){ return (r.team_name||'').trim(); }).map(function(r){
+    var d = deriveClasifRow(r);
+    return Object.assign({}, r, { pg: d.pg, pts: d.pts });
+  });
+  var sorted = sortedStandingsForDisplay(rowsToSave);
+  for(var j=0;j<sorted.length;j++){
+    var row = sorted[j];
+    var payload = { position: row.position, team_name: row.team_name, pj: row.pj||0, pg: row.pg||0, pp: row.pp||0, pe: row.pe||0, pf: row.pf||0, pc: row.pc||0, pts: row.pts||0, is_own_team: !!row.is_own_team, season_id: currentSeasonId, fase_id: manualClasifFaseId };
+    if(row.id) payload.id = row.id; else payload.id = uuidv4();
+    try{ await sb.from('standings_entries').upsert(payload); }catch(e){}
+  }
+  try{
+    var st = await sb.from('standings_entries').select('*').eq('season_id', currentSeasonId).order('position',{ascending:true});
+    standings = (st && st.data) || [];
+  }catch(e){}
+  manualClasifSaving = false;
+  manualClasifOpen = false;
+  manualClasifFaseId = null;
+  render();
+}
+function manualClasifOverlay(){
+  if(!manualClasifOpen) return '';
+  var fase = byIdArr(clubSettings.fbm_fases||[], manualClasifFaseId);
+  var h = '<div class="veilfull" onclick="if(event.target===this) closeManualClasifEditor()"><div class="sheet" style="height:92%">';
+  h += '<div class="sheethead"><div><div class="shtitle">Clasificación</div><div class="shsub">'+esc(fase?fase.label:'')+' &middot; se ordena sola por Puntos</div></div>'+
+    '<button class="iconbtn" onclick="closeManualClasifEditor()">'+icon('x',15)+'</button></div>';
+  h += '<div class="content" style="padding:14px 20px 16px">';
+  h += '<div class="caption" style="margin:-4px 0 14px">Mete P.J, P.P, P.E, P.F y P.C -- P.G y Puntos se calculan solos, y el orden se recalcula al guardar (Puntos y, en empate, mejor promedio P.F/P.C, igual que en fbm.es).</div>';
+  manualClasifDraft.forEach(function(r,i){
+    var d = deriveClasifRow(r);
+    h += '<div class="teamcard">'+
+      '<div class="teamhead"><div class="rankbadge">'+(i+1)+'</div>'+
+      '<input class="teamname-input" value="'+esc(r.team_name)+'" placeholder="Nombre del equipo" oninput="mcField('+i+',\'team_name\',this.value)">'+
+      '<button class="rmbtn" onclick="mcRemoveRow('+i+')">'+icon('trash',15)+'</button></div>'+
+      '<div class="inputsrow">'+
+        '<div class="fld"><div class="fldlabel">P.J</div><input class="fldinput" type="number" value="'+(r.pj||0)+'" oninput="mcField('+i+',\'pj\',this.value)"></div>'+
+        '<div class="fld"><div class="fldlabel">P.P</div><input class="fldinput" type="number" value="'+(r.pp||0)+'" oninput="mcField('+i+',\'pp\',this.value)"></div>'+
+        '<div class="fld"><div class="fldlabel">P.E</div><input class="fldinput" type="number" value="'+(r.pe||0)+'" oninput="mcField('+i+',\'pe\',this.value)"></div>'+
+        '<div class="fld"><div class="fldlabel">P.G</div><div class="fldauto">'+d.pg+'</div></div>'+
+        '<div class="fld"><div class="fldlabel">P.F</div><input class="fldinput" type="number" value="'+(r.pf||0)+'" oninput="mcField('+i+',\'pf\',this.value)"></div>'+
+        '<div class="fld"><div class="fldlabel">P.C</div><input class="fldinput" type="number" value="'+(r.pc||0)+'" oninput="mcField('+i+',\'pc\',this.value)"></div>'+
+        '<div class="fld"><div class="fldlabel">Pts</div><div class="fldauto fldpts">'+d.pts+'</div></div>'+
+      '</div>'+
+      '<label class="ownrow"><input type="checkbox" '+(r.is_own_team?'checked':'')+' onchange="mcField('+i+',\'is_own_team\',this.checked)"> Es nuestro equipo</label>'+
+    '</div>';
+  });
+  h += '<button class="addteambtn" onclick="mcAddRow()">'+icon('plus',15)+' Añadir equipo</button>';
+  h += '</div>';
+  h += '<div class="ctabar"><button class="cta" onclick="saveManualClasif()">'+(manualClasifSaving?'Guardando…':'Guardar clasificación')+'</button></div>';
+  h += '</div></div>';
+  return h;
+}
+
+/* ---------- Bracket / cuadro de eliminatorias (por fase) ---------- */
+function nextPow2(n){ var p=1; while(p<n) p*=2; return Math.max(1,p); }
+function padToPow2(ids){
+  var size = nextPow2(ids.length || 1);
+  var out = ids.slice();
+  while(out.length < size) out.push(null);
+  return out;
+}
+// legs: [{a,b}, ...] resultados de cada partido de un mismo cruce. Ninguno
+// fijo a 1 o 2 -- se admiten los que hagan falta (al mejor de 3, 5...). Gana
+// quien tenga más partidos ganados; si están igualados, el cruce sigue
+// pendiente (no avanza nadie hasta que sea inequívoco).
+function legsTally(legs){
+  var wa=0, wb=0, played=0;
+  (legs||[]).forEach(function(l){
+    if(!l) return;
+    var a = (l.a==='' || l.a==null) ? null : Number(l.a);
+    var b = (l.b==='' || l.b==null) ? null : Number(l.b);
+    if(a==null || b==null || isNaN(a) || isNaN(b)) return;
+    played++;
+    if(a>b) wa++; else if(b>a) wb++;
+  });
+  return { wa:wa, wb:wb, played:played };
+}
+function legsResult(legs){
+  var t = legsTally(legs);
+  if(t.wa>t.wb) return 'A';
+  if(t.wb>t.wa) return 'B';
+  return null;
+}
+// Construye las rondas de UN lado (o del bracket entero si sides=1) a partir
+// de los slots iniciales (ids de equipo, o null = "bye"/pasa directo).
+// Todo se deriva de los resultados guardados cada vez que se llama -- no se
+// guarda ningún "ganador" en ningún sitio, así que corregir un resultado de
+// una ronda ya jugada actualiza solo, en cadena, las rondas siguientes.
+function computeSideBracket(initialSlots, results, keyPrefix){
+  var rounds = [];
+  var currentTeams = initialSlots.slice();
+  while(currentTeams.length >= 1){
+    if(currentTeams.length === 1) break;
+    var matchups = [];
+    for(var i=0;i<currentTeams.length;i+=2){
+      var teamA = currentTeams[i], teamB = currentTeams[i+1];
+      var key = keyPrefix+rounds.length+'-'+(i/2);
+      var legs = (results && results[key]) || [];
+      var winnerId = null;
+      if(teamA && !teamB) winnerId = teamA;
+      else if(teamB && !teamA) winnerId = teamB;
+      else if(teamA && teamB){
+        var res = legsResult(legs);
+        winnerId = res==='A' ? teamA : (res==='B' ? teamB : null);
+      }
+      matchups.push({ key:key, teamA:teamA, teamB:teamB, legs:legs, winnerId:winnerId });
+    }
+    rounds.push(matchups);
+    currentTeams = matchups.map(function(m){ return m.winnerId; });
+  }
+  return { rounds: rounds, championId: currentTeams[0] || null };
+}
+function computeBracket(bracket){
+  bracket = bracket || {};
+  var teams = bracket.teams || [];
+  var results = bracket.results || {};
+  if(bracket.sides === 2){
+    var side0 = teams.filter(function(t){ return t.side===0; }).map(function(t){ return t.id; });
+    var side1 = teams.filter(function(t){ return t.side===1; }).map(function(t){ return t.id; });
+    var sideA = computeSideBracket(padToPow2(side0), results, 'A');
+    var sideB = computeSideBracket(padToPow2(side1), results, 'B');
+    var finalKey = 'F-0';
+    var finalLegs = results[finalKey] || [];
+    var finalWinner = null;
+    if(sideA.championId && sideB.championId){
+      var res = legsResult(finalLegs);
+      finalWinner = res==='A' ? sideA.championId : (res==='B' ? sideB.championId : null);
+    }
+    return { mode:'2sides', sideA: sideA.rounds, sideB: sideB.rounds, final: [{ key:finalKey, teamA:sideA.championId, teamB:sideB.championId, legs:finalLegs, winnerId:finalWinner }], championId: finalWinner };
+  } else {
+    var slots = padToPow2(teams.map(function(t){ return t.id; }));
+    var single = computeSideBracket(slots, results, '');
+    return { mode:'1side', rounds: single.rounds, championId: single.championId };
+  }
+}
+function findMatchupByKey(bracket, key){
+  var comp = computeBracket(bracket);
+  var all = [];
+  if(comp.mode==='2sides'){
+    comp.sideA.forEach(function(r){ all = all.concat(r); });
+    comp.sideB.forEach(function(r){ all = all.concat(r); });
+    all = all.concat(comp.final);
+  } else {
+    comp.rounds.forEach(function(r){ all = all.concat(r); });
+  }
+  return all.filter(function(m){ return m.key===key; })[0] || null;
+}
+function roundName(matchCount){
+  if(matchCount===1) return 'Final';
+  if(matchCount===2) return 'Semifinal';
+  if(matchCount===4) return 'Cuartos';
+  if(matchCount===8) return 'Octavos';
+  if(matchCount>=1) return (matchCount*2)+'avos';
+  return '';
+}
+
+/* ---------- Asistente para crear/editar el bracket (equipos, lados) ---------- */
+var bracketSetupDraft = null; // {faseId, mode:'create'|'editTeams', step, sides, count, teams:[{id,name,side}], ownTeamId}
+function openBracketSetup(faseId){
+  bracketSetupDraft = { faseId:faseId, mode:'create', step:1, sides:1, count:8, teams:[], ownTeamId:null };
+  render();
+}
+function openBracketTeamsEdit(faseId){
+  var fase = byIdArr(clubSettings.fbm_fases||[], faseId);
+  var bracket = (fase && fase.bracket) || { teams:[], sides:1, ownTeamId:null };
+  bracketSetupDraft = {
+    faseId: faseId, mode:'editTeams', step:2, sides: bracket.sides||1, count:(bracket.teams||[]).length,
+    teams: (bracket.teams||[]).map(function(t){ return Object.assign({}, t); }),
+    ownTeamId: bracket.ownTeamId || null
+  };
+  render();
+}
+function closeBracketSetup(){ bracketSetupDraft = null; render(); }
+function bsSetSides(n){ if(!bracketSetupDraft) return; bracketSetupDraft.sides = n; render(); }
+function bsSetCount(n){ if(!bracketSetupDraft) return; bracketSetupDraft.count = Math.max(2, Math.min(64, parseInt(n,10)||0)); render(); }
+function bsNextStep(){
+  if(!bracketSetupDraft) return;
+  var n = bracketSetupDraft.count;
+  var teams = [];
+  for(var i=0;i<n;i++){
+    teams.push({ id: uuidv4(), name:'', side: bracketSetupDraft.sides===2 ? (i < Math.ceil(n/2) ? 0 : 1) : 0 });
+  }
+  bracketSetupDraft.teams = teams;
+  bracketSetupDraft.step = 2;
+  render();
+}
+function bsBackStep(){ if(bracketSetupDraft){ bracketSetupDraft.step = 1; render(); } }
+function bsTeamField(i, field, value){
+  if(!bracketSetupDraft || !bracketSetupDraft.teams[i]) return;
+  if(field==='name') bracketSetupDraft.teams[i].name = value;
+}
+function bsSetOwnTeam(id){ if(!bracketSetupDraft) return; bracketSetupDraft.ownTeamId = id; render(); }
+async function bsSave(){
+  if(!bracketSetupDraft) return;
+  if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); bracketSetupDraft=null; render(); return; }
+  var d = bracketSetupDraft;
+  if(d.teams.some(function(t){ return !(t.name||'').trim(); })){ showToast('Ponle nombre a todos los equipos.'); return; }
+  var fases = (clubSettings.fbm_fases||[]).slice();
+  var existing = byIdArr(fases, d.faseId);
+  var newBracket = {
+    sides: d.sides,
+    teams: d.teams.map(function(t){ return { id:t.id, name:(t.name||'').trim(), side:t.side||0 }; }),
+    ownTeamId: d.ownTeamId || null,
+    results: (d.mode==='editTeams' && existing && existing.bracket) ? existing.bracket.results||{} : {}
+  };
+  fases = fases.map(function(f){ return f.id===d.faseId ? Object.assign({}, f, { bracket:newBracket }) : f; });
+  bracketSetupDraft = null;
+  await saveClubSettings({ fbm_fases: fases });
+}
+function confirmRecreateBracket(faseId){
+  askConfirm('Recrear bracket', 'Se borrará el bracket actual (equipos y resultados) para empezar de nuevo. Esta acción no se puede deshacer.', 'Recrear', function(){ openBracketSetup(faseId); });
+}
+function bracketSetupOverlay(){
+  if(!bracketSetupDraft) return '';
+  var d = bracketSetupDraft;
+  var h = '<div class="veil"><div class="modal" style="max-height:88%">';
+  if(d.step===1){
+    h += '<div class="mhead"><div class="mtitle">Crear bracket</div></div>';
+    h += '<div><div class="label" style="margin-bottom:8px">Formato</div>'+
+      '<div class="seg2"><button class="opt'+(d.sides===1?' on':'')+'" onclick="bsSetSides(1)">1 lado</button><button class="opt'+(d.sides===2?' on':'')+'" onclick="bsSetSides(2)">2 lados</button></div>'+
+      '<div class="caption">2 lados: estilo conferencias NBA, cada lado juega su propio cuadro hasta la final.</div></div>';
+    h += '<div><div class="label" style="margin:14px 0 8px">Número de equipos</div>'+
+      '<div class="rowcard"><div class="k">Equipos</div><input type="number" value="'+d.count+'" oninput="bsSetCount(this.value)"></div>'+
+      '<div class="chiprow" style="margin-top:8px">'+[4,8,16,32].map(function(n){ return '<button class="chip'+(d.count===n?' on':'')+'" onclick="bsSetCount('+n+')">'+n+'</button>'; }).join('')+'</div>'+
+      '<div class="caption" style="margin-top:8px">Pon el número que quieras -- estos son solo accesos rápidos.</div></div>';
+    h += '<button class="fullbtn" onclick="bsNextStep()">Continuar</button>';
+    h += '<div class="cancel" onclick="closeBracketSetup()">Cancelar</div>';
+  } else {
+    h += '<div class="mhead"><div class="mtitle">'+(d.mode==='editTeams'?'Editar equipos':'Nombra los equipos')+'</div></div>';
+    if(d.sides===2){
+      h += '<div class="caption" style="margin-bottom:4px">Lado A: equipos 1-'+Math.ceil(d.count/2)+'. Lado B: equipos '+(Math.ceil(d.count/2)+1)+'-'+d.count+'.</div>';
+    }
+    d.teams.forEach(function(t,i){
+      h += '<div class="rowcard" style="gap:8px">'+
+        '<div class="k" style="width:18px;flex-shrink:0">'+(i+1)+'</div>'+
+        '<input type="text" placeholder="Nombre del equipo" value="'+esc(t.name)+'" oninput="bsTeamField('+i+',\'name\',this.value)" style="flex:1;text-align:left">'+
+        '<label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);flex-shrink:0;white-space:nowrap"><input type="radio" name="ownteam" '+(d.ownTeamId===t.id?'checked':'')+' onchange="bsSetOwnTeam(\''+t.id+'\')"> Nuestro</label>'+
+      '</div>';
+    });
+    h += '<button class="fullbtn" onclick="bsSave()">'+(d.mode==='editTeams'?'Guardar cambios':'Crear bracket')+'</button>';
+    if(d.mode==='create'){ h += '<div class="cancel" onclick="bsBackStep()">Atrás</div>'; }
+    if(d.mode==='editTeams'){ h += '<div class="cancel" style="color:var(--bad)" onclick="closeBracketSetup();confirmRecreateBracket(\''+d.faseId+'\')">Recrear bracket desde cero</div>'; }
+    h += '<div class="cancel" onclick="closeBracketSetup()">Cancelar</div>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+/* ---------- Resultado de un cruce (nº de partidos libre, editable) ---------- */
+var bracketMatchDraft = null; // {faseId, key, legs:[{a,b}]}
+function openBracketMatch(faseId, key){
+  var fase = byIdArr(clubSettings.fbm_fases||[], faseId);
+  if(!fase || !fase.bracket) return;
+  var legs = (fase.bracket.results && fase.bracket.results[key]) || [];
+  bracketMatchDraft = { faseId:faseId, key:key, legs: legs.length ? legs.map(function(l){ return Object.assign({},l); }) : [{a:'',b:''}] };
+  render();
+}
+function closeBracketMatch(){ bracketMatchDraft = null; render(); }
+function bmLegField(i, side, value){ if(bracketMatchDraft && bracketMatchDraft.legs[i]){ bracketMatchDraft.legs[i][side] = value; render(); } }
+function bmAddLeg(){ if(bracketMatchDraft){ bracketMatchDraft.legs.push({a:'',b:''}); render(); } }
+function bmRemoveLeg(i){ if(bracketMatchDraft){ bracketMatchDraft.legs.splice(i,1); render(); } }
+async function saveBracketMatch(){
+  if(!bracketMatchDraft) return;
+  if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); bracketMatchDraft=null; render(); return; }
+  var faseId = bracketMatchDraft.faseId, key = bracketMatchDraft.key;
+  var legs = bracketMatchDraft.legs.filter(function(l){ return (l.a!=='' && l.a!=null) || (l.b!=='' && l.b!=null); });
+  var fases = (clubSettings.fbm_fases||[]).map(function(f){
+    if(f.id!==faseId) return f;
+    var bracket = Object.assign({}, f.bracket||{});
+    var results = Object.assign({}, bracket.results||{});
+    if(legs.length) results[key] = legs; else delete results[key];
+    bracket.results = results;
+    return Object.assign({}, f, { bracket: bracket });
+  });
+  bracketMatchDraft = null;
+  await saveClubSettings({ fbm_fases: fases });
+}
+function bracketMatchOverlay(){
+  if(!bracketMatchDraft) return '';
+  var fase = byIdArr(clubSettings.fbm_fases||[], bracketMatchDraft.faseId);
+  var bracket = fase && fase.bracket;
+  var teamsById = {}; ((bracket&&bracket.teams)||[]).forEach(function(t){ teamsById[t.id]=t; });
+  var m = bracket ? findMatchupByKey(bracket, bracketMatchDraft.key) : null;
+  var nameA = m && teamsById[m.teamA] ? teamsById[m.teamA].name : '—';
+  var nameB = m && teamsById[m.teamB] ? teamsById[m.teamB].name : '—';
+  var isOwnA = !!(m && bracket && bracket.ownTeamId===m.teamA), isOwnB = !!(m && bracket && bracket.ownTeamId===m.teamB);
+  var tally = legsTally(bracketMatchDraft.legs);
+  var winnerLabel = '';
+  if(tally.played){
+    if(tally.wa>tally.wb) winnerLabel = esc(nameA)+' gana '+tally.wa+'–'+tally.wb+' y pasa a la siguiente ronda';
+    else if(tally.wb>tally.wa) winnerLabel = esc(nameB)+' gana '+tally.wb+'–'+tally.wa+' y pasa a la siguiente ronda';
+  }
+  var h = '<div class="veilfull" onclick="if(event.target===this) closeBracketMatch()"><div class="sheet">';
+  h += '<div class="sheethead"><div><div class="shtitle">Resultado</div><div class="shsub">'+esc(fase?fase.label:'')+'</div></div>'+
+    '<button class="iconbtn" onclick="closeBracketMatch()">'+icon('x',15)+'</button></div>';
+  h += '<div class="content">';
+  h += '<div class="matchupteams"><div class="mt-name'+(isOwnA?' me':'')+'">'+esc(nameA)+'</div><div class="mt-vs">VS</div><div class="mt-name'+(isOwnB?' me':'')+'">'+esc(nameB)+'</div></div>';
+  h += '<div class="caption">Añade tantos partidos como se jueguen entre estos dos equipos (1, 2, al mejor de 3, 5...). El equipo que gane más partidos avanza automáticamente.</div>';
+  bracketMatchDraft.legs.forEach(function(l,i){
+    h += '<div class="leg"><div class="legnum">Partido '+(i+1)+'</div>'+
+      '<div class="legscore"><input type="number" value="'+esc(String(l.a==null?'':l.a))+'" oninput="bmLegField('+i+',\'a\',this.value)"><span>—</span><input type="number" value="'+esc(String(l.b==null?'':l.b))+'" oninput="bmLegField('+i+',\'b\',this.value)"></div>'+
+      '<button class="rmbtn" onclick="bmRemoveLeg('+i+')">'+icon('trash',14)+'</button></div>';
+  });
+  h += '<button class="addlegbtn" onclick="bmAddLeg()">'+icon('plus',14)+' Añadir otro partido</button>';
+  if(winnerLabel) h += '<div class="result">'+winnerLabel+'</div>';
+  h += '</div>';
+  h += '<div class="ctabar"><button class="cta" onclick="saveBracketMatch()">Guardar resultado</button>'+
+    '<div class="cancel">Puedes volver a abrir este cruce cuando quieras para corregir los resultados</div></div>';
+  h += '</div></div>';
+  return h;
+}
+
+/* ---------- Bloque del bracket en Inicio: sale entero por defecto, pellizca
+   con los dedos para ampliar/reducir y arrastra para moverte por él. ---------- */
+var bracketZoomState = {}; // { [faseId]: {scale,tx,ty,fitted,sig} } -- transitorio, no se guarda
+function renderBracketBlock(fase){
+  var bracket = fase.bracket || { teams:[], results:{}, sides:1 };
+  var teams = bracket.teams || [];
+  if(!teams.length){
+    return '<div class="bracketempty"><div class="empty" style="padding:20px 0 16px">Todavía no has creado el bracket de esta fase.</div>'+
+      '<button class="cta" onclick="openBracketSetup(\''+fase.id+'\')">'+icon('plus',16)+' Crear bracket</button></div>';
+  }
+  var teamsById = {}; teams.forEach(function(t){ teamsById[t.id]=t; });
+  var comp = computeBracket(bracket);
+  function teamLabel(id){ if(!id) return '—'; var t = teamsById[id]; return t ? t.name : '—'; }
+  function isOwn(id){ return !!(id && bracket.ownTeamId===id); }
+  function matchupHtml(m){
+    if(!m) return '<div class="matchup"><div class="mempty">Esperando clasificados</div></div>';
+    var tally = legsTally(m.legs);
+    var showScore = tally.played>0;
+    var tapAttr = (m.teamA && m.teamB) ? ' onclick="openBracketMatch(\''+fase.id+'\',\''+m.key+'\')" style="cursor:pointer"' : '';
+    var rowA = '<div class="mrow"><div class="mteam'+(m.winnerId && m.winnerId===m.teamA?' win':'')+(isOwn(m.teamA)?' me':'')+'">'+esc(teamLabel(m.teamA))+'</div>'+(showScore?'<div class="mscore'+(m.winnerId===m.teamA?' win':'')+'">'+tally.wa+'</div>':'')+'</div>';
+    var rowB = '<div class="mrow"><div class="mteam'+(m.winnerId && m.winnerId===m.teamB?' win':'')+(isOwn(m.teamB)?' me':'')+'">'+esc(teamLabel(m.teamB))+'</div>'+(showScore?'<div class="mscore'+(m.winnerId===m.teamB?' win':'')+'">'+tally.wb+'</div>':'')+'</div>';
+    return '<div class="matchup"'+tapAttr+'>'+rowA+rowB+'</div>';
+  }
+  function roundsColumnsHtml(rounds){
+    var html = '';
+    rounds.forEach(function(matchups){
+      html += '<div class="round"><div class="roundlabel">'+esc(roundName(matchups.length))+'</div>';
+      matchups.forEach(function(m){ html += matchupHtml(m); });
+      html += '</div>';
+    });
+    return html;
+  }
+  var inner = '';
+  var sig;
+  if(comp.mode==='2sides'){
+    sig = teams.length+'-2-'+JSON.stringify(Object.keys(bracket.results||{}));
+    inner += roundsColumnsHtml(comp.sideA);
+    inner += '<div class="round" style="justify-content:center"><div class="roundlabel">Final</div>'+matchupHtml(comp.final[0])+'</div>';
+    inner += roundsColumnsHtml(comp.sideB.slice().reverse());
+  } else {
+    sig = teams.length+'-1-'+JSON.stringify(Object.keys(bracket.results||{}));
+    inner += roundsColumnsHtml(comp.rounds);
+  }
+  var h = '<div class="bracketlegend">'+icon('star',10)+' nuestro equipo &middot; toca un cruce para ver/editar el resultado</div>';
+  h += '<div class="bracketwrap"><div class="bracketzoomcontrols">'+
+    '<button class="zbtn" onclick="bracketZoomStep(\''+fase.id+'\',1)">+</button>'+
+    '<button class="zbtn" onclick="bracketZoomFitNow(\''+fase.id+'\')">'+icon('history',13)+'</button>'+
+    '<button class="zbtn" onclick="bracketZoomStep(\''+fase.id+'\',-1)">−</button>'+
+    '</div>'+
+    '<div class="bracketzoomouter" id="bz-'+fase.id+'" data-fase="'+fase.id+'">'+
+      '<div class="bracketzoominner" data-sig="'+esc(sig)+'"><div class="rounds">'+inner+'</div></div>'+
+    '</div></div>';
+  return h;
+}
+function applyBracketTransform(outer, inner, st){
+  inner.style.transformOrigin = '0 0';
+  inner.style.transform = 'translate('+st.tx+'px,'+st.ty+'px) scale('+st.scale+')';
+}
+function bracketZoomStep(faseId, dir){
+  var outer = document.getElementById('bz-'+faseId);
+  var inner = outer && outer.querySelector('.bracketzoominner');
+  var st = bracketZoomState[faseId];
+  if(!outer || !inner || !st) return;
+  var newScale = Math.max(0.25, Math.min(3, st.scale * (dir>0?1.25:0.8)));
+  var cx = outer.clientWidth/2, cy = outer.clientHeight/2;
+  var factor = newScale/st.scale;
+  st.tx = cx - (cx - st.tx)*factor;
+  st.ty = cy - (cy - st.ty)*factor;
+  st.scale = newScale;
+  applyBracketTransform(outer, inner, st);
+}
+function bracketZoomFitNow(faseId){
+  var st = bracketZoomState[faseId];
+  if(st) st.fitted = false;
+  setupBracketZoom();
+}
+// Se llama tras cada render(): calcula (una vez por "forma" de bracket) el
+// zoom que hace que se vea entero, y engancha pellizcar-para-ampliar / arrastrar
+// con los dedos SIN pasar por render() en cada movimiento (para que no vaya a
+// tirones, igual que se evitó el long-press en la gráfica de tendencia).
+function setupBracketZoom(){
+  var outers = document.querySelectorAll('.bracketzoomouter');
+  outers.forEach(function(outer){
+    var faseId = outer.getAttribute('data-fase');
+    var inner = outer.querySelector('.bracketzoominner');
+    if(!inner) return;
+    var st = bracketZoomState[faseId] || (bracketZoomState[faseId] = { scale:1, tx:0, ty:0, fitted:false, sig:'' });
+    var sig = inner.getAttribute('data-sig') || '';
+    if(!st.fitted || st.sig !== sig){
+      inner.style.transform = 'none';
+      var r = inner.getBoundingClientRect();
+      var orect = outer.getBoundingClientRect();
+      var iw = r.width || 1, ih = r.height || 1;
+      var ow = orect.width || 1, oh = orect.height || 1;
+      var fit = Math.min(ow/iw, oh/ih);
+      if(!isFinite(fit) || fit<=0) fit = 1;
+      fit = Math.max(0.2, Math.min(fit, 2.5));
+      st.scale = fit; st.tx = (ow - iw*fit)/2; st.ty = (oh - ih*fit)/2; st.fitted = true; st.sig = sig;
+    }
+    applyBracketTransform(outer, inner, st);
+    attachBracketGestures(outer, inner, st);
+  });
+}
+function attachBracketGestures(outer, inner, st){
+  if(outer._bzWired) return; // los listeners no dependen del contenido -- se enganchan una vez por elemento
+  outer._bzWired = true;
+  var pointers = {};
+  var mode = null;
+  var startDist=1, startScale=1, startTx=0, startTy=0;
+  var moved = false;
+  outer.addEventListener('pointerdown', function(e){
+    pointers[e.pointerId] = { x:e.clientX, y:e.clientY, startX:e.clientX, startY:e.clientY };
+    try{ outer.setPointerCapture(e.pointerId); }catch(ex){}
+    moved = false;
+    var ids = Object.keys(pointers);
+    if(ids.length===1){
+      mode='pan'; startTx=st.tx; startTy=st.ty;
+    } else if(ids.length===2){
+      mode='pinch';
+      var p = ids.map(function(id){ return pointers[id]; });
+      startDist = Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y) || 1;
+      startScale = st.scale; startTx = st.tx; startTy = st.ty;
+    }
+  });
+  outer.addEventListener('pointermove', function(e){
+    if(!pointers[e.pointerId]) return;
+    pointers[e.pointerId].x = e.clientX; pointers[e.pointerId].y = e.clientY;
+    var ids = Object.keys(pointers);
+    if(mode==='pan' && ids.length===1){
+      var p = pointers[ids[0]];
+      var dx = e.clientX - p.startX, dy = e.clientY - p.startY;
+      if(Math.abs(dx)>4 || Math.abs(dy)>4) moved = true;
+      st.tx = startTx + dx; st.ty = startTy + dy;
+      applyBracketTransform(outer, inner, st);
+    } else if(mode==='pinch' && ids.length===2){
+      moved = true;
+      var pts = ids.map(function(id){ return pointers[id]; });
+      var dist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y) || 1;
+      var scale = Math.max(0.2, Math.min(3, startScale * (dist/startDist)));
+      var mid = { x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
+      var rect = outer.getBoundingClientRect();
+      var mx = mid.x - rect.left, my = mid.y - rect.top;
+      var factor = scale/startScale;
+      st.tx = mx - (mx - startTx)*factor;
+      st.ty = my - (my - startTy)*factor;
+      st.scale = scale;
+      applyBracketTransform(outer, inner, st);
+    }
+  });
+  function endPointer(e){
+    delete pointers[e.pointerId];
+    var ids = Object.keys(pointers);
+    if(ids.length===1){
+      mode='pan'; startTx=st.tx; startTy=st.ty;
+      var id=ids[0]; pointers[id].startX=pointers[id].x; pointers[id].startY=pointers[id].y;
+    } else if(ids.length===0){
+      mode=null;
+    }
+  }
+  outer.addEventListener('pointerup', endPointer);
+  outer.addEventListener('pointercancel', endPointer);
+  outer.addEventListener('pointerleave', function(e){ if(pointers[e.pointerId]) endPointer(e); });
+  outer.addEventListener('click', function(e){
+    if(moved){ e.stopPropagation(); e.preventDefault(); moved=false; }
+  }, true);
+}
+
 function renderHome(){
   var h = '';
   var teamName = clubSettings.team_name || (S.games[0]&&S.games[0].teamName) || 'Tu equipo';
@@ -3552,28 +4203,43 @@ function renderHome(){
     (clubSettings.photo_url?'':icon('camera',26))+'<div class="tp-label">'+(clubSettings.photo_url?'':'Añadir foto de equipo')+'</div>'+
     '<input type="file" accept="image/*" style="display:none" onchange="uploadClubAsset(this.files[0],\'photo_url\')"></div></label>';
 
-  h += '<div class="section"><div class="label" style="display:flex;align-items:center;justify-content:space-between">'+
-    '<span>Clasificación <span class="upd">Actualizada automáticamente</span></span>'+
-    '<button class="iconbtn" style="width:26px;height:26px" onclick="openStandingsEditor()">'+icon('pencil',13)+'</button>'+
-    '</div>';
   var fasesForChips = clubSettings.fbm_fases || [];
+  if(fasesForChips.length && (!selectedFaseId || !fasesForChips.some(function(f){ return f.id===selectedFaseId; }))) selectedFaseId = fasesForChips[0].id;
+  var selFase = fasesForChips.length ? byIdArr(fasesForChips, selectedFaseId) : null;
+  var faseModo = selFase ? (selFase.modo||'auto') : 'auto';
+  var faseManualTipo = selFase ? (selFase.manualTipo||'clasificacion') : 'clasificacion';
+  var modoTagLabel = faseModo==='manual' ? (faseManualTipo==='bracket' ? 'Bracket' : 'Clasificación manual') : 'Actualizada automáticamente';
+  var showBracketPencil = faseModo==='manual' && faseManualTipo==='bracket' && selFase && selFase.bracket && (selFase.bracket.teams||[]).length;
+
+  h += '<div class="section"><div class="label" style="display:flex;align-items:center;justify-content:space-between">'+
+    '<span>Clasificación <span class="upd">'+esc(modoTagLabel)+'</span></span>'+
+    (faseModo==='manual'
+      ? (faseManualTipo==='bracket'
+          ? (showBracketPencil ? '<button class="iconbtn" style="width:26px;height:26px" onclick="openBracketTeamsEdit(\''+selFase.id+'\')">'+icon('pencil',13)+'</button>' : '')
+          : '<button class="iconbtn" style="width:26px;height:26px" onclick="openManualClasifEditor(\''+(selFase?selFase.id:'')+'\')">'+icon('pencil',13)+'</button>')
+      : '<button class="iconbtn" style="width:26px;height:26px" onclick="openStandingsEditor()">'+icon('pencil',13)+'</button>')+
+    '</div>';
   if(fasesForChips.length >= 2){
-    if(!selectedFaseId || !fasesForChips.some(function(f){ return f.id===selectedFaseId; })) selectedFaseId = fasesForChips[0].id;
     h += '<div class="chipswrap"><div class="fasechips">';
     fasesForChips.forEach(function(f){
       h += '<div class="chip'+(f.id===selectedFaseId?' on':'')+'" onclick="selectFase(\''+f.id+'\')">'+esc(f.label||'Fase')+'</div>';
     });
     h += '</div><div class="fadeedge"></div></div>';
   }
-  var shownStandings = visibleStandings();
-  if(!shownStandings.length){
-    h += '<div class="empty" style="padding:20px">Todavía no has añadido la clasificación.</div>';
+  if(faseModo==='manual' && faseManualTipo==='bracket'){
+    h += renderBracketBlock(selFase);
   } else {
-    h += '<div class="standings"><div class="strow head"><span class="st-pos">#</span><span class="st-team">Equipo</span><span class="st-val">PJ</span><span class="st-val">PG</span><span class="st-pts">Pts</span></div>';
-    shownStandings.forEach(function(r){
-      h += '<div class="strow'+(r.is_own_team?' me':'')+'"><span class="st-pos">'+r.position+'</span><span class="st-team">'+esc(r.team_name)+'</span><span class="st-val">'+r.pj+'</span><span class="st-val">'+r.pg+'</span><span class="st-pts">'+r.pts+'</span></div>';
-    });
-    h += '</div>';
+    // Con menos de 2 fases configuradas, se mantiene el comportamiento de
+    // siempre para el modo automático (sin filtrar por fase_id -- por si algún
+    // equipo tiene clasificación antigua sin ese campo bien enlazado); el modo
+    // manual sí siempre filtra por la fase seleccionada, tenga las que tenga.
+    var rowsForFase = (faseModo==='auto' && fasesForChips.length<2) ? standings : standingsForFase(selFase?selFase.id:null);
+    var shownStandings = faseModo==='manual' ? sortedStandingsForDisplay(rowsForFase) : rowsForFase;
+    if(!shownStandings.length){
+      h += '<div class="empty" style="padding:20px">'+(faseModo==='manual' ? 'Todavía no has añadido ningún equipo. Toca el lápiz para empezar.' : 'Todavía no has añadido la clasificación.')+'</div>';
+    } else {
+      h += renderStandingsTable(shownStandings);
+    }
   }
   h += '</div>';
 
