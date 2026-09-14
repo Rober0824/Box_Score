@@ -2101,6 +2101,7 @@ function render(){
   html += createTeamOverlay();
   html += nuevaTemporadaOverlay();
   html += rankFilterSheetOverlay();
+  html += statsFilterSheetOverlay();
   html += zonePopupOverlay();
   html += toastHtml();
   app.innerHTML = html;
@@ -3680,10 +3681,60 @@ var statsViewMode = 'players';
 var statsFilterMode = 'todas';
 var statsPeriodMode = 'all'; // 'all' | 'month' | 'week'
 var statsPeriodKey = null;   // 'yyyy-mm' o el lunes de la semana 'yyyy-mm-dd'
+var statsFilterSheetOpen = false;
 function setStatsView(m){ statsViewMode = m; render(); }
 function setStatsFilter(m){ statsFilterMode = m; render(); }
 function setStatsPeriodMode(m){ statsPeriodMode = m; statsPeriodKey = null; render(); }
 function setStatsPeriodKey(k){ statsPeriodKey = k; render(); }
+function openStatsFilters(){ statsFilterSheetOpen = true; render(); }
+function closeStatsFilters(){ statsFilterSheetOpen = false; render(); }
+function statsFiltersActive(){ return statsFilterMode!=='todas' || statsPeriodMode!=='all'; }
+// Igual que rankFilterSummaryLabel() pero para el filtro de Estadísticas
+// (competición + periodo, con la etiqueta del mes/semana concreto si aplica).
+function statsFilterSummaryLabel(){
+  var parts = [];
+  var compLabels = {liga:'Liga', torneo:'Torneo', amistoso:'Amistosos'};
+  if(statsFilterMode!=='todas') parts.push(compLabels[statsFilterMode]||statsFilterMode);
+  if(statsPeriodMode!=='all' && statsPeriodKey){
+    parts.push(statsPeriodMode==='week' ? weekLabelFromKey(statsPeriodKey) : monthLabelFromKey(statsPeriodKey));
+  } else if(statsPeriodMode!=='all'){
+    parts.push(statsPeriodMode==='week' ? 'Por semana' : 'Por mes');
+  }
+  return parts.join(' · ');
+}
+// Hoja de filtros de Estadísticas (Competición + Periodo juntos) -- mismo
+// patrón que rankFilterSheetOverlay() para el ranking de Inicio.
+function statsFilterSheetOverlay(){
+  if(!statsFilterSheetOpen) return '';
+  var compLabels = {todas:'Todos', liga:'Liga', torneo:'Torneo', amistoso:'Amistosos'};
+  var periodLabels = {all:'Todo el periodo', month:'Por mes', week:'Por semana'};
+  var h = '<div class="veilfull" onclick="if(event.target===this) closeStatsFilters()"><div class="sheet">';
+  h += '<div class="sheethead"><div><div class="shtitle">Filtrar estadísticas</div></div>'+
+    '<button class="iconbtn" onclick="closeStatsFilters()">'+icon('x',14)+'</button></div>';
+  h += '<div class="sheetlist" style="gap:18px">';
+  h += '<div><div class="label" style="margin-bottom:8px">Competición</div><div class="compsrow sym" style="padding:0">'+
+    ['todas','liga','torneo','amistoso'].map(function(f){
+      return '<button class="chip'+(statsFilterMode===f?' on':'')+'" onclick="setStatsFilter(\''+f+'\')">'+compLabels[f]+'</button>';
+    }).join('')+'</div></div>';
+  h += '<div><div class="label" style="margin-bottom:8px">Periodo</div>';
+  h += '<div class="compsrow sym" style="padding:0;margin-bottom:10px">'+
+    ['all','month','week'].map(function(m){
+      return '<button class="chip'+(statsPeriodMode===m?' on':'')+'" onclick="setStatsPeriodMode(\''+m+'\')">'+periodLabels[m]+'</button>';
+    }).join('')+'</div>';
+  if(statsPeriodMode!=='all'){
+    var periods = statsPeriodsAvailable(statsPeriodMode);
+    if(periods.length && (!statsPeriodKey || !periods.some(function(p){return p.key===statsPeriodKey;}))) statsPeriodKey = periods[0].key;
+    if(periods.length){
+      h += '<div class="chipswrap"><div class="fasechips">'+
+        periods.map(function(p){ return '<div class="chip'+(statsPeriodKey===p.key?' on':'')+'" onclick="setStatsPeriodKey(\''+p.key+'\')">'+esc(p.label)+'</div>'; }).join('')+
+        '</div><div class="fadeedge"></div></div>';
+    }
+  }
+  h += '</div>';
+  h += '<button class="cta" onclick="closeStatsFilters()">Aplicar filtros</button>';
+  h += '</div></div></div>';
+  return h;
+}
 function weekStart(d){
   var dt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   var day = (dt.getDay()+6)%7; // lunes=0 ... domingo=6
@@ -3905,28 +3956,15 @@ function zonePopupOverlay(){
 function renderStats(){
   var h = '';
   h += '<div class="header" style="padding-bottom:12px"><div class="header-row"><div class="htitles"><div class="title">Estadísticas</div></div></div></div>';
-  h += '<div class="seg2" style="margin:0 20px;width:auto">'+
-    '<button class="opt'+(statsViewMode==='team'?' on':'')+'" onclick="setStatsView(\'team\')">Equipo</button>'+
-    '<button class="opt'+(statsViewMode==='players'?' on':'')+'" onclick="setStatsView(\'players\')">Jugador</button>'+
+  h += '<div style="display:flex;align-items:center;gap:10px;padding:0 20px">'+
+    '<div class="seg2" style="margin:0;flex:1">'+
+      '<button class="opt'+(statsViewMode==='team'?' on':'')+'" onclick="setStatsView(\'team\')">Equipo</button>'+
+      '<button class="opt'+(statsViewMode==='players'?' on':'')+'" onclick="setStatsView(\'players\')">Jugador</button>'+
+    '</div>'+
+    '<button class="iconbtn'+(statsFiltersActive()?' active':'')+'" onclick="openStatsFilters()">'+icon('filter',13)+(statsFiltersActive()?'<div class="filterdot"></div>':'')+'</button>'+
     '</div>';
-  h += '<div class="compsrow sym" style="padding-top:12px">'+
-    ['todas','liga','torneo','amistoso'].map(function(f){
-      var labels = {todas:'Todos', liga:'Liga', torneo:'Torneo', amistoso:'Amistosos'};
-      return '<button class="chip'+(statsFilterMode===f?' on':'')+'" onclick="setStatsFilter(\''+f+'\')">'+labels[f]+'</button>';
-    }).join('')+'</div>';
-  h += '<div class="compsrow sym" style="padding-top:0;padding-bottom:8px">'+
-    ['all','month','week'].map(function(m){
-      var labels = {all:'Todo el periodo', month:'Por mes', week:'Por semana'};
-      return '<button class="chip'+(statsPeriodMode===m?' on':'')+'" onclick="setStatsPeriodMode(\''+m+'\')">'+labels[m]+'</button>';
-    }).join('')+'</div>';
-  if(statsPeriodMode!=='all'){
-    var periods = statsPeriodsAvailable(statsPeriodMode);
-    if(periods.length && (!statsPeriodKey || !periods.some(function(p){return p.key===statsPeriodKey;}))) statsPeriodKey = periods[0].key;
-    if(periods.length){
-      h += '<div class="chipswrap"><div class="fasechips" style="padding:0 20px 10px">'+
-        periods.map(function(p){ return '<div class="chip'+(statsPeriodKey===p.key?' on':'')+'" onclick="setStatsPeriodKey(\''+p.key+'\')">'+esc(p.label)+'</div>'; }).join('')+
-        '</div><div class="fadeedge"></div></div>';
-    }
+  if(statsFiltersActive()){
+    h += '<div style="padding:10px 20px 0"><div class="activepill">'+icon('filter',12)+esc(statsFilterSummaryLabel())+'</div></div>';
   }
 
   var games = filteredStatsGames();
