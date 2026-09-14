@@ -323,7 +323,7 @@
   .gamerow{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
   .gamerow .gname{ font-weight:800; font-size:13.5px; }
   .gamerow .gdate{ font-size:11px; color:var(--text-dim); font-weight:600; margin-top:2px; }
-  .gamerow .gscore{ font-family:'Oswald',sans-serif; font-size:18px; font-weight:700; }
+  .gamerow .gscore{ font-family:'Oswald',sans-serif; font-size:18px; font-weight:700; white-space:nowrap; flex-shrink:0; }
   .empty{ text-align:center; color:var(--text-dim); font-size:13px; padding:40px 20px; }
 
   .toast{ position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:13px; font-weight:700; padding:10px 18px; border-radius:999px; z-index:50; box-shadow:0 6px 20px rgba(0,0,0,.35); }
@@ -1500,12 +1500,20 @@ function recordTeamStat(type){
 
 /* ---- shot zone (mandatory court position for every 2pt/3pt shot) ---- */
 var ZONE_DEFS = {
+  // "mid" son las zonas de 2 puntos. Antes eran solo las 5 exteriores (llegaban
+  // hasta un radio de 40 del aro), dejando un hueco minúsculo para los tiros
+  // pegados al aro. Ahora las 5 exteriores empiezan más lejos (radio 72 en vez
+  // de 40) y se han añadido 3 zonas nuevas de tiro cercano (izquierda/centro/
+  // derecha) que cubren ese espacio, mucho más fáciles de tocar en el móvil.
   mid: [
-    { id:'cornerL', label:'Esquina izquierda', d:'M 119.1 353.2 A 125 125 0 0 0 110.0 400.0 L 195.0 400.0 A 40 40 0 0 1 197.9 385.0 Z', lx:154, ly:388 },
-    { id:'wing45L', label:'45º izquierda', d:'M 182.2 286.7 A 125 125 0 0 0 119.1 353.2 L 197.9 385.0 A 40 40 0 0 1 218.1 363.7 Z', lx:175, ly:347 },
-    { id:'frontal', label:'Frontal', d:'M 287.8 286.7 A 125 125 0 0 0 182.2 286.7 L 218.1 363.7 A 40 40 0 0 1 251.9 363.7 Z', lx:235, ly:321 },
-    { id:'wing45R', label:'45º derecha', d:'M 350.9 353.2 A 125 125 0 0 0 287.8 286.7 L 251.9 363.7 A 40 40 0 0 1 272.1 385.0 Z', lx:295, ly:347 },
-    { id:'cornerR', label:'Esquina derecha', d:'M 360.0 400.0 A 125 125 0 0 0 350.9 353.2 L 272.1 385.0 A 40 40 0 0 1 275.0 400.0 Z', lx:316, ly:388 }
+    { id:'cornerL', label:'Esquina izquierda', d:'M 119.1 353.2 A 125 125 0 0 0 110.0 400.0 L 163.0 400.0 A 72 72 0 0 1 168.2 373.0 Z', lx:138.3, ly:381.2 },
+    { id:'wing45L', label:'45º izquierda', d:'M 182.2 286.7 A 125 125 0 0 0 119.1 353.2 L 168.2 373.0 A 72 72 0 0 1 204.6 334.7 Z', lx:163.6, ly:332.2 },
+    { id:'frontal', label:'Frontal', d:'M 287.8 286.7 A 125 125 0 0 0 182.2 286.7 L 204.6 334.7 A 72 72 0 0 1 265.4 334.7 Z', lx:235.0, ly:301.5 },
+    { id:'wing45R', label:'45º derecha', d:'M 350.9 353.2 A 125 125 0 0 0 287.8 286.7 L 265.4 334.7 A 72 72 0 0 1 301.8 373.0 Z', lx:306.4, ly:332.2 },
+    { id:'cornerR', label:'Esquina derecha', d:'M 360.0 400.0 A 125 125 0 0 0 350.9 353.2 L 301.8 373.0 A 72 72 0 0 1 307.0 400.0 Z', lx:331.7, ly:381.2 },
+    { id:'closeL', label:'Cerca izquierda', d:'M 204.6 334.7 A 72 72 0 0 0 163.0 400.0 L 235.0 400.0 Z', lx:204.6, ly:380.7 },
+    { id:'closeC', label:'Cerca centro', d:'M 265.4 334.7 A 72 72 0 0 0 204.6 334.7 L 235.0 400.0 Z', lx:235.0, ly:364.0 },
+    { id:'closeR', label:'Cerca derecha', d:'M 307.0 400.0 A 72 72 0 0 0 265.4 334.7 L 235.0 400.0 Z', lx:265.4, ly:380.7 }
   ],
   three: [
     { id:'cornerL', label:'Esquina izquierda', d:'M 44.9 323.2 A 205 205 0 0 0 30.0 400.0 L 110.0 400.0 A 125 125 0 0 1 119.1 353.2 Z', lx:73, ly:372 },
@@ -1518,7 +1526,7 @@ var ZONE_DEFS = {
 var ZONE_COURT_ARCS = {
   threeArcD: 'M 440.0 400.0 A 205 205 0 0 0 30.0 400.0',
   midArcD: 'M 360.0 400.0 A 125 125 0 0 0 110.0 400.0',
-  paintArcD: 'M 275.0 400.0 A 40 40 0 0 0 195.0 400.0'
+  paintArcD: 'M 307.0 400.0 A 72 72 0 0 0 163.0 400.0'
 };
 function cancelShotZone(){
   go('stat', {playerId: S.routeParams.playerId, editEventId: S.routeParams.editEventId});
@@ -1980,8 +1988,19 @@ function toastHtml(){
   if(!toastMsg) return '';
   return '<div class="toast">'+esc(toastMsg)+'</div>';
 }
+// Guarda/restaura el scroll del contenedor principal de la pantalla entre
+// renders -- como render() sustituye TODO el HTML de #app en cada interacción
+// (p.ej. cada toque al marcar el quinteto), sin esto el contenedor scrolleable
+// se recreaba siempre desde arriba y la pantalla "saltaba" hacia arriba en
+// cada toque. lastRenderedRoute guarda qué pantalla era la que estaba en
+// pantalla ANTES de este render (S.route ya puede haber cambiado a la nueva
+// ruta si esto viene de una navegación, no de un simple refresco).
+var scrollPositions = {};
+var lastRenderedRoute = null;
 function render(){
   var app = document.getElementById('app');
+  var prevScroller = app.querySelector('.content, .playlist, .livecontent, .boxcontent');
+  if(prevScroller && lastRenderedRoute){ scrollPositions[lastRenderedRoute] = prevScroller.scrollTop; }
   var html = '';
   if(SUPABASE_CONFIGURED && !authChecked){
     html = renderBoot();
@@ -2037,6 +2056,9 @@ function render(){
   html += nuevaTemporadaOverlay();
   html += toastHtml();
   app.innerHTML = html;
+  var newScroller = app.querySelector('.content, .playlist, .livecontent, .boxcontent');
+  if(newScroller && scrollPositions[S.route]){ newScroller.scrollTop = scrollPositions[S.route]; }
+  lastRenderedRoute = S.route;
 }
 
 /* ---- setup ---- */
@@ -2188,9 +2210,9 @@ function renderStat(){
        '<div class="sub">'+st.pts+' PTS · '+(st.rebO+st.rebD)+' REB · '+st.ast+' AST · en pista</div></div></div>';
   h += '<div class="content" style="padding-top:0">';
   h += '<div class="section"><div class="label">Tiro</div>'+
+       shotRow('Tiro libre','ftm','ftx')+
        shotRow('Tiro de 2','2m','2x')+
        shotRow('Tiro de 3','3m','3x')+
-       shotRow('Tiro libre','ftm','ftx')+
        '</div>';
   h += '<div class="section"><div class="statgrid4">'+
        '<div class="glabel">Rebotes</div><div class="glabel">Faltas</div>'+
@@ -2646,8 +2668,8 @@ function matchRowHtml(g, isLive){
   // Editar/borrar (incluido un partido en curso) es cosa solo del admin.
   var canManage = isAdmin();
   return '<div class="gamerow" style="margin-top:8px;padding:0">'+
-    '<div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;cursor:pointer" onclick="'+onclick+'">'+
-    '<div><div class="gname">'+esc(g.teamName)+' vs '+esc(g.rivalName||'Rival')+'</div>'+
+    '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;cursor:pointer" onclick="'+onclick+'">'+
+    '<div style="flex:1;min-width:0">'+'<div class="gname">'+esc(g.teamName)+' vs '+esc(g.rivalName||'Rival')+'</div>'+
     '<div class="gdate">'+(isLive?'En curso &middot; ':'')+d.toLocaleDateString('es-ES')+' &middot; '+kindLabel+(g.jornada?(' J'+g.jornada):'')+'</div></div>'+
     '<div class="gscore">'+(isLive?'':(teamScore(g)+' – '+rivalScore(g)))+'</div>'+
     '</div>'+
