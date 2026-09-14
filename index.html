@@ -238,6 +238,14 @@
   .zonema{ font-size:9px; font-weight:700; color:oklch(98% 0.01 85 / 82%); text-shadow:0 1px 3px oklch(10% 0.01 55 / 85%); margin-top:1px; }
   .smlegend{ display:flex; justify-content:center; gap:14px; font-size:10.5px; font-weight:700; color:var(--text-dim); margin-top:8px; }
   .smdot{ display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:5px; vertical-align:middle; }
+  .taphint{ font-size:9.5px; font-weight:700; color:var(--accent); text-transform:none; letter-spacing:0; }
+  .trendcard{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 16px 18px; margin-top:16px; }
+  .trendtitle{ font-size:11px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-dim); margin-bottom:12px; }
+  .legend{ display:flex; gap:16px; margin-bottom:10px; flex-wrap:wrap; }
+  .legend span{ display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--text-dim); }
+  .legend i{ width:9px; height:9px; border-radius:999px; display:inline-block; }
+  .charttip{ font-size:9.5px; font-weight:700; color:var(--text-dim); text-align:right; margin-top:8px; }
+  .lstack{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; }
   .swipeviewport{ overflow:hidden; border-radius:12px; touch-action:pan-y; flex-shrink:0; }
   .swipetrack{ display:flex; width:200%; transition:transform 0.28s ease; }
   .swipepage{ width:50%; flex-shrink:0; display:flex; flex-direction:column; align-items:center; }
@@ -1656,7 +1664,7 @@ function shotMapColorFor(pct){
   if(pct<=50) return 'oklch(55% 0.03 70)';
   return 'var(--good)';
 }
-function renderShotMap(zoneStats){
+function renderShotMap(zoneStats, interactive){
   var allZones = ZONE_DEFS.mid.map(function(z){ return Object.assign({ring:'mid'}, z); })
     .concat(ZONE_DEFS.three.map(function(z){ return Object.assign({ring:'three'}, z); }));
   var h = '<div class="courtwrap"><div class="courtbox">';
@@ -1670,13 +1678,15 @@ function renderShotMap(zoneStats){
   allZones.forEach(function(z){
     var st = zoneStats[z.ring+':'+z.id] || {m:0,a:0};
     var pct = st.a ? Math.round(100*st.m/st.a) : 0;
-    h += '<path d="'+z.d+'" fill="'+(st.a?shotMapColorFor(pct):'var(--surface-2)')+'" opacity="'+(st.a?'0.85':'0.5')+'" stroke="var(--bg)" stroke-width="2"/>';
+    var tap = interactive ? ' style="cursor:pointer" onclick="openZonePopup(\''+z.ring+'\',\''+z.id+'\',\''+jsAttr(z.label)+'\')"' : '';
+    h += '<path d="'+z.d+'" fill="'+(st.a?shotMapColorFor(pct):'var(--surface-2)')+'" opacity="'+(st.a?'0.85':'0.5')+'" stroke="var(--bg)" stroke-width="2"'+tap+'/>';
   });
   h += '</svg>';
   allZones.forEach(function(z){
     var st = zoneStats[z.ring+':'+z.id] || {m:0,a:0};
     var pct = st.a ? Math.round(100*st.m/st.a) : 0;
-    h += '<div class="zonelbl" style="left:'+(z.lx/470*100)+'%;top:'+(z.ly/430*100)+'%">'+
+    var tapClick = interactive ? ' onclick="openZonePopup(\''+z.ring+'\',\''+z.id+'\',\''+jsAttr(z.label)+'\')"' : '';
+    h += '<div class="zonelbl"'+tapClick+' style="left:'+(z.lx/470*100)+'%;top:'+(z.ly/430*100)+'%'+(interactive?';cursor:pointer':'')+'">'+
       '<div class="zonepct">'+(st.a?pct+'%':'–')+'</div>'+
       (st.a ? '<div class="zonema">'+st.m+'/'+st.a+'</div>' : '')+
       '</div>';
@@ -2091,6 +2101,7 @@ function render(){
   html += createTeamOverlay();
   html += nuevaTemporadaOverlay();
   html += rankFilterSheetOverlay();
+  html += zonePopupOverlay();
   html += toastHtml();
   app.innerHTML = html;
   var newScroller = app.querySelector('.content, .playlist, .livecontent, .boxcontent');
@@ -3711,6 +3722,186 @@ function filteredStatsGames(){
     return true;
   });
 }
+
+/* ---------- tendencia de tiro (Estadísticas -> Equipo) ---------- */
+var trendMonthKey = 'all';        // 'all' o 'yyyy-mm' -- filtra los partidos de la tarjeta de tendencia de equipo
+var trendSelectedIdx = null;      // partido seleccionado en esa gráfica (índice sobre la lista ya filtrada/ordenada)
+var zonePopup = null;             // {ring,id,label} para una zona del mapa, o {kind:'ft',label:'Tiros libres'} -- null = cerrado
+var zoneTrendMonthKey = 'all';
+var zoneTrendSelectedIdx = null;
+function setTrendMonth(k){ trendMonthKey = k; trendSelectedIdx = null; render(); }
+function setTrendIdx(i){ trendSelectedIdx = i; render(); }
+function openZonePopup(ring, id, label){ zonePopup = {ring:ring, id:id, label:label}; zoneTrendMonthKey='all'; zoneTrendSelectedIdx=null; render(); }
+function openFtPopup(){ zonePopup = {kind:'ft', label:'Tiros libres'}; zoneTrendMonthKey='all'; zoneTrendSelectedIdx=null; render(); }
+function closeZonePopup(){ zonePopup = null; render(); }
+function setZoneTrendMonth(k){ zoneTrendMonthKey = k; zoneTrendSelectedIdx = null; render(); }
+function setZoneTrendIdx(i){ zoneTrendSelectedIdx = i; render(); }
+// Meses con al menos un partido dentro de una lista de partidos dada (para los
+// chips de mes de las tarjetas de tendencia -- igual criterio que rankingMonthsAvailable
+// pero sobre un subconjunto, no siempre toda la temporada).
+function monthsAvailableIn(games){
+  var set = {};
+  games.forEach(function(g){ set[monthKey(matchDateObj(g))] = true; });
+  return Object.keys(set).sort().reverse().map(function(key){ return {key:key, label:monthLabelFromKey(key)}; });
+}
+function gamesSortedByDate(games){
+  return games.slice().sort(function(a,b){ return matchDateObj(a) - matchDateObj(b); });
+}
+function shortDateLabel(g){ var d = matchDateObj(g); return d.getDate()+'/'+(d.getMonth()+1); }
+function jsAttr(s){ return (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function trendGamesFiltered(games, key){
+  if(key==='all') return games;
+  return games.filter(function(g){ return monthKey(matchDateObj(g))===key; });
+}
+// % de tiro del EQUIPO en un partido para 'ft' (tiro libre), '2pt' o '3pt'.
+// Nota: teamAggregates().fgM/fgA son TODOS los tiros de campo (2+3 juntos), así
+// que los 2 puntos "puros" son fgM-p3M / fgA-p3A (p3M/p3A son solo los triples).
+function teamGameShotPct(g, kind){
+  var ta = teamAggregates(g,'team');
+  var m,a;
+  if(kind==='ft'){ m=ta.ftM; a=ta.ftA; }
+  else if(kind==='3pt'){ m=ta.p3M; a=ta.p3A; }
+  else { m=ta.fgM-ta.p3M; a=ta.fgA-ta.p3A; }
+  return a>0 ? {m:m, a:a, pct:Math.round(1000*m/a)/10} : null;
+}
+// % de tiro de una zona concreta del mapa (o de tiros libres) en un partido.
+function zoneGameStat(g, zp){
+  if(zp.kind==='ft'){
+    var ta = teamAggregates(g,'team');
+    return ta.ftA>0 ? {m:ta.ftM, a:ta.ftA, pct:Math.round(1000*ta.ftM/ta.ftA)/10} : null;
+  }
+  var st = teamZoneStats([g])[zp.ring+':'+zp.id];
+  return (st && st.a>0) ? {m:st.m, a:st.a, pct:Math.round(1000*st.m/st.a)/10} : null;
+}
+// Construye el SVG de una gráfica de tendencia (1 o varias series de %, una por
+// partido). Se reutiliza tanto para la tarjeta de equipo (3 series: TL/2PT/3PT)
+// como para el popup de una zona/"Tiros libres" (1 sola serie).
+function buildTrendChartSvg(games, series, selectedIdx, opts){
+  opts = opts || {};
+  var W = 320, H = opts.height || 175;
+  var yTop = 10, yBottom = H-25, xLeft = 30, xRight = W-10;
+  var n = games.length;
+  function xFor(i){ return n<=1 ? (xLeft+xRight)/2 : xLeft + i*(xRight-xLeft)/(n-1); }
+  function yFor(p){ return yBottom - (p/100)*(yBottom-yTop); }
+  var svg = '';
+  svg += '<line x1="'+xLeft+'" y1="'+yTop+'" x2="'+xLeft+'" y2="'+yBottom+'" stroke="var(--border)" stroke-width="1"/>';
+  svg += '<line x1="'+xLeft+'" y1="'+yBottom+'" x2="'+xRight+'" y2="'+yBottom+'" stroke="var(--border)" stroke-width="1"/>';
+  svg += '<text x="'+(xLeft-6)+'" y="'+(yTop+4)+'" text-anchor="end" font-size="8" fill="var(--text-dim)" font-family="Manrope">100%</text>';
+  svg += '<text x="'+(xLeft-6)+'" y="'+(yFor(50)+3).toFixed(1)+'" text-anchor="end" font-size="8" fill="var(--text-dim)" font-family="Manrope">50%</text>';
+  svg += '<text x="'+(xLeft-6)+'" y="'+(yBottom+3)+'" text-anchor="end" font-size="8" fill="var(--text-dim)" font-family="Manrope">0%</text>';
+  if(!n) return '<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="margin-top:6px">'+svg+'</svg>';
+  if(selectedIdx==null || selectedIdx<0 || selectedIdx>=n) selectedIdx = n-1;
+  series.forEach(function(s){
+    var pts = games.map(function(g,i){ var d = s.dataFn(g); return d ? {i:i, x:xFor(i), y:yFor(d.pct)} : null; });
+    var run = [];
+    function flush(){
+      if(run.length>=2) svg += '<polyline points="'+run.map(function(p){return p.x.toFixed(1)+','+p.y.toFixed(1);}).join(' ')+'" fill="none" stroke="'+s.color+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>';
+      run = [];
+    }
+    pts.forEach(function(p){ if(p) run.push(p); else flush(); });
+    flush();
+    pts.forEach(function(p){
+      if(!p) return;
+      var isSel = p.i===selectedIdx;
+      svg += '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+(isSel?3.6:2.6)+'" fill="'+s.color+'"'+(isSel?' stroke="var(--bg)" stroke-width="1.5"':'')+'/>';
+    });
+  });
+  // columnas invisibles para poder tocar cada partido y elegirlo
+  games.forEach(function(g,i){
+    var cx = xFor(i);
+    var colW = n>1 ? (xRight-xLeft)/(n-1) : (xRight-xLeft);
+    var left = Math.max(0, cx-colW/2), w = Math.min(W, cx+colW/2)-left;
+    svg += '<rect x="'+left.toFixed(1)+'" y="0" width="'+w.toFixed(1)+'" height="'+H+'" fill="transparent" onclick="'+(opts.selectFn||'setTrendIdx')+'('+i+')"/>';
+  });
+  var selX = xFor(selectedIdx);
+  var selGame = games[selectedIdx];
+  svg += '<line x1="'+selX.toFixed(1)+'" y1="'+(yTop-2)+'" x2="'+selX.toFixed(1)+'" y2="'+yBottom+'" stroke="var(--text-dim)" stroke-width="1" stroke-dasharray="3,3" opacity="0.6"/>';
+  svg += '<text x="'+selX.toFixed(1)+'" y="'+(yBottom+14)+'" text-anchor="middle" font-size="8" fill="var(--text-dim)" font-family="Manrope">vs '+esc(selGame.rivalName||'Rival')+' &middot; '+shortDateLabel(selGame)+'</text>';
+  var lines = series.map(function(s){
+    var d = s.dataFn(selGame);
+    return {color:s.color, label:s.label, text: d ? (Math.round(d.pct)+'% ('+d.m+'/'+d.a+')') : 'Sin tiros'};
+  });
+  if(lines.length===1){
+    var bw = 96, bh = 24;
+    var bx = (selX+8+bw>W) ? Math.max(4, selX-8-bw) : selX+8;
+    svg += '<rect x="'+bx.toFixed(1)+'" y="6" width="'+bw+'" height="'+bh+'" rx="7" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.2"/>';
+    svg += '<text x="'+(bx+bw/2).toFixed(1)+'" y="21" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--text)" font-family="Manrope">'+lines[0].text+'</text>';
+  } else {
+    var bw2 = 118, bh2 = 14+lines.length*14;
+    var bx2 = (selX+8+bw2>W) ? Math.max(4, selX-8-bw2) : selX+8;
+    svg += '<rect x="'+bx2.toFixed(1)+'" y="6" width="'+bw2+'" height="'+bh2+'" rx="8" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.2"/>';
+    lines.forEach(function(l,i){
+      var cy = 18+i*14;
+      svg += '<circle cx="'+(bx2+11).toFixed(1)+'" cy="'+(cy-3)+'" r="3" fill="'+l.color+'"/>';
+      svg += '<text x="'+(bx2+19).toFixed(1)+'" y="'+cy+'" font-size="9" font-weight="700" fill="var(--text)" font-family="Manrope">'+esc(l.label)+' '+l.text+'</text>';
+    });
+  }
+  return '<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="margin-top:6px">'+svg+'</svg>';
+}
+// Tarjeta "Tendencia de tiro" de Estadísticas -> Equipo: TL/2PT/3PT partido a
+// partido, con chips para ver un mes concreto (calculados sobre los partidos
+// que ya se ven en Estadísticas, respetando su filtro de liga/torneo/amistoso).
+function renderTrendCard(games){
+  var months = monthsAvailableIn(games);
+  var sorted = gamesSortedByDate(trendGamesFiltered(games, trendMonthKey));
+  var series = [
+    {color:'var(--reb)', label:'TL', dataFn:function(g){ return teamGameShotPct(g,'ft'); }},
+    {color:'var(--accent)', label:'2PT', dataFn:function(g){ return teamGameShotPct(g,'2pt'); }},
+    {color:'var(--create)', label:'3PT', dataFn:function(g){ return teamGameShotPct(g,'3pt'); }}
+  ];
+  var h = '<div class="trendcard"><div class="trendtitle">Tendencia de tiro</div>';
+  h += '<div class="legend"><span><i style="background:var(--reb)"></i>Tiro libre</span><span><i style="background:var(--accent)"></i>2 puntos</span><span><i style="background:var(--create)"></i>3 puntos</span></div>';
+  h += '<div class="chipswrap"><div class="fasechips">'+
+    '<div class="chip'+(trendMonthKey==='all'?' on':'')+'" onclick="setTrendMonth(\'all\')">Por partido</div>'+
+    months.map(function(m){ return '<div class="chip'+(trendMonthKey===m.key?' on':'')+'" onclick="setTrendMonth(\''+m.key+'\')">'+esc(m.label)+'</div>'; }).join('')+
+    '</div><div class="fadeedge"></div></div>';
+  if(!sorted.length){
+    h += '<div class="empty" style="padding:16px 0">No hay tiros registrados en este periodo.</div>';
+  } else {
+    h += buildTrendChartSvg(sorted, series, trendSelectedIdx, {selectFn:'setTrendIdx'});
+    h += '<div class="charttip">Toca un partido en la gráfica para ver los datos exactos</div>';
+  }
+  h += '</div>';
+  return h;
+}
+// Popup de una zona del mapa (o de "Tiros libres"): misma gráfica pero de un
+// solo dato, con su propio filtro por mes y el detalle partido a partido.
+function zonePopupOverlay(){
+  if(!zonePopup) return '';
+  var allGames = filteredStatsGames();
+  var months = monthsAvailableIn(allGames);
+  var sorted = gamesSortedByDate(trendGamesFiltered(allGames, zoneTrendMonthKey));
+  var dataFn = function(g){ return zoneGameStat(g, zonePopup); };
+  var totals = {m:0,a:0};
+  sorted.forEach(function(g){ var d = dataFn(g); if(d){ totals.m+=d.m; totals.a+=d.a; } });
+  var overallPct = totals.a ? Math.round(1000*totals.m/totals.a)/10 : 0;
+  var ringLabel = zonePopup.kind==='ft' ? '' : (zonePopup.ring==='three' ? ' &middot; 3 puntos' : ' &middot; 2 puntos');
+  var h = '<div class="veilfull" onclick="if(event.target===this) closeZonePopup()"><div class="sheet">';
+  h += '<div class="sheethead"><div><div class="shtitle">'+esc(zonePopup.label)+ringLabel+'</div>'+
+    '<div class="shsub">'+(totals.a ? (Math.round(overallPct)+'% de acierto &middot; '+totals.m+'/'+totals.a+' esta temporada') : 'Sin tiros registrados')+'</div></div>'+
+    '<button class="iconbtn" onclick="closeZonePopup()">'+icon('x',15)+'</button></div>';
+  h += '<div class="sheetlist" style="gap:14px">';
+  h += '<div class="chipswrap"><div class="fasechips">'+
+    '<div class="chip'+(zoneTrendMonthKey==='all'?' on':'')+'" onclick="setZoneTrendMonth(\'all\')">Por partido</div>'+
+    months.map(function(m){ return '<div class="chip'+(zoneTrendMonthKey===m.key?' on':'')+'" onclick="setZoneTrendMonth(\''+m.key+'\')">'+esc(m.label)+'</div>'; }).join('')+
+    '</div><div class="fadeedge"></div></div>';
+  if(!sorted.length){
+    h += '<div class="empty" style="padding:10px 0">No hay partidos con este filtro.</div>';
+  } else {
+    h += buildTrendChartSvg(sorted, [{color:'var(--accent)', label:'', dataFn:dataFn}], zoneTrendSelectedIdx, {selectFn:'setZoneTrendIdx', height:150});
+    h += '<div class="charttip">Toca un partido en la gráfica para ver los datos exactos</div>';
+    var selIdx = (zoneTrendSelectedIdx==null || zoneTrendSelectedIdx<0 || zoneTrendSelectedIdx>=sorted.length) ? sorted.length-1 : zoneTrendSelectedIdx;
+    h += '<div><div class="label" style="margin-bottom:8px">Partido a partido</div><div class="lstack">';
+    sorted.map(function(g,i){ return {g:g, i:i}; }).slice().reverse().forEach(function(r){
+      var d = dataFn(r.g);
+      h += '<div class="lrow'+(r.i===selIdx?' top':'')+'"><span class="lname">vs '+esc(r.g.rivalName||'Rival')+'</span><span class="ldetail">'+shortDateLabel(r.g)+'</span>'+
+        '<span class="lval">'+(d ? (Math.round(d.pct)+'% ('+d.m+'/'+d.a+')') : '—')+'</span></div>';
+    });
+    h += '</div></div>';
+  }
+  h += '</div></div></div>';
+  return h;
+}
 function renderStats(){
   var h = '';
   h += '<div class="header" style="padding-bottom:12px"><div class="header-row"><div class="htitles"><div class="title">Estadísticas</div></div></div></div>';
@@ -3766,7 +3957,9 @@ function renderTeamPanelAggregate(games){
   h += pctRow(pct(t.fg2m+t.fg3m, t.fg2a+t.fg3a), '% de tiros de campo');
   h += row(t.fg3m+'/'+t.fg3a, 'Triples');
   h += pctRow(pct(t.fg3m,t.fg3a), '% de triples');
-  h += row(t.ftm+'/'+t.fta, 'Tiros libres');
+  h += '<div class="teamstatrow" style="cursor:pointer" onclick="openFtPopup()"><div class="tsval">'+t.ftm+'/'+t.fta+'</div>'+
+    '<div class="tslabel" style="display:flex;align-items:center;justify-content:center;gap:5px">Tiros libres'+icon('chevronRight',12)+'</div>'+
+    '<div class="tsval right"></div></div>';
   h += pctRow(pct(t.ftm,t.fta), '% de tiros libres');
   h += '<div class="teamstat-divider"></div>';
   h += row(t.rebO+t.rebD, 'Total de rebotes');
@@ -3775,7 +3968,8 @@ function renderTeamPanelAggregate(games){
   h += '<div class="teamstat-divider"></div>';
   h += row(t.ast,'Asistencias'); h += row(t.blk,'Bloqueos'); h += row(t.stl,'Balones robados'); h += row(t.to,'Balones perdidos'); h += row(t.foulC,'Faltas personales');
   h += '</div>';
-  h += '<div class="shotmapcard"><div class="label shotmaptitle">Mapa de tiro</div>'+renderShotMap(teamZoneStats(games))+'</div>';
+  h += '<div class="shotmapcard"><div class="label shotmaptitle" style="display:flex;align-items:center;justify-content:space-between">Mapa de tiro<span class="taphint">Toca una zona ↓</span></div>'+renderShotMap(teamZoneStats(games), true)+'</div>';
+  h += renderTrendCard(games);
   return h;
 }
 function renderPlayersTableAggregate(games){
