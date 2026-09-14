@@ -414,6 +414,16 @@
   .rt-name{ font-size:13px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
   .rt-val{ font-family:'Oswald',sans-serif; font-size:18px; font-weight:700; color:var(--accent); margin-left:auto; flex-shrink:0; }
 
+  .mvpcard{ background:linear-gradient(135deg, oklch(72% 0.18 45 / 16%), oklch(72% 0.18 45 / 4%)); border:1.5px solid var(--accent); border-radius:16px; padding:14px 16px; margin-bottom:10px; }
+  .mvp-badge{ display:flex; align-items:center; gap:6px; font-size:10.5px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
+  .mvp-body{ display:flex; align-items:center; gap:12px; }
+  .mvp-av{ width:46px; height:46px; font-size:16px; flex-shrink:0; background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .mvp-info{ min-width:0; flex:1; }
+  .mvp-name{ font-weight:800; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mvp-stats{ display:flex; gap:12px; margin-top:4px; flex-wrap:wrap; }
+  .mvp-stats span{ font-size:11.5px; color:var(--text-dim); font-weight:600; }
+  .mvp-stats b{ font-family:'Oswald',sans-serif; font-size:14px; font-weight:700; color:var(--text); margin-right:2px; }
+
   /* ---------- Partidos ---------- */
   .compsrow{ display:flex; gap:8px; padding:0 20px 14px; overflow-x:auto; flex-shrink:0; }
   .compsrow.sym{ overflow-x:visible; }
@@ -1926,7 +1936,8 @@ function icon(name, size){
     chevronDown:'<path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
     chevronRight:'<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
     users:'<path d="M17 20v-1.5a3.5 3.5 0 00-3.5-3.5h-5A3.5 3.5 0 005 18.5V20M9.5 11a3 3 0 100-6 3 3 0 000 6zM19 20v-1.5a3 3 0 00-2-2.83M15 4.2a3 3 0 010 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
-    calendar:'<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M3 9h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
+    calendar:'<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M3 9h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+    star:'<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9L12 16.9l-5.2 2.9 1-5.9-4.3-4.2 5.9-.8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="currentColor"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none">'+(icons[name]||'')+'</svg>';
 }
@@ -2025,6 +2036,7 @@ function render(){
     switch(S.route){
       case 'home': html = renderHome(); break;
       case 'team': html = renderTeamScreen(); break;
+      case 'roster': html = renderRoster(); break;
       case 'admin': html = renderAdminMenu(); break;
       case 'adminFbm': html = renderAdminFbmSource(); break;
       case 'adminUsuarios': html = renderAdminUsuarios(); break;
@@ -2766,8 +2778,14 @@ async function deleteMatch(id){
   }
   if(sb){
     try{
-      var res = await sb.from('matches').delete().eq('id', id);
+      // OJO: pedimos .select('id') a propósito. Sin esto, si el permiso (RLS)
+      // de Supabase bloquea el borrado, la llamada NO devuelve ningún error
+      // -- simplemente borra 0 filas en silencio y responde "todo bien". Con
+      // .select('id') podemos comprobar si de verdad se borró alguna fila, y
+      // si no, avisar en vez de dar el borrado por hecho sin serlo.
+      var res = await sb.from('matches').delete().eq('id', id).select('id');
       if(res && res.error){ restoreLocal(); showToast('No se ha podido borrar: '+res.error.message); }
+      else if(!res || !res.data || !res.data.length){ restoreLocal(); showToast('No tienes permiso para borrar este partido (revisa los permisos en Supabase).'); }
     }catch(e){ restoreLocal(); showToast('No se ha podido borrar el partido (revisa la conexión).'); }
   }
 }
@@ -2796,24 +2814,11 @@ function renderTeamScreen(){
     '<div class="rowcard"><div class="k">Categoría</div><input type="text" placeholder="Ej. Infantil femenino" value="'+esc(clubSettings.category||'')+'" onchange="saveClubSettings({category:this.value})"></div>'+
     '</div>';
 
-  var roster = teamRoster.slice().sort(function(a,b){ return a.dorsal-b.dorsal; });
   h += '<div class="section">'+
-    '<div class="countline"><div class="label" style="margin-bottom:0">Plantilla ('+roster.length+')</div></div>'+
-    '<div class="players">';
-  roster.forEach(function(p){
-    var pkey = (p.dorsal+'|'+p.name).replace(/'/g,"\\'");
-    h += '<div class="prow" style="cursor:pointer" onclick="openPlayerRadar(\''+pkey+'\',\'team\')">'+
-      '<div class="dorsal">'+p.dorsal+'</div>'+
-      '<div class="pname"><div class="nm">'+esc(p.name)+'</div></div>'+
-      '<button class="editbtn" onclick="event.stopPropagation();openEditPlayerPopup(\''+p.id+'\')">'+icon('pencil',14)+'</button></div>';
-  });
-  h += '</div>'+
-    '<div class="addrow">'+
-      '<input class="dorsalinput" id="teamPlayerDorsal" type="number" placeholder="Dorsal" onkeydown="if(event.key===\'Enter\') document.getElementById(\'teamPlayerName\').focus()">'+
-      '<input id="teamPlayerName" type="text" style="flex:1;min-width:0" placeholder="Nombre del jugador" onkeydown="if(event.key===\'Enter\') addTeamPlayerFromInputs()">'+
-      '<button class="addbtn" onclick="addTeamPlayerFromInputs()">'+icon('plus',18)+'</button>'+
+    '<div class="navrow" style="cursor:pointer" onclick="go(\'roster\')">'+
+      '<div><div class="navlabel">Plantilla ('+teamRoster.length+')</div><div class="navsub">Jugadoras del equipo</div></div>'+
+      '<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
     '</div>'+
-    (!roster.length ? '<div class="caption" style="margin-top:8px">Añade aquí a las jugadoras del equipo: aparecerán automáticamente al crear un partido nuevo.</div>' : '')+
     '</div>';
 
   h += '<div class="section"><div class="label">Cuenta</div>'+
@@ -2830,6 +2835,33 @@ function renderTeamScreen(){
 
   h += '</div>';
   h += renderBottomNav('team');
+  return h;
+}
+function renderRoster(){
+  var roster = teamRoster.slice().sort(function(a,b){ return a.dorsal-b.dorsal; });
+  var h = '<div class="header"><div class="header-row">'+
+    '<button class="iconbtn" onclick="go(\'team\')">'+icon('back',18)+'</button>'+
+    '<div class="htitles"><div class="title">Plantilla</div></div></div></div>';
+  h += '<div class="content">';
+  h += '<div class="section">'+
+    '<div class="countline"><div class="label" style="margin-bottom:0">'+roster.length+' jugadoras</div></div>'+
+    '<div class="players">';
+  roster.forEach(function(p){
+    var pkey = (p.dorsal+'|'+p.name).replace(/'/g,"\\'");
+    h += '<div class="prow" style="cursor:pointer" onclick="openPlayerRadar(\''+pkey+'\',\'team\')">'+
+      '<div class="dorsal">'+p.dorsal+'</div>'+
+      '<div class="pname"><div class="nm">'+esc(p.name)+'</div></div>'+
+      '<button class="editbtn" onclick="event.stopPropagation();openEditPlayerPopup(\''+p.id+'\')">'+icon('pencil',14)+'</button></div>';
+  });
+  h += '</div>'+
+    '<div class="addrow">'+
+      '<input class="dorsalinput" id="teamPlayerDorsal" type="number" placeholder="Dorsal" onkeydown="if(event.key===\'Enter\') document.getElementById(\'teamPlayerName\').focus()">'+
+      '<input id="teamPlayerName" type="text" style="flex:1;min-width:0" placeholder="Nombre del jugador" onkeydown="if(event.key===\'Enter\') addTeamPlayerFromInputs()">'+
+      '<button class="addbtn" onclick="addTeamPlayerFromInputs()">'+icon('plus',18)+'</button>'+
+    '</div>'+
+    (!roster.length ? '<div class="caption" style="margin-top:8px">Añade aquí a las jugadoras del equipo: aparecerán automáticamente al crear un partido nuevo.</div>' : '')+
+    '</div>';
+  h += '</div>';
   return h;
 }
 function addTeamPlayerFromInputs(){
@@ -3318,15 +3350,18 @@ function renderAdminUsuarios(){
 }
 
 /* ---------- Inicio ---------- */
+// El ranking de Inicio se muestra como media por partido (más justo entre
+// jugadoras con distinto número de partidos jugados) -- excepto los
+// porcentajes, que ya son una tasa y no una suma, así que no aplica.
 var RANK_STATS = [
-  {key:'pts', label:'Puntos'},
-  {key:'reb', label:'Rebotes'},
-  {key:'ast', label:'Asistencias'},
-  {key:'stl', label:'Robos'},
+  {key:'pts_pg', label:'Puntos'},
+  {key:'reb_pg', label:'Rebotes'},
+  {key:'ast_pg', label:'Asistencias'},
+  {key:'stl_pg', label:'Robos'},
   {key:'fg2pct', label:'% de 2'},
   {key:'fg3pct', label:'% de 3'},
   {key:'ftpct', label:'% de TL'},
-  {key:'eff', label:'Eficiencia'}
+  {key:'eff_pg', label:'Eficiencia'}
 ];
 function allFinishedGames(){ return S.games; }
 function aggregatePlayers(games){
@@ -3360,6 +3395,7 @@ function aggregatePlayers(games){
     a.rebD_pg = a.gp>0 ? a.rebD/a.gp : 0;
     a.rebO_pg = a.gp>0 ? a.rebO/a.gp : 0;
     a.reb_pg = a.gp>0 ? a.reb/a.gp : 0;
+    a.eff_pg = a.gp>0 ? a.eff/a.gp : 0;
   });
   return list;
 }
@@ -3368,6 +3404,31 @@ function rankLeader(list, key){
   var pool = withPct ? list.filter(function(a){ return (key==='fg2pct'?a.fg2a:key==='fg3pct'?a.fg3a:a.fta) > 0; }) : list;
   if(!pool.length) return null;
   return pool.slice().sort(function(a,b){ return b[key]-a[key]; })[0];
+}
+// Formatea un valor de estadística para mostrar: los porcentajes van enteros
+// (ya son una tasa, no tiene sentido "por partido"), el resto de medias por
+// partido con 1 decimal (12 partidos con 3.0 puntos de media no es lo mismo
+// que "3 puntos" a secas).
+function fmtRankVal(val, isPct){
+  return isPct ? Math.round(val) : (Math.round(val*10)/10).toLocaleString('es-ES', {minimumFractionDigits:1, maximumFractionDigits:1});
+}
+// MVP del mes: entre las jugadoras con partidos finalizados este mes natural,
+// la que tiene mejor media de Eficiencia (EFF) por partido.
+function mvpOfMonth(){
+  var now = new Date();
+  var gamesThisMonth = S.games.filter(function(g){
+    var d = matchDateObj(g);
+    return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+  });
+  if(!gamesThisMonth.length) return null;
+  var list = aggregatePlayers(gamesThisMonth).filter(function(a){ return a.gp>0; });
+  if(!list.length) return null;
+  list.sort(function(a,b){ return b.eff_pg-a.eff_pg; });
+  var top = list[0];
+  var monthLabel = now.toLocaleDateString('es-ES', {month:'long'});
+  monthLabel = monthLabel.charAt(0).toUpperCase()+monthLabel.slice(1);
+  top.monthLabel = monthLabel;
+  return top;
 }
 function visibleStandings(){
   var fases = clubSettings.fbm_fases || [];
@@ -3428,13 +3489,26 @@ function renderHome(){
   h += '</div>';
 
   var list = aggregatePlayers(allFinishedGames());
-  h += '<div class="section"><div class="label">Ranking de estadísticas</div><div class="rankgrid">';
+  h += '<div class="section"><div class="label">Ranking de estadísticas</div>';
+  var mvp = mvpOfMonth();
+  if(mvp){
+    h += '<div class="mvpcard"><div class="mvp-badge">'+icon('star',12)+'MVP de '+esc(mvp.monthLabel)+'</div>'+
+      '<div class="mvp-body"><div class="dorsal mvp-av">'+mvp.dorsal+'</div>'+
+      '<div class="mvp-info"><div class="mvp-name">'+esc(mvp.name)+'</div>'+
+      '<div class="mvp-stats">'+
+        '<span><b>'+fmtRankVal(mvp.pts_pg)+'</b>PTS</span>'+
+        '<span><b>'+fmtRankVal(mvp.reb_pg)+'</b>REB</span>'+
+        '<span><b>'+fmtRankVal(mvp.ast_pg)+'</b>AST</span>'+
+        '<span><b>'+fmtRankVal(mvp.eff_pg)+'</b>EFF</span>'+
+      '</div></div></div></div>';
+  }
+  h += '<div class="rankgrid">';
   RANK_STATS.forEach(function(rs){
     var leader = rankLeader(list, rs.key);
     var isPct = rs.key.indexOf('pct')!==-1;
     h += '<button class="ranktile" onclick="openRanking(\''+rs.key+'\')"><div class="rt-top"><span class="rt-label">'+rs.label+'</span>'+
       '<svg class="rt-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div>'+
-      '<div class="rt-leader">'+(leader?('<span class="rt-name">'+esc(leader.name)+'</span><span class="rt-val">'+leader[rs.key]+(isPct?'%':'')+'</span>'):'<span class="rt-name" style="color:var(--text-dim)">Sin datos</span>')+'</div>'+
+      '<div class="rt-leader">'+(leader?('<span class="rt-name">'+esc(leader.name)+'</span><span class="rt-val">'+fmtRankVal(leader[rs.key],isPct)+(isPct?'%':'')+'</span>'):'<span class="rt-name" style="color:var(--text-dim)">Sin datos</span>')+'</div>'+
       '</button>';
   });
   h += '</div></div>';
@@ -3452,7 +3526,7 @@ function renderRankingPopup(){
   var pool = isPct ? list.filter(function(a){ return (key==='fg2pct'?a.fg2a:key==='fg3pct'?a.fg3a:a.fta) > 0; }) : list;
   pool = pool.slice().sort(function(a,b){ return b[key]-a[key]; });
   var h = '<div class="veilfull"><div class="sheet">';
-  h += '<div class="sheethead"><div><div class="shtitle">'+rs.label+'</div><div class="shsub">Todas las jugadoras &middot; temporada completa</div></div>'+
+  h += '<div class="sheethead"><div><div class="shtitle">'+rs.label+'</div><div class="shsub">Todas las jugadoras &middot; '+(isPct?'temporada completa':'media por partido')+'</div></div>'+
     '<button class="iconbtn" onclick="go(\'home\')">'+icon('x',15)+'</button></div>';
   h += '<div class="sheetlist">';
   if(!pool.length){ h += '<div class="empty">Todavía no hay datos suficientes.</div>'; }
@@ -3461,9 +3535,10 @@ function renderRankingPopup(){
     if(key==='fg2pct') detail = a.fg2m+'-'+a.fg2a;
     else if(key==='fg3pct') detail = a.fg3m+'-'+a.fg3a;
     else if(key==='ftpct') detail = a.ftm+'-'+a.fta;
+    else detail = a.gp+(a.gp===1?' partido':' partidos');
     h += '<div class="lrow'+(i===0?' top':'')+'"><span class="lrank">'+(i+1)+'</span><span class="dorsal" style="width:30px;height:30px;font-size:12.5px">'+a.dorsal+'</span>'+
       '<span class="lname">'+esc(a.name)+'</span>'+(detail?'<span class="ldetail">'+detail+'</span>':'')+
-      '<span class="lval">'+a[key]+(isPct?'%':'')+'</span></div>';
+      '<span class="lval">'+fmtRankVal(a[key],isPct)+(isPct?'%':'')+'</span></div>';
   });
   h += '</div></div></div>';
   return h;
