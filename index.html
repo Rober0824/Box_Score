@@ -854,8 +854,25 @@ async function loadSeasonScopedData(){
         g.id = row.id; g.kind = row.kind; g.jornada = row.jornada; g.season_id = row.season_id;
         return g;
       });
-      var liveRow = ms.data.filter(function(row){ return !row.finished; })[0];
-      if(liveRow){
+      // Solo debería existir un partido en curso a la vez. Si aparece más de una
+      // fila sin terminar (restos de una "resurrección" de una versión antigua
+      // de deleteMatch(), cuando un guardado en la nube pendiente podía volver a
+      // crear el partido justo después de borrarlo -- ya corregido, pero puede
+      // haber dejado filas sueltas en Supabase de antes de ese arreglo), nos
+      // quedamos con la más reciente como la de verdad y limpiamos el resto,
+      // para que no puedan seguir reapareciendo como "otro partido nuevo" cada
+      // vez que se borra el que se ve en la app.
+      var unfinishedRows = ms.data.filter(function(row){ return !row.finished; });
+      if(unfinishedRows.length){
+        unfinishedRows.sort(function(a,b){ return new Date(b.created_at||0) - new Date(a.created_at||0); });
+        var liveRow = unfinishedRows[0];
+        var staleRows = unfinishedRows.slice(1);
+        if(staleRows.length && isAdmin()){
+          staleRows.forEach(function(row){
+            sb.from('matches').delete().eq('id', row.id).then(function(){}).catch(function(){});
+          });
+          showToast('Se han limpiado '+staleRows.length+' partido'+(staleRows.length===1?'':'s')+' en curso duplicado'+(staleRows.length===1?'':'s')+' que habían quedado sueltos en la nube.');
+        }
         var g2 = liveRow.data || {};
         g2.id = liveRow.id; g2.kind = liveRow.kind; g2.jornada = liveRow.jornada; g2.season_id = liveRow.season_id;
         S.current = g2;
@@ -3650,10 +3667,49 @@ function renderMvpHistoryPopup(){
 /* ---------- Estadísticas (agregadas) ---------- */
 var statsViewMode = 'players';
 var statsFilterMode = 'todas';
+var statsPeriodMode = 'all'; // 'all' | 'month' | 'week'
+var statsPeriodKey = null;   // 'yyyy-mm' o el lunes de la semana 'yyyy-mm-dd'
 function setStatsView(m){ statsViewMode = m; render(); }
 function setStatsFilter(m){ statsFilterMode = m; render(); }
+function setStatsPeriodMode(m){ statsPeriodMode = m; statsPeriodKey = null; render(); }
+function setStatsPeriodKey(k){ statsPeriodKey = k; render(); }
+function weekStart(d){
+  var dt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  var day = (dt.getDay()+6)%7; // lunes=0 ... domingo=6
+  dt.setDate(dt.getDate()-day);
+  return dt;
+}
+function weekKeyFor(d){ var ws = weekStart(d); return ws.getFullYear()+'-'+pad2(ws.getMonth()+1)+'-'+pad2(ws.getDate()); }
+function weekLabelFromKey(key){
+  var parts = key.split('-');
+  var d = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
+  var monthLabel = d.toLocaleDateString('es-ES', {month:'long'});
+  return 'Semana del '+d.getDate()+' de '+monthLabel;
+}
+// Meses o semanas (según el modo) en los que hay al menos un partido, del más
+// reciente al más antiguo -- igual que rankingMonthsAvailable() pero también
+// admite semanas, para el filtro de la pantalla Estadísticas.
+function statsPeriodsAvailable(mode){
+  var set = {};
+  S.games.forEach(function(g){
+    var d = matchDateObj(g);
+    var key = mode==='week' ? weekKeyFor(d) : monthKey(d);
+    set[key] = true;
+  });
+  return Object.keys(set).sort().reverse().map(function(key){
+    return {key:key, label: mode==='week' ? weekLabelFromKey(key) : monthLabelFromKey(key)};
+  });
+}
 function filteredStatsGames(){
-  return S.games.filter(function(g){ return statsFilterMode==='todas' || (g.kind||'liga')===statsFilterMode; });
+  return S.games.filter(function(g){
+    if(statsFilterMode!=='todas' && (g.kind||'liga')!==statsFilterMode) return false;
+    if(statsPeriodMode!=='all' && statsPeriodKey){
+      var d = matchDateObj(g);
+      var key = statsPeriodMode==='week' ? weekKeyFor(d) : monthKey(d);
+      if(key!==statsPeriodKey) return false;
+    }
+    return true;
+  });
 }
 function renderStats(){
   var h = '';
@@ -3667,6 +3723,20 @@ function renderStats(){
       var labels = {todas:'Todos', liga:'Liga', torneo:'Torneo', amistoso:'Amistosos'};
       return '<button class="chip'+(statsFilterMode===f?' on':'')+'" onclick="setStatsFilter(\''+f+'\')">'+labels[f]+'</button>';
     }).join('')+'</div>';
+  h += '<div class="compsrow sym" style="padding-top:0;padding-bottom:8px">'+
+    ['all','month','week'].map(function(m){
+      var labels = {all:'Todo el periodo', month:'Por mes', week:'Por semana'};
+      return '<button class="chip'+(statsPeriodMode===m?' on':'')+'" onclick="setStatsPeriodMode(\''+m+'\')">'+labels[m]+'</button>';
+    }).join('')+'</div>';
+  if(statsPeriodMode!=='all'){
+    var periods = statsPeriodsAvailable(statsPeriodMode);
+    if(periods.length && (!statsPeriodKey || !periods.some(function(p){return p.key===statsPeriodKey;}))) statsPeriodKey = periods[0].key;
+    if(periods.length){
+      h += '<div class="chipswrap"><div class="fasechips" style="padding:0 20px 10px">'+
+        periods.map(function(p){ return '<div class="chip'+(statsPeriodKey===p.key?' on':'')+'" onclick="setStatsPeriodKey(\''+p.key+'\')">'+esc(p.label)+'</div>'; }).join('')+
+        '</div><div class="fadeedge"></div></div>';
+    }
+  }
 
   var games = filteredStatsGames();
   h += '<div class="content">';
