@@ -245,6 +245,25 @@
   .legend span{ display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--text-dim); }
   .legend i{ width:9px; height:9px; border-radius:999px; display:inline-block; }
   .charttip{ font-size:9.5px; font-weight:700; color:var(--text-dim); text-align:right; margin-top:8px; }
+
+  .periodstatcard{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px 16px; margin-top:16px; }
+  .pstatcaption{ font-size:11px; color:var(--text-dim); margin-bottom:14px; line-height:1.4; }
+  .pbarrow{ display:flex; align-items:center; gap:10px; padding:7px 0; }
+  .pbarrow .pbname{ width:46px; flex-shrink:0; font-size:11.5px; font-weight:800; color:var(--text-dim); }
+  .pbarrow .pbartrack{ flex:1; height:16px; background:var(--surface-2); border-radius:6px; overflow:hidden; position:relative; }
+  .pbarrow .pbarfill{ height:100%; background:var(--text-dim); border-radius:6px; opacity:0.55; }
+  .pbarrow .pbarfill.best{ background:var(--accent); opacity:1; }
+  .pbarrow .pbval{ width:38px; text-align:right; flex-shrink:0; font-family:'Oswald',sans-serif; font-size:13px; font-weight:700; }
+  .pvdrow{ display:flex; align-items:center; gap:10px; padding:7px 0; }
+  .pvdrow .pbname{ width:46px; flex-shrink:0; font-size:11.5px; font-weight:800; color:var(--text-dim); }
+  .pvdtrack{ flex:1; height:16px; border-radius:6px; overflow:hidden; display:flex; }
+  .pvdseg.win{ background:var(--good); }
+  .pvdseg.tie{ background:var(--text-dim); opacity:0.5; }
+  .pvdseg.loss{ background:var(--bad); }
+  .pvdlegend{ display:flex; gap:14px; margin-top:10px; font-size:10px; color:var(--text-dim); font-weight:700; flex-wrap:wrap; }
+  .pvdlegend span{ display:flex; align-items:center; gap:5px; }
+  .pvdlegend .dot{ width:8px; height:8px; border-radius:999px; display:inline-block; }
+  .pstatinsight{ display:flex; align-items:center; gap:8px; background:oklch(72% 0.18 45 / 12%); border:1px solid var(--accent); border-radius:12px; padding:10px 12px; margin-top:14px; font-size:11.5px; font-weight:700; color:var(--accent); line-height:1.4; }
   .lstack{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; }
   .swipeviewport{ overflow:hidden; border-radius:12px; touch-action:pan-y; flex-shrink:0; }
   .swipetrack{ display:flex; width:200%; transition:transform 0.28s ease; }
@@ -263,6 +282,20 @@
 
   .sortrow{ display:flex; align-items:center; justify-content:space-between; padding:14px 20px 0; flex-shrink:0; }
   .sortlabel{ font-size:10.5px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); }
+
+  .periodsection{ padding:14px 20px 0; flex-shrink:0; }
+  .periodlabelrow{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:10px; }
+  .periodhint{ font-size:9.5px; font-weight:700; color:var(--text-dim); text-transform:none; letter-spacing:0; white-space:nowrap; }
+  .periodchips{ display:grid; gap:6px; }
+  .pchip{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:7px 2px; display:flex; flex-direction:column; align-items:center; gap:3px; }
+  .pchip .pnum{ font-size:9.5px; font-weight:800; color:var(--text-dim); letter-spacing:0.03em; }
+  .pchip .pscore{ font-family:'Oswald',sans-serif; font-size:11.5px; font-weight:700; }
+  .pchip.on{ background:var(--accent); border-color:var(--accent); }
+  .pchip.on .pnum, .pchip.on .pscore{ color:var(--accent-ink); }
+  .pchip.all .pnum{ font-size:9px; }
+  .periodfilterpill{ margin-top:10px; display:flex; align-items:center; justify-content:space-between; background:oklch(72% 0.18 45 / 12%); border:1px solid var(--accent); border-radius:10px; padding:8px 12px; gap:10px; }
+  .periodfilterpill .tx{ font-size:11.5px; font-weight:700; color:var(--accent); }
+  .periodfilterpill .clear{ font-size:11px; font-weight:800; color:var(--text-dim); text-decoration:underline; flex-shrink:0; }
 
   .boxcontent{ flex:1; overflow-y:auto; padding:12px 20px 20px; display:flex; flex-direction:column; gap:10px; -webkit-overflow-scrolling:touch; }
   .prow2{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
@@ -344,6 +377,11 @@
   .printmeta{ font-size:12px; color:var(--text-dim); font-weight:600; margin-top:4px; }
   .printsection{ margin-top:22px; }
   .printsectitle{ font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-dim); margin-bottom:10px; }
+  .periodtable{ border-collapse:collapse; width:100%; font-family:'Manrope',sans-serif; }
+  .periodtable th, .periodtable td{ padding:6px 8px; text-align:center; font-size:11px; border-bottom:1px solid var(--border); }
+  .periodtable th{ color:var(--text-dim); font-weight:800; text-transform:uppercase; letter-spacing:0.04em; font-size:9.5px; }
+  .periodtable td:first-child, .periodtable th:first-child{ text-align:left; font-weight:800; color:var(--text); }
+  .periodtable tbody tr:last-child td{ border-bottom:none; }
 
   @media print{
     html, body{ background:#fff !important; height:auto !important; overflow:visible !important; }
@@ -377,6 +415,7 @@
     #printArea .tcell-player span:last-child{ max-width:80px; }
     #printArea .minbtn{ display:none; }
     #printArea .printsection{ page-break-inside:avoid; break-inside:avoid; }
+    #printArea .periodtable th, #printArea .periodtable td{ padding:4px 5px; }
     @page{ size:landscape; margin:10mm; }
   }
 
@@ -1701,9 +1740,15 @@ function zoneStatsFromEvents(events){
   });
   return out;
 }
-function teamZoneStats(games){
+function teamZoneStats(games, periods){
   var events = [];
-  games.forEach(function(g){ events = events.concat(g.events.filter(function(e){ return e.side==='team'; })); });
+  games.forEach(function(g){
+    events = events.concat(g.events.filter(function(e){
+      if(e.side!=='team') return false;
+      if(periods && periods.length && periods.indexOf(e.period)===-1) return false;
+      return true;
+    }));
+  });
   return zoneStatsFromEvents(events);
 }
 function playerZoneStats(games, dorsal, name){
@@ -1886,10 +1931,60 @@ function showToast(msg){
 var boxViewMode = 'team';
 function setBoxView(mode){ boxViewMode = mode; render(); }
 
+/* ---------- filtro de resultado por periodo (pantalla box score) ---------- */
+var boxPeriodFilter = {}; // gameId -> array de nº de periodo seleccionados (vacío = "Todos", sin filtro)
+function ensureBoxPeriodFilter(gid){
+  if(!boxPeriodFilter[gid]) boxPeriodFilter[gid] = [];
+  return boxPeriodFilter[gid];
+}
+function toggleBoxPeriod(gid, period){
+  var arr = ensureBoxPeriodFilter(gid);
+  var idx = arr.indexOf(period);
+  if(idx===-1) arr.push(period); else arr.splice(idx,1);
+  render();
+}
+function clearBoxPeriodFilter(gid){
+  boxPeriodFilter[gid] = [];
+  render();
+}
+function periodFilterLabel(g, periods){
+  if(!periods || !periods.length) return '';
+  var ps = periodScores(g);
+  var teamSum=0, rivalSum=0;
+  var sorted = periods.slice().sort(function(a,b){ return a-b; });
+  var names = sorted.map(function(p){
+    teamSum += (ps[p]?ps[p].team:0);
+    rivalSum += (ps[p]?ps[p].rival:0);
+    return esc(g.periodLabel)+' '+p;
+  });
+  return 'Filtrando: '+names.join(' + ')+' ('+teamSum+'-'+rivalSum+')';
+}
+function periodScoreChipsHtml(g){
+  if(g.periodsCount<=1) return '';
+  var periods = ensureBoxPeriodFilter(g.id);
+  var ps = periodScores(g);
+  var abbr = (g.periodLabel||'Periodo').charAt(0).toUpperCase();
+  var h = '<div class="periodsection">';
+  h += '<div class="periodlabelrow"><span class="label">Resultado por '+esc((g.periodLabel||'periodo').toLowerCase())+'</span><span class="periodhint">toca para filtrar · varios a la vez</span></div>';
+  h += '<div class="periodchips" style="grid-template-columns:repeat('+Math.min(g.periodsCount+1,7)+',1fr)">';
+  h += '<div class="pchip all'+(periods.length?'':' on')+'" onclick="clearBoxPeriodFilter(\''+g.id+'\')"><div class="pnum">Todos</div><div class="pscore">'+teamScore(g)+'-'+rivalScore(g)+'</div></div>';
+  for(var p=1;p<=g.periodsCount;p++){
+    var sc = ps[p]||{team:0,rival:0};
+    var on = periods.indexOf(p)!==-1;
+    h += '<div class="pchip'+(on?' on':'')+'" onclick="toggleBoxPeriod(\''+g.id+'\','+p+')"><div class="pnum">'+abbr+p+'</div><div class="pscore">'+sc.team+'-'+sc.rival+'</div></div>';
+  }
+  h += '</div>';
+  if(periods.length){
+    h += '<div class="periodfilterpill"><span class="tx">'+periodFilterLabel(g, periods)+'</span><span class="clear" onclick="clearBoxPeriodFilter(\''+g.id+'\')">Quitar filtro</span></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
 /* ---------- team-level aggregates (for the "Equipo" box score view) ---------- */
-function teamAggregates(g, side){
+function teamAggregates(g, side, eventsOverride){
   var a = {fgM:0,fgA:0,p3M:0,p3A:0,ftM:0,ftA:0,rebO:0,rebD:0,ast:0,blk:0,stl:0,to:0,foulC:0};
-  g.events.forEach(function(e){
+  (eventsOverride || g.events).forEach(function(e){
     if(e.side!==side) return;
     switch(e.type){
       case '2m': a.fgM++; a.fgA++; break;
@@ -2440,13 +2535,18 @@ function renderBox(){
        '<div class="fteam right"><div class="fname">'+esc((g.rivalName||'RIVAL').toUpperCase())+'</div><div class="fscore">'+rivalScore(g)+'</div></div></div>'+
        '</div></div>';
 
+  if(g.finished){
+    h += periodScoreChipsHtml(g);
+  }
+
   h += '<div class="sortrow"><div class="sortlabel">Vista</div><div class="seg2" style="width:auto">'+
        '<button class="opt'+(boxViewMode==='team'?' on':'')+'" onclick="setBoxView(\'team\')">Equipo</button>'+
        '<button class="opt'+(boxViewMode==='players'?' on':'')+'" onclick="setBoxView(\'players\')">Jugadores</button>'+
        '</div></div>';
 
   if(boxViewMode==='team'){
-    h += '<div class="boxcontent">'+renderTeamPanel(g)+'</div>';
+    var boxPeriods = (g.finished && ensureBoxPeriodFilter(g.id).length) ? ensureBoxPeriodFilter(g.id) : null;
+    h += '<div class="boxcontent">'+renderTeamPanel(g, {periods: boxPeriods})+'</div>';
     h += '<div class="actions"><button class="abtn" onclick="exportBoxScorePDF(\''+g.id+'\')">Exportar PDF</button><button class="abtn" onclick="shareBoxScore(\''+g.id+'\')">Compartir</button></div>';
     return h;
   }
@@ -2591,6 +2691,23 @@ function renderMatchPlayerPopup(){
   return h;
 }
 
+/* ---- resultado por periodo (tabla, usada en la vista y en el PDF) ---- */
+function periodScoreTableHtml(g){
+  var ps = periodScores(g);
+  var abbr = (g.periodLabel||'Periodo').charAt(0).toUpperCase();
+  var h = '<table class="periodtable"><thead><tr><th></th>';
+  for(var p=1;p<=g.periodsCount;p++) h += '<th>'+abbr+p+'</th>';
+  h += '<th>Total</th></tr></thead><tbody>';
+  h += '<tr><td>'+esc(firstWord(g.teamName))+'</td>';
+  for(var p2=1;p2<=g.periodsCount;p2++) h += '<td>'+(ps[p2]?ps[p2].team:0)+'</td>';
+  h += '<td>'+teamScore(g)+'</td></tr>';
+  h += '<tr><td>'+esc(firstWord(g.rivalName||'Rival'))+'</td>';
+  for(var p3=1;p3<=g.periodsCount;p3++) h += '<td>'+(ps[p3]?ps[p3].rival:0)+'</td>';
+  h += '<td>'+rivalScore(g)+'</td></tr>';
+  h += '</tbody></table>';
+  return h;
+}
+
 /* ---- export / share (Exportar PDF & Compartir buttons) ---- */
 function buildPrintHtml(g){
   var roster = g.roster.slice();
@@ -2608,6 +2725,9 @@ function buildPrintHtml(g){
   h += '<div class="printmatch"><span>'+esc(g.teamName)+'</span><span class="printscore">'+teamTotal+' – '+rivalScore(g)+'</span><span>'+esc(g.rivalName||'Rival')+'</span></div>';
   h += '<div class="printmeta">'+(g.finished?'Partido finalizado':'En curso')+' · '+g.periodsCount+' '+esc(g.periodLabel.toLowerCase())+(g.periodsCount!==1?'s':'')+' · '+d.toLocaleDateString('es-ES')+'</div>';
   h += '</div>';
+  if(g.periodsCount>1){
+    h += '<div class="printsection"><div class="printsectitle">Resultado por '+esc((g.periodLabel||'periodo').toLowerCase())+'</div>'+periodScoreTableHtml(g)+'</div>';
+  }
   h += '<div class="printsection"><div class="printsectitle">Estadísticas de equipo</div>'+renderTeamPanel(g, {forPrint:true})+'</div>';
   h += '<div class="printsection"><div class="printsectitle">Estadísticas de jugadoras</div>'+renderPlayersTable(g, rows, teamTotal)+'</div>';
   return h;
@@ -2650,7 +2770,9 @@ function shareBoxScore(gid){
 /* ---- team stats panel (Equipo view of the box score) ---- */
 function renderTeamPanel(g, opts){
   opts = opts || {};
-  var team = teamAggregates(g, 'team');
+  var periods = (opts.periods && opts.periods.length) ? opts.periods : null;
+  var filteredEvents = periods ? g.events.filter(function(e){ return periods.indexOf(e.period)!==-1; }) : null;
+  var team = teamAggregates(g, 'team', filteredEvents);
   var rivalKnown = !!g.trackRivalFull;
   var rival = rivalKnown ? rivalAggAsTeamShape(g) : null;
 
@@ -2688,8 +2810,14 @@ function renderTeamPanel(g, opts){
   if(!rivalKnown){
     h += '<div class="rivalnote" style="margin-top:10px"><div class="ic">'+icon('info',16)+'</div><div class="tx">Activa "Completas" en la configuración del rival para comparar también sus estadísticas de equipo. De momento solo tienes su marcador: <b>'+rivalScore(g)+' pts</b>.</div></div>';
   }
+  if(periods && rivalKnown){
+    var ps2 = periodScores(g);
+    var rivalPeriodPts = 0;
+    var periodNames = periods.slice().sort(function(a,b){ return a-b; }).map(function(p){ rivalPeriodPts += (ps2[p]?ps2[p].rival:0); return esc(g.periodLabel)+' '+p; }).join(' + ');
+    h += '<div class="rivalnote" style="margin-top:10px"><div class="ic">'+icon('info',16)+'</div><div class="tx">Con este filtro de periodo, las estadísticas detalladas del rival (tiros, rebotes...) que ves arriba son las del <b>partido completo</b> — solo su marcador se puede filtrar por periodo. '+esc(firstWord(g.rivalName||'Rival'))+' en '+periodNames+': <b>'+rivalPeriodPts+' pts</b>.</div></div>';
+  }
   if(!opts.forPrint){
-    h += '<div class="shotmapcard" style="margin-top:16px"><div class="label shotmaptitle">Mapa de tiro</div>'+renderShotMap(teamZoneStats([g]))+'</div>';
+    h += '<div class="shotmapcard" style="margin-top:16px"><div class="label shotmaptitle">Mapa de tiro'+(periods?' · '+periods.slice().sort(function(a,b){return a-b;}).map(function(p){return esc(g.periodLabel)+' '+p;}).join(' + '):'')+'</div>'+renderShotMap(teamZoneStats([g], periods))+'</div>';
   }
   return h;
 }
@@ -4861,6 +4989,85 @@ function renderStats(){
   h += renderBottomNav('stats');
   return h;
 }
+/* ---------- estadísticas por periodo (Estadísticas -> Equipo) ---------- */
+// Agrega, sobre la lista de partidos ya filtrada (competición/mes/semana),
+// el % de los puntos propios que vienen de cada periodo (sexto/cuarto/...) y
+// el % de partidos en los que se gana/empata/pierde ese periodo. Usa el
+// mayor periodsCount visto entre los partidos filtrados, así funciona igual
+// si en algún momento se han jugado partidos con distinto número de periodos.
+function aggregatePeriodStats(games){
+  var maxP = 0, periodLabel = 'Periodo';
+  games.forEach(function(g){
+    if(g.periodsCount>maxP) maxP = g.periodsCount;
+    if(g.periodLabel) periodLabel = g.periodLabel;
+  });
+  var pointsByPeriod = {}, resultsByPeriod = {}, totalTeamPoints = 0;
+  for(var p=1;p<=maxP;p++){ pointsByPeriod[p]=0; resultsByPeriod[p]={win:0,tie:0,loss:0,total:0}; }
+  games.forEach(function(g){
+    var ps = periodScores(g);
+    for(var p2=1;p2<=g.periodsCount;p2++){
+      var sc = ps[p2] || {team:0,rival:0};
+      pointsByPeriod[p2] = (pointsByPeriod[p2]||0) + sc.team;
+      totalTeamPoints += sc.team;
+      var r = resultsByPeriod[p2] || (resultsByPeriod[p2]={win:0,tie:0,loss:0,total:0});
+      r.total++;
+      if(sc.team>sc.rival) r.win++; else if(sc.team<sc.rival) r.loss++; else r.tie++;
+    }
+  });
+  var points = [];
+  for(var p3=1;p3<=maxP;p3++){
+    var pts = pointsByPeriod[p3]||0;
+    points.push({period:p3, pts:pts, pct: totalTeamPoints>0 ? Math.round(1000*pts/totalTeamPoints)/10 : 0});
+  }
+  var results = [];
+  for(var p4=1;p4<=maxP;p4++){
+    var r2 = resultsByPeriod[p4] || {win:0,tie:0,loss:0,total:0};
+    results.push({period:p4, total:r2.total,
+      winPct: r2.total>0 ? Math.round(100*r2.win/r2.total) : 0,
+      tiePct: r2.total>0 ? Math.round(100*r2.tie/r2.total) : 0,
+      lossPct: r2.total>0 ? Math.round(100*r2.loss/r2.total) : 0});
+  }
+  return {maxPeriods:maxP, periodLabel:periodLabel, points:points, results:results, totalTeamPoints:totalTeamPoints};
+}
+function renderPeriodStatsCards(games){
+  var agg = aggregatePeriodStats(games);
+  if(!agg.maxPeriods || !agg.totalTeamPoints) return '';
+  var labelLower = agg.periodLabel.toLowerCase();
+  var abbr = agg.periodLabel.charAt(0).toUpperCase();
+  var h = '';
+
+  // -- tarjeta 1: % de puntos propios anotados en cada periodo --
+  var bestPts = agg.points.slice().sort(function(a,b){ return b.pct-a.pct; })[0];
+  h += '<div class="periodstatcard"><div class="label">¿En qué '+esc(labelLower)+' metemos más puntos?</div>';
+  h += '<div class="pstatcaption">% de todos nuestros puntos anotados que vienen de cada '+esc(labelLower)+' (con el filtro de arriba).</div>';
+  agg.points.forEach(function(row){
+    h += '<div class="pbarrow"><div class="pbname">'+abbr+row.period+'</div><div class="pbartrack"><div class="pbarfill'+(bestPts && row.period===bestPts.period?' best':'')+'" style="width:'+row.pct+'%"></div></div><div class="pbval">'+row.pct+'%</div></div>';
+  });
+  if(bestPts && bestPts.pts>0){
+    h += '<div class="pstatinsight">'+icon('star',14)+' Vuestro mejor '+esc(labelLower)+' anotando: '+esc(agg.periodLabel)+' '+bestPts.period+' ('+bestPts.pct+'% de los puntos)</div>';
+  }
+  h += '</div>';
+
+  // -- tarjeta 2: % de victoria/empate/derrota en cada periodo --
+  h += '<div class="periodstatcard"><div class="label">¿En qué '+esc(labelLower)+' solemos ganar?</div>';
+  h += '<div class="pstatcaption">De los partidos con datos, en qué % ganáis, empatáis o perdéis cada '+esc(labelLower)+'.</div>';
+  agg.results.forEach(function(row){
+    h += '<div class="pvdrow"><div class="pbname">'+abbr+row.period+'</div><div class="pvdtrack">'+
+      '<div class="pvdseg win" style="width:'+row.winPct+'%"></div>'+
+      '<div class="pvdseg tie" style="width:'+row.tiePct+'%"></div>'+
+      '<div class="pvdseg loss" style="width:'+row.lossPct+'%"></div>'+
+      '</div></div>';
+  });
+  h += '<div class="pvdlegend"><span><span class="dot" style="background:var(--good)"></span>Ganado</span><span><span class="dot" style="background:var(--text-dim);opacity:0.5"></span>Empate</span><span><span class="dot" style="background:var(--bad)"></span>Perdido</span></div>';
+  var worst = agg.results.filter(function(r){ return r.total>0; }).slice().sort(function(a,b){ return a.winPct-b.winPct; })[0];
+  if(worst && worst.winPct<50){
+    var worstTied = agg.results.filter(function(r){ return r.total>0 && r.winPct===worst.winPct; });
+    var worstLabel = worstTied.map(function(r){ return esc(agg.periodLabel)+' '+r.period; }).join(' y ');
+    h += '<div class="pstatinsight" style="color:var(--bad);background:oklch(62% 0.19 25 / 12%);border-color:var(--bad)">'+icon('info',14)+' Vuestro '+esc(labelLower)+' más flojo: '+worstLabel+' (ganáis solo el '+worst.winPct+'% de las veces)</div>';
+  }
+  h += '</div>';
+  return h;
+}
 function renderTeamPanelAggregate(games){
   var t = {fg2m:0,fg2a:0,fg3m:0,fg3a:0,ftm:0,fta:0,rebO:0,rebD:0,ast:0,blk:0,stl:0,to:0,foulC:0};
   games.forEach(function(g){
@@ -4889,6 +5096,7 @@ function renderTeamPanelAggregate(games){
   h += '</div>';
   h += '<div class="shotmapcard"><div class="label shotmaptitle" style="display:flex;align-items:center;justify-content:space-between">Mapa de tiro<span class="taphint">Toca una zona ↓</span></div>'+renderShotMap(teamZoneStats(games), true)+'</div>';
   h += renderTrendCard(games);
+  h += renderPeriodStatsCards(games);
   return h;
 }
 function renderPlayersTableAggregate(games){
