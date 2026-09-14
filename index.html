@@ -2744,11 +2744,32 @@ function confirmDeleteMatch(id){
 async function deleteMatch(id){
   if(!isAdmin()){ showToast('Solo un administrador puede borrar partidos.'); return; }
   if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); return; }
-  if(S.current && S.current.id===id){ S.current = null; }
-  S.games = S.games.filter(function(g){ return g.id!==id; });
+  // Si había un guardado en la nube pendiente (debounced, 900ms) para este
+  // partido, hay que cancelarlo -- si no, podía dispararse JUSTO DESPUÉS de
+  // borrar y volver a crear el partido en Supabase (pushMatch hace upsert),
+  // "resucitándolo" sin que se note hasta la próxima vez que se cargan los
+  // datos. Esto podía ser la causa de que un partido en curso "no se dejara
+  // borrar" de verdad (parecía borrarse y luego volvía a aparecer).
+  if(cloudSaveTimer){ clearTimeout(cloudSaveTimer); cloudSaveTimer = null; }
+  var removedCurrent = null, removedFromGames = null, removedIdx = -1;
+  if(S.current && S.current.id===id){ removedCurrent = S.current; S.current = null; }
+  else {
+    removedIdx = S.games.findIndex(function(g){ return g.id===id; });
+    if(removedIdx!==-1) removedFromGames = S.games.splice(removedIdx,1)[0];
+  }
   saveState();
   render();
-  if(sb){ try{ await sb.from('matches').delete().eq('id', id); }catch(e){} }
+  function restoreLocal(){
+    if(removedCurrent){ S.current = removedCurrent; }
+    else if(removedFromGames){ S.games.splice(removedIdx,0,removedFromGames); }
+    saveState(); render();
+  }
+  if(sb){
+    try{
+      var res = await sb.from('matches').delete().eq('id', id);
+      if(res && res.error){ restoreLocal(); showToast('No se ha podido borrar: '+res.error.message); }
+    }catch(e){ restoreLocal(); showToast('No se ha podido borrar el partido (revisa la conexión).'); }
+  }
 }
 var matchesFilter = 'todas';
 function setMatchesFilter(f){ matchesFilter = f; render(); }
