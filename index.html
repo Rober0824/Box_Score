@@ -3676,12 +3676,23 @@ function openManualClasifEditor(faseId){
   render();
 }
 function closeManualClasifEditor(){ manualClasifOpen = false; manualClasifFaseId = null; render(); }
+// OJO: nunca llamar a render() aquí -- un render() en cada tecla reconstruye
+// todo el HTML y el input pierde el foco, cerrando el teclado del móvil en
+// cada caracter (mismo problema ya visto antes con "Página FBM" en Admin).
+// En vez de eso, se actualiza el dato en memoria y solo se "parchea" a mano
+// el P.G/Puntos calculados de esa fila (los únicos que dependen en vivo de
+// lo que se está escribiendo), sin tocar el resto del DOM.
 function mcField(i, field, value){
   if(!manualClasifDraft[i]) return;
   if(field==='team_name') manualClasifDraft[i][field] = value;
   else if(field==='is_own_team') manualClasifDraft[i][field] = !!value;
   else manualClasifDraft[i][field] = parseInt(value,10) || 0;
-  render();
+  if(field!=='team_name' && field!=='is_own_team'){
+    var d = deriveClasifRow(manualClasifDraft[i]);
+    var pgEl = document.getElementById('mcpg-'+i), ptsEl = document.getElementById('mcpts-'+i);
+    if(pgEl) pgEl.textContent = d.pg;
+    if(ptsEl) ptsEl.textContent = d.pts;
+  }
 }
 function mcAddRow(){
   manualClasifDraft.push({ id:null, team_name:'', pj:0, pp:0, pe:0, pf:0, pc:0, is_own_team:false, fase_id: manualClasifFaseId });
@@ -3736,10 +3747,10 @@ function manualClasifOverlay(){
         '<div class="fld"><div class="fldlabel">P.J</div><input class="fldinput" type="number" value="'+(r.pj||0)+'" oninput="mcField('+i+',\'pj\',this.value)"></div>'+
         '<div class="fld"><div class="fldlabel">P.P</div><input class="fldinput" type="number" value="'+(r.pp||0)+'" oninput="mcField('+i+',\'pp\',this.value)"></div>'+
         '<div class="fld"><div class="fldlabel">P.E</div><input class="fldinput" type="number" value="'+(r.pe||0)+'" oninput="mcField('+i+',\'pe\',this.value)"></div>'+
-        '<div class="fld"><div class="fldlabel">P.G</div><div class="fldauto">'+d.pg+'</div></div>'+
+        '<div class="fld"><div class="fldlabel">P.G</div><div class="fldauto" id="mcpg-'+i+'">'+d.pg+'</div></div>'+
         '<div class="fld"><div class="fldlabel">P.F</div><input class="fldinput" type="number" value="'+(r.pf||0)+'" oninput="mcField('+i+',\'pf\',this.value)"></div>'+
         '<div class="fld"><div class="fldlabel">P.C</div><input class="fldinput" type="number" value="'+(r.pc||0)+'" oninput="mcField('+i+',\'pc\',this.value)"></div>'+
-        '<div class="fld"><div class="fldlabel">Pts</div><div class="fldauto fldpts">'+d.pts+'</div></div>'+
+        '<div class="fld"><div class="fldlabel">Pts</div><div class="fldauto fldpts" id="mcpts-'+i+'">'+d.pts+'</div></div>'+
       '</div>'+
       '<label class="ownrow"><input type="checkbox" '+(r.is_own_team?'checked':'')+' onchange="mcField('+i+',\'is_own_team\',this.checked)"> Es nuestro equipo</label>'+
     '</div>';
@@ -3761,24 +3772,31 @@ function padToPow2(ids){
 }
 // legs: [{a,b}, ...] resultados de cada partido de un mismo cruce. Ninguno
 // fijo a 1 o 2 -- se admiten los que hagan falta (al mejor de 3, 5...). Gana
-// quien tenga más partidos ganados; si están igualados, el cruce sigue
-// pendiente (no avanza nadie hasta que sea inequívoco).
+// quien tenga más partidos ganados; si el número de partidos ganados queda
+// empatado (p.ej. eliminatorias a un número par de partidos), desempata quien
+// tenga mejor suma total de puntos a favor/en contra de todos los partidos
+// jugados. Solo si también empatan en eso el cruce sigue pendiente.
 function legsTally(legs){
-  var wa=0, wb=0, played=0;
+  var wa=0, wb=0, played=0, sumA=0, sumB=0;
   (legs||[]).forEach(function(l){
     if(!l) return;
     var a = (l.a==='' || l.a==null) ? null : Number(l.a);
     var b = (l.b==='' || l.b==null) ? null : Number(l.b);
     if(a==null || b==null || isNaN(a) || isNaN(b)) return;
     played++;
+    sumA += a; sumB += b;
     if(a>b) wa++; else if(b>a) wb++;
   });
-  return { wa:wa, wb:wb, played:played };
+  return { wa:wa, wb:wb, played:played, sumA:sumA, sumB:sumB };
 }
 function legsResult(legs){
   var t = legsTally(legs);
   if(t.wa>t.wb) return 'A';
   if(t.wb>t.wa) return 'B';
+  if(t.played>0){
+    if(t.sumA>t.sumB) return 'A';
+    if(t.sumB>t.sumA) return 'B';
+  }
   return null;
 }
 // Construye las rondas de UN lado (o del bracket entero si sides=1) a partir
@@ -3855,16 +3873,17 @@ function roundName(matchCount){
 }
 
 /* ---------- Asistente para crear/editar el bracket (equipos, lados) ---------- */
-var bracketSetupDraft = null; // {faseId, mode:'create'|'editTeams', step, sides, count, teams:[{id,name,side}], ownTeamId}
+var bracketSetupDraft = null; // {faseId, mode:'create'|'editTeams', step, sides, count, legsPerTie, teams:[{id,name,side}], ownTeamId}
 function openBracketSetup(faseId){
-  bracketSetupDraft = { faseId:faseId, mode:'create', step:1, sides:1, count:8, teams:[], ownTeamId:null };
+  bracketSetupDraft = { faseId:faseId, mode:'create', step:1, sides:1, count:8, legsPerTie:2, teams:[], ownTeamId:null };
   render();
 }
 function openBracketTeamsEdit(faseId){
   var fase = byIdArr(clubSettings.fbm_fases||[], faseId);
-  var bracket = (fase && fase.bracket) || { teams:[], sides:1, ownTeamId:null };
+  var bracket = (fase && fase.bracket) || { teams:[], sides:1, ownTeamId:null, legsPerTie:2 };
   bracketSetupDraft = {
     faseId: faseId, mode:'editTeams', step:2, sides: bracket.sides||1, count:(bracket.teams||[]).length,
+    legsPerTie: bracket.legsPerTie || 2,
     teams: (bracket.teams||[]).map(function(t){ return Object.assign({}, t); }),
     ownTeamId: bracket.ownTeamId || null
   };
@@ -3872,7 +3891,18 @@ function openBracketTeamsEdit(faseId){
 }
 function closeBracketSetup(){ bracketSetupDraft = null; render(); }
 function bsSetSides(n){ if(!bracketSetupDraft) return; bracketSetupDraft.sides = n; render(); }
+// bsSetCount() SÍ renderiza -- se usa desde los chips rápidos (4/8/16/32), que
+// necesitan reflejar cuál queda "on". El campo de texto libre usa en cambio
+// bsSetCountFromInput(), que no renderiza en cada tecla (mismo motivo que
+// mcField más arriba: evitar que se cierre el teclado del móvil).
 function bsSetCount(n){ if(!bracketSetupDraft) return; bracketSetupDraft.count = Math.max(2, Math.min(64, parseInt(n,10)||0)); render(); }
+function bsSetCountFromInput(n){ if(!bracketSetupDraft) return; bracketSetupDraft.count = Math.max(2, Math.min(64, parseInt(n,10)||0)); }
+// Nº de partidos por eliminatoria (a cuántos se juega cada cruce). Igual que
+// con el nº de equipos: los chips rápidos (bsSetLegsPerTie) sí renderizan,
+// el campo de texto libre (bsSetLegsPerTieFromInput) no, para no cerrar el
+// teclado del móvil al escribir.
+function bsSetLegsPerTie(n){ if(!bracketSetupDraft) return; bracketSetupDraft.legsPerTie = Math.max(1, Math.min(9, parseInt(n,10)||0)); render(); }
+function bsSetLegsPerTieFromInput(n){ if(!bracketSetupDraft) return; bracketSetupDraft.legsPerTie = Math.max(1, Math.min(9, parseInt(n,10)||0)); }
 function bsNextStep(){
   if(!bracketSetupDraft) return;
   var n = bracketSetupDraft.count;
@@ -3899,6 +3929,7 @@ async function bsSave(){
   var existing = byIdArr(fases, d.faseId);
   var newBracket = {
     sides: d.sides,
+    legsPerTie: Math.max(1, parseInt(d.legsPerTie,10)||2),
     teams: d.teams.map(function(t){ return { id:t.id, name:(t.name||'').trim(), side:t.side||0 }; }),
     ownTeamId: d.ownTeamId || null,
     results: (d.mode==='editTeams' && existing && existing.bracket) ? existing.bracket.results||{} : {}
@@ -3920,9 +3951,13 @@ function bracketSetupOverlay(){
       '<div class="seg2"><button class="opt'+(d.sides===1?' on':'')+'" onclick="bsSetSides(1)">1 lado</button><button class="opt'+(d.sides===2?' on':'')+'" onclick="bsSetSides(2)">2 lados</button></div>'+
       '<div class="caption">2 lados: estilo conferencias NBA, cada lado juega su propio cuadro hasta la final.</div></div>';
     h += '<div><div class="label" style="margin:14px 0 8px">Número de equipos</div>'+
-      '<div class="rowcard"><div class="k">Equipos</div><input type="number" value="'+d.count+'" oninput="bsSetCount(this.value)"></div>'+
+      '<div class="rowcard"><div class="k">Equipos</div><input type="number" value="'+d.count+'" oninput="bsSetCountFromInput(this.value)"></div>'+
       '<div class="chiprow" style="margin-top:8px">'+[4,8,16,32].map(function(n){ return '<button class="chip'+(d.count===n?' on':'')+'" onclick="bsSetCount('+n+')">'+n+'</button>'; }).join('')+'</div>'+
       '<div class="caption" style="margin-top:8px">Pon el número que quieras -- estos son solo accesos rápidos.</div></div>';
+    h += '<div><div class="label" style="margin:14px 0 8px">Partidos por eliminatoria</div>'+
+      '<div class="rowcard"><div class="k">Partidos</div><input type="number" min="1" value="'+d.legsPerTie+'" oninput="bsSetLegsPerTieFromInput(this.value)"></div>'+
+      '<div class="chiprow" style="margin-top:8px">'+[1,2,3,5].map(function(n){ return '<button class="chip'+(d.legsPerTie===n?' on':'')+'" onclick="bsSetLegsPerTie('+n+')">'+n+'</button>'; }).join('')+'</div>'+
+      '<div class="caption" style="margin-top:8px">A cuántos partidos se juega cada cruce (ida, ida y vuelta, al mejor de 3, 5...). Podrás cambiarlo luego.</div></div>';
     h += '<button class="fullbtn" onclick="bsNextStep()">Continuar</button>';
     h += '<div class="cancel" onclick="closeBracketSetup()">Cancelar</div>';
   } else {
@@ -3930,11 +3965,18 @@ function bracketSetupOverlay(){
     if(d.sides===2){
       h += '<div class="caption" style="margin-bottom:4px">Lado A: equipos 1-'+Math.ceil(d.count/2)+'. Lado B: equipos '+(Math.ceil(d.count/2)+1)+'-'+d.count+'.</div>';
     }
+    if(d.mode==='editTeams'){
+      h += '<div style="margin-bottom:10px"><div class="label" style="margin-bottom:8px">Partidos por eliminatoria</div>'+
+        '<div class="rowcard"><div class="k">Partidos</div><input type="number" min="1" value="'+d.legsPerTie+'" oninput="bsSetLegsPerTieFromInput(this.value)"></div>'+
+        '<div class="chiprow" style="margin-top:8px">'+[1,2,3,5].map(function(n){ return '<button class="chip'+(d.legsPerTie===n?' on':'')+'" onclick="bsSetLegsPerTie('+n+')">'+n+'</button>'; }).join('')+'</div>'+
+        '<div class="caption" style="margin-top:8px">Afecta a los próximos cruces que abras -- los ya jugados no cambian.</div></div>';
+    }
+    h += '<div class="caption" style="margin-bottom:6px">Marca cuál es "Nuestro equipo" (el favorito) -- puedes cambiarlo cuando quieras, luego pulsa "'+(d.mode==='editTeams'?'Guardar cambios':'Crear bracket')+'" para que se quede guardado.</div>';
     d.teams.forEach(function(t,i){
       h += '<div class="rowcard" style="gap:8px">'+
         '<div class="k" style="width:18px;flex-shrink:0">'+(i+1)+'</div>'+
         '<input type="text" placeholder="Nombre del equipo" value="'+esc(t.name)+'" oninput="bsTeamField('+i+',\'name\',this.value)" style="flex:1;text-align:left">'+
-        '<label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);flex-shrink:0;white-space:nowrap"><input type="radio" name="ownteam" '+(d.ownTeamId===t.id?'checked':'')+' onchange="bsSetOwnTeam(\''+t.id+'\')"> Nuestro</label>'+
+        '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-dim);flex-shrink:0;white-space:nowrap;padding:4px 2px"><input type="radio" name="ownteam" '+(d.ownTeamId===t.id?'checked':'')+' onchange="bsSetOwnTeam(\''+t.id+'\')"> Nuestro</label>'+
       '</div>';
     });
     h += '<button class="fullbtn" onclick="bsSave()">'+(d.mode==='editTeams'?'Guardar cambios':'Crear bracket')+'</button>';
@@ -3952,11 +3994,43 @@ function openBracketMatch(faseId, key){
   var fase = byIdArr(clubSettings.fbm_fases||[], faseId);
   if(!fase || !fase.bracket) return;
   var legs = (fase.bracket.results && fase.bracket.results[key]) || [];
-  bracketMatchDraft = { faseId:faseId, key:key, legs: legs.length ? legs.map(function(l){ return Object.assign({},l); }) : [{a:'',b:''}] };
+  var emptyLegs = [];
+  var n = Math.max(1, fase.bracket.legsPerTie || 2);
+  for(var i=0;i<n;i++) emptyLegs.push({a:'',b:''});
+  bracketMatchDraft = { faseId:faseId, key:key, legs: legs.length ? legs.map(function(l){ return Object.assign({},l); }) : emptyLegs };
   render();
 }
 function closeBracketMatch(){ bracketMatchDraft = null; render(); }
-function bmLegField(i, side, value){ if(bracketMatchDraft && bracketMatchDraft.legs[i]){ bracketMatchDraft.legs[i][side] = value; render(); } }
+// Un solo sitio para el texto de "quién pasa": gana quien tenga más partidos
+// ganados, y si empatan (eliminatorias a un nº par de partidos) se desempata
+// por la suma total de puntos a favor/en contra -- igual que legsResult().
+function bmWinnerLabel(tally, nameA, nameB){
+  if(!tally.played) return '';
+  if(tally.wa>tally.wb) return esc(nameA)+' gana '+tally.wa+'–'+tally.wb+' y pasa a la siguiente ronda';
+  if(tally.wb>tally.wa) return esc(nameB)+' gana '+tally.wb+'–'+tally.wa+' y pasa a la siguiente ronda';
+  if(tally.sumA>tally.sumB) return esc(nameA)+' pasa a la siguiente ronda por mejor suma de puntos ('+tally.sumA+'-'+tally.sumB+' en total)';
+  if(tally.sumB>tally.sumA) return esc(nameB)+' pasa a la siguiente ronda por mejor suma de puntos ('+tally.sumB+'-'+tally.sumA+' en total)';
+  return '';
+}
+// Igual que en mcField: nada de render() en cada tecla o el teclado se cierra.
+// Se actualiza el borrador y se parchea a mano el aviso de "quién gana y pasa".
+function bmLegField(i, side, value){
+  if(!bracketMatchDraft || !bracketMatchDraft.legs[i]) return;
+  bracketMatchDraft.legs[i][side] = value;
+  var fase = byIdArr(clubSettings.fbm_fases||[], bracketMatchDraft.faseId);
+  var bracket = fase && fase.bracket;
+  var teamsById = {}; ((bracket&&bracket.teams)||[]).forEach(function(t){ teamsById[t.id]=t; });
+  var m = bracket ? findMatchupByKey(bracket, bracketMatchDraft.key) : null;
+  var nameA = m && teamsById[m.teamA] ? teamsById[m.teamA].name : '—';
+  var nameB = m && teamsById[m.teamB] ? teamsById[m.teamB].name : '—';
+  var tally = legsTally(bracketMatchDraft.legs);
+  var winnerLabel = bmWinnerLabel(tally, nameA, nameB);
+  var resultEl = document.getElementById('bm-result');
+  if(resultEl){
+    resultEl.textContent = winnerLabel;
+    resultEl.style.display = winnerLabel ? 'block' : 'none';
+  }
+}
 function bmAddLeg(){ if(bracketMatchDraft){ bracketMatchDraft.legs.push({a:'',b:''}); render(); } }
 function bmRemoveLeg(i){ if(bracketMatchDraft){ bracketMatchDraft.legs.splice(i,1); render(); } }
 async function saveBracketMatch(){
@@ -3985,11 +4059,7 @@ function bracketMatchOverlay(){
   var nameB = m && teamsById[m.teamB] ? teamsById[m.teamB].name : '—';
   var isOwnA = !!(m && bracket && bracket.ownTeamId===m.teamA), isOwnB = !!(m && bracket && bracket.ownTeamId===m.teamB);
   var tally = legsTally(bracketMatchDraft.legs);
-  var winnerLabel = '';
-  if(tally.played){
-    if(tally.wa>tally.wb) winnerLabel = esc(nameA)+' gana '+tally.wa+'–'+tally.wb+' y pasa a la siguiente ronda';
-    else if(tally.wb>tally.wa) winnerLabel = esc(nameB)+' gana '+tally.wb+'–'+tally.wa+' y pasa a la siguiente ronda';
-  }
+  var winnerLabel = bmWinnerLabel(tally, nameA, nameB);
   var h = '<div class="veilfull" onclick="if(event.target===this) closeBracketMatch()"><div class="sheet">';
   h += '<div class="sheethead"><div><div class="shtitle">Resultado</div><div class="shsub">'+esc(fase?fase.label:'')+'</div></div>'+
     '<button class="iconbtn" onclick="closeBracketMatch()">'+icon('x',15)+'</button></div>';
@@ -4002,7 +4072,7 @@ function bracketMatchOverlay(){
       '<button class="rmbtn" onclick="bmRemoveLeg('+i+')">'+icon('trash',14)+'</button></div>';
   });
   h += '<button class="addlegbtn" onclick="bmAddLeg()">'+icon('plus',14)+' Añadir otro partido</button>';
-  if(winnerLabel) h += '<div class="result">'+winnerLabel+'</div>';
+  h += '<div class="result" id="bm-result" style="display:'+(winnerLabel?'block':'none')+'">'+winnerLabel+'</div>';
   h += '</div>';
   h += '<div class="ctabar"><button class="cta" onclick="saveBracketMatch()">Guardar resultado</button>'+
     '<div class="cancel">Puedes volver a abrir este cruce cuando quieras para corregir los resultados</div></div>';
@@ -4054,6 +4124,9 @@ function renderBracketBlock(fase){
     inner += roundsColumnsHtml(comp.rounds);
   }
   var h = '<div class="bracketlegend">'+icon('star',10)+' nuestro equipo &middot; toca un cruce para ver/editar el resultado</div>';
+  h += '<div style="display:flex;justify-content:flex-end;margin:-2px 0 8px">'+
+    '<div style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:var(--accent);padding:5px 4px;cursor:pointer" onclick="openBracketTeamsEdit(\''+fase.id+'\')">'+icon('pencil',13)+'<span>Editar equipos / favorito</span></div>'+
+    '</div>';
   h += '<div class="bracketwrap"><div class="bracketzoomcontrols">'+
     '<button class="zbtn" onclick="bracketZoomStep(\''+fase.id+'\',1)">+</button>'+
     '<button class="zbtn" onclick="bracketZoomFitNow(\''+fase.id+'\')">'+icon('history',13)+'</button>'+
