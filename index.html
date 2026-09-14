@@ -423,6 +423,10 @@
   .mvp-stats{ display:flex; gap:12px; margin-top:4px; flex-wrap:wrap; }
   .mvp-stats span{ font-size:11.5px; color:var(--text-dim); font-weight:600; }
   .mvp-stats b{ font-family:'Oswald',sans-serif; font-size:14px; font-weight:700; color:var(--text); margin-right:2px; }
+  .iconbtn{ position:relative; }
+  .iconbtn.active{ border-color:var(--accent); color:var(--accent); }
+  .filterdot{ position:absolute; top:-2px; right:-2px; width:8px; height:8px; border-radius:999px; background:var(--accent); border:1.5px solid var(--bg); }
+  .activepill{ display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:oklch(72% 0.18 45 / 14%); border:1px solid var(--accent); color:var(--accent); font-size:11.5px; font-weight:700; margin-bottom:12px; }
 
   /* ---------- Partidos ---------- */
   .compsrow{ display:flex; gap:8px; padding:0 20px 14px; overflow-x:auto; flex-shrink:0; }
@@ -1937,7 +1941,8 @@ function icon(name, size){
     chevronRight:'<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
     users:'<path d="M17 20v-1.5a3.5 3.5 0 00-3.5-3.5h-5A3.5 3.5 0 005 18.5V20M9.5 11a3 3 0 100-6 3 3 0 000 6zM19 20v-1.5a3 3 0 00-2-2.83M15 4.2a3 3 0 010 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
     calendar:'<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M3 9h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
-    star:'<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9L12 16.9l-5.2 2.9 1-5.9-4.3-4.2 5.9-.8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="currentColor"/>'
+    star:'<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9L12 16.9l-5.2 2.9 1-5.9-4.3-4.2 5.9-.8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="currentColor"/>',
+    filter:'<path d="M4 5h16M7 12h10M10.5 19h3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none">'+(icons[name]||'')+'</svg>';
 }
@@ -2026,6 +2031,8 @@ function render(){
     html = renderApprovals();
   } else if(S.route==='ranking'){
     html = renderRankingPopup();
+  } else if(S.route==='mvpHistory'){
+    html = renderMvpHistoryPopup();
   } else if(S.route==='standingsEdit'){
     html = renderStandingsEditor();
   } else if(S.route==='playerRadar'){
@@ -2066,6 +2073,7 @@ function render(){
   html += seasonRenameOverlay();
   html += createTeamOverlay();
   html += nuevaTemporadaOverlay();
+  html += rankFilterSheetOverlay();
   html += toastHtml();
   app.innerHTML = html;
   var newScroller = app.querySelector('.content, .playlist, .livecontent, .boxcontent');
@@ -3430,6 +3438,58 @@ function mvpOfMonth(){
   top.monthLabel = monthLabel;
   return top;
 }
+/* ---------- Filtro del ranking de Inicio (competición + mes) ---------- */
+var rankFilterComp = 'todos';  // 'todos' | 'liga' | 'torneo' | 'amistoso'
+var rankFilterMonth = 'all';   // 'all' o 'yyyy-mm'
+var rankFilterSheetOpen = false;
+function openRankFilters(){ rankFilterSheetOpen = true; render(); }
+function closeRankFilters(){ rankFilterSheetOpen = false; render(); }
+function setRankFilterComp(v){ rankFilterComp = v; render(); }
+function setRankFilterMonth(v){ rankFilterMonth = v; render(); }
+function rankFiltersActive(){ return rankFilterComp!=='todos' || rankFilterMonth!=='all'; }
+function monthKey(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1); }
+function monthLabelFromKey(key){
+  var parts = key.split('-');
+  var d = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, 1);
+  var label = d.toLocaleDateString('es-ES', {month:'long', year:'numeric'});
+  return label.charAt(0).toUpperCase()+label.slice(1);
+}
+// Meses con al menos un partido, del más reciente al más antiguo.
+function rankingMonthsAvailable(){
+  var set = {};
+  S.games.forEach(function(g){ set[monthKey(matchDateObj(g))] = true; });
+  return Object.keys(set).sort().reverse().map(function(key){ return {key:key, label:monthLabelFromKey(key)}; });
+}
+function filteredRankingGames(){
+  return S.games.filter(function(g){
+    if(rankFilterComp!=='todos' && (g.kind||'liga')!==rankFilterComp) return false;
+    if(rankFilterMonth!=='all' && monthKey(matchDateObj(g))!==rankFilterMonth) return false;
+    return true;
+  });
+}
+function rankFilterSummaryLabel(){
+  var parts = [];
+  var compLabels = {liga:'Liga', torneo:'Torneo', amistoso:'Amistosos'};
+  if(rankFilterComp!=='todos') parts.push(compLabels[rankFilterComp]||rankFilterComp);
+  if(rankFilterMonth!=='all') parts.push(monthLabelFromKey(rankFilterMonth));
+  return parts.join(' · ');
+}
+// MVP de cada mes con partidos jugados (mismo criterio que mvpOfMonth: mejor
+// media de Eficiencia), del más reciente al más antiguo -- para el histórico.
+function monthlyMvps(){
+  var out = [];
+  rankingMonthsAvailable().forEach(function(m){
+    var gamesInMonth = S.games.filter(function(g){ return monthKey(matchDateObj(g))===m.key; });
+    var list = aggregatePlayers(gamesInMonth).filter(function(a){ return a.gp>0; });
+    if(!list.length) return;
+    list.sort(function(a,b){ return b.eff_pg-a.eff_pg; });
+    var top = list[0];
+    top.monthLabel = m.label;
+    top.monthKey = m.key;
+    out.push(top);
+  });
+  return out;
+}
 function visibleStandings(){
   var fases = clubSettings.fbm_fases || [];
   if(fases.length < 2) return standings;
@@ -3488,11 +3548,18 @@ function renderHome(){
   }
   h += '</div>';
 
-  var list = aggregatePlayers(allFinishedGames());
-  h += '<div class="section"><div class="label">Ranking de estadísticas</div>';
+  var rankGames = filteredRankingGames();
+  var list = aggregatePlayers(rankGames);
+  h += '<div class="section"><div class="label" style="display:flex;align-items:center;justify-content:space-between">'+
+    '<span>Ranking de estadísticas</span>'+
+    '<button class="iconbtn'+(rankFiltersActive()?' active':'')+'" style="width:26px;height:26px" onclick="openRankFilters()">'+icon('filter',13)+(rankFiltersActive()?'<div class="filterdot"></div>':'')+'</button>'+
+    '</div>';
+  if(rankFiltersActive()){
+    h += '<div class="activepill">'+icon('filter',12)+esc(rankFilterSummaryLabel())+'</div>';
+  }
   var mvp = mvpOfMonth();
   if(mvp){
-    h += '<div class="mvpcard"><div class="mvp-badge">'+icon('star',12)+'MVP de '+esc(mvp.monthLabel)+'</div>'+
+    h += '<div class="mvpcard" style="cursor:pointer" onclick="go(\'mvpHistory\')"><div class="mvp-badge">'+icon('star',12)+'MVP de '+esc(mvp.monthLabel)+'</div>'+
       '<div class="mvp-body"><div class="dorsal mvp-av">'+mvp.dorsal+'</div>'+
       '<div class="mvp-info"><div class="mvp-name">'+esc(mvp.name)+'</div>'+
       '<div class="mvp-stats">'+
@@ -3522,11 +3589,12 @@ function renderRankingPopup(){
   var key = S.routeParams.statKey;
   var rs = RANK_STATS.filter(function(r){return r.key===key;})[0] || RANK_STATS[0];
   var isPct = key.indexOf('pct')!==-1;
-  var list = aggregatePlayers(allFinishedGames());
+  var list = aggregatePlayers(filteredRankingGames());
   var pool = isPct ? list.filter(function(a){ return (key==='fg2pct'?a.fg2a:key==='fg3pct'?a.fg3a:a.fta) > 0; }) : list;
   pool = pool.slice().sort(function(a,b){ return b[key]-a[key]; });
+  var scopeLabel = rankFiltersActive() ? rankFilterSummaryLabel() : (isPct ? 'temporada completa' : 'media por partido');
   var h = '<div class="veilfull"><div class="sheet">';
-  h += '<div class="sheethead"><div><div class="shtitle">'+rs.label+'</div><div class="shsub">Todas las jugadoras &middot; '+(isPct?'temporada completa':'media por partido')+'</div></div>'+
+  h += '<div class="sheethead"><div><div class="shtitle">'+rs.label+'</div><div class="shsub">Todas las jugadoras &middot; '+esc(scopeLabel)+'</div></div>'+
     '<button class="iconbtn" onclick="go(\'home\')">'+icon('x',15)+'</button></div>';
   h += '<div class="sheetlist">';
   if(!pool.length){ h += '<div class="empty">Todavía no hay datos suficientes.</div>'; }
@@ -3539,6 +3607,41 @@ function renderRankingPopup(){
     h += '<div class="lrow'+(i===0?' top':'')+'"><span class="lrank">'+(i+1)+'</span><span class="dorsal" style="width:30px;height:30px;font-size:12.5px">'+a.dorsal+'</span>'+
       '<span class="lname">'+esc(a.name)+'</span>'+(detail?'<span class="ldetail">'+detail+'</span>':'')+
       '<span class="lval">'+fmtRankVal(a[key],isPct)+(isPct?'%':'')+'</span></div>';
+  });
+  h += '</div></div></div>';
+  return h;
+}
+function rankFilterSheetOverlay(){
+  if(!rankFilterSheetOpen) return '';
+  var months = rankingMonthsAvailable();
+  var compLabels = {todos:'Todos', liga:'Liga', torneo:'Torneo', amistoso:'Amistosos'};
+  var h = '<div class="veilfull" onclick="if(event.target===this) closeRankFilters()"><div class="sheet">';
+  h += '<div class="sheethead"><div><div class="shtitle">Filtrar ranking</div></div>'+
+    '<button class="iconbtn" onclick="closeRankFilters()">'+icon('x',14)+'</button></div>';
+  h += '<div class="sheetlist" style="gap:18px">';
+  h += '<div><div class="label" style="margin-bottom:8px">Competición</div><div class="compsrow sym" style="padding:0">'+
+    ['todos','liga','torneo','amistoso'].map(function(f){
+      return '<button class="chip'+(rankFilterComp===f?' on':'')+'" onclick="setRankFilterComp(\''+f+'\')">'+compLabels[f]+'</button>';
+    }).join('')+'</div></div>';
+  h += '<div><div class="label" style="margin-bottom:8px">Mes</div><div class="chipswrap"><div class="fasechips">'+
+    '<div class="chip'+(rankFilterMonth==='all'?' on':'')+'" onclick="setRankFilterMonth(\'all\')">Toda la temporada</div>'+
+    months.map(function(m){ return '<div class="chip'+(rankFilterMonth===m.key?' on':'')+'" onclick="setRankFilterMonth(\''+m.key+'\')">'+esc(m.label)+'</div>'; }).join('')+
+    '</div><div class="fadeedge"></div></div></div>';
+  h += '<button class="cta" onclick="closeRankFilters()">Aplicar filtros</button>';
+  h += '</div></div></div>';
+  return h;
+}
+function renderMvpHistoryPopup(){
+  var mvps = monthlyMvps();
+  var h = '<div class="veilfull"><div class="sheet">';
+  h += '<div class="sheethead"><div><div class="shtitle">MVP del mes</div><div class="shsub">Por Eficiencia (EFF) media, mes a mes</div></div>'+
+    '<button class="iconbtn" onclick="go(\'home\')">'+icon('x',15)+'</button></div>';
+  h += '<div class="sheetlist">';
+  if(!mvps.length){ h += '<div class="empty">Todavía no hay partidos suficientes.</div>'; }
+  mvps.forEach(function(a, i){
+    h += '<div class="lrow'+(i===0?' top':'')+'"><span class="dorsal" style="width:30px;height:30px;font-size:12.5px">'+a.dorsal+'</span>'+
+      '<span class="lname">'+esc(a.name)+'</span><span class="ldetail">'+esc(a.monthLabel)+'</span>'+
+      '<span class="lval">'+fmtRankVal(a.eff_pg)+'</span></div>';
   });
   h += '</div></div></div>';
   return h;
