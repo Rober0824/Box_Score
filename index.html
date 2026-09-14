@@ -435,11 +435,17 @@
   .bracketzoomcontrols{ position:absolute; top:8px; right:8px; z-index:2; display:flex; flex-direction:column; gap:6px; }
   .zbtn{ width:26px; height:26px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:14px; font-weight:800; display:flex; align-items:center; justify-content:center; line-height:1; }
   .bracketzoomouter{ position:absolute; inset:0; overflow:hidden; touch-action:none; }
-  .bracketzoominner{ position:absolute; top:0; left:0; width:max-content; will-change:transform; }
-  .rounds{ display:flex; gap:20px; padding:10px; }
-  .round{ display:flex; flex-direction:column; justify-content:space-around; gap:16px; width:148px; flex-shrink:0; }
-  .roundlabel{ font-size:9px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-dim); text-align:center; margin-bottom:4px; }
-  .matchup{ background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:7px 9px; }
+  .bracketzoominner{ position:absolute; top:0; left:0; will-change:transform; }
+  /* Cada cruce y su etiqueta de ronda se posicionan en coordenadas exactas
+     (calculadas en JS, centrado recursivo -- ver bracketRoundYs()/layoutBracketSide())
+     para poder dibujar líneas rectas de un cruce al siguiente, como un cuadro de
+     playoffs de verdad. El SVG de líneas se dibuja detrás, en las mismas coordenadas. */
+  .roundlabel{ position:absolute; font-size:9px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-dim); text-align:center; }
+  .matchup{ position:absolute; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:7px 9px; }
+  .matchup.champbox{ display:flex; align-items:center; justify-content:center; }
+  .matchup.champbox.win{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .champbody{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:2px 0; width:100%; color:var(--accent); }
+  .champbody .name{ font-size:11px; font-weight:800; color:var(--accent); text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
   .mrow{ display:flex; align-items:center; justify-content:space-between; padding:4px 0; gap:6px; }
   .mrow:first-child{ border-bottom:1px solid var(--border); }
   .mteam{ font-size:11.5px; font-weight:700; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
@@ -3047,6 +3053,16 @@ function openEditFase(id){
   render();
 }
 function closeFaseModal(){ faseDraft = null; render(); }
+// Punto de entrada a la configuración del bracket (equipos, lados, favorito,
+// partidos por eliminatoria) directamente desde "Editar Fase" -- antes solo
+// se podía llegar ahí con un lápiz pequeño en Inicio, y no todo lo de la
+// fase era editable desde el mismo sitio.
+function openBracketFromFaseModal(id){
+  var f = byIdArr(clubSettings.fbm_fases||[], id);
+  closeFaseModal();
+  if(f && f.bracket && (f.bracket.teams||[]).length) openBracketTeamsEdit(id);
+  else openBracketSetup(id);
+}
 function fdField(field, value){ if(!faseDraft) return; faseDraft[field] = value; }
 function fdSetModo(m){ if(!faseDraft) return; faseDraft.modo = m; render(); }
 function fdSetManualTipo(t){ if(!faseDraft) return; faseDraft.manualTipo = t; render(); }
@@ -3105,7 +3121,8 @@ function faseModalOverlay(){
     (d.modo==='manual' ? (
       '<div class="label" style="margin:14px 0 8px">Tipo de clasificación manual</div>'+
       '<div class="seg2"><button class="opt'+(d.manualTipo!=='bracket'?' on':'')+'" onclick="fdSetManualTipo(\'clasificacion\')">Tabla de clasificación</button><button class="opt'+(d.manualTipo==='bracket'?' on':'')+'" onclick="fdSetManualTipo(\'bracket\')">Bracket / Cuadro</button></div>'+
-      '<div class="caption">Bracket: eliminatoria directa (octavos, cuartos...). Tabla: liguilla o grupo -- se ordena sola por puntos; tú metes P.J, P.P, P.E, P.F y P.C.</div>'
+      '<div class="caption">Bracket: eliminatoria directa (octavos, cuartos...). Tabla: liguilla o grupo -- se ordena sola por puntos; tú metes P.J, P.P, P.E, P.F y P.C.</div>'+
+      (d.manualTipo==='bracket' && !d.isNew ? '<button class="fullbtn" style="margin-top:12px" onclick="openBracketFromFaseModal(\''+d.id+'\')">'+icon('pencil',14)+' Equipos, favorito y partidos por eliminatoria</button>' : '')
     ) : (
       '<div class="section" style="margin-top:14px">'+
         '<div class="rowcard"><div class="k">Temporada</div><input type="text" placeholder="Ej. 2025/2026" value="'+esc(d.temporada)+'" oninput="fdField(\'temporada\',this.value)"></div>'+
@@ -3809,14 +3826,21 @@ function computeSideBracket(initialSlots, results, keyPrefix){
   var currentTeams = initialSlots.slice();
   while(currentTeams.length >= 1){
     if(currentTeams.length === 1) break;
+    // El "bye" (un hueco vacío que pasa directo) SOLO existe en la ronda 0,
+    // que viene de rellenar hasta la potencia de 2 más cercana. A partir de
+    // la ronda 1, un hueco vacío significa "el cruce anterior aún no está
+    // decidido" -- NUNCA se debe dar por ganador automático al otro equipo
+    // solo porque su rival todavía no se conoce (si no, un cruce se declararía
+    // "campeón" antes de que el resto del cuadro haya terminado).
+    var isFirstRound = rounds.length === 0;
     var matchups = [];
     for(var i=0;i<currentTeams.length;i+=2){
       var teamA = currentTeams[i], teamB = currentTeams[i+1];
       var key = keyPrefix+rounds.length+'-'+(i/2);
       var legs = (results && results[key]) || [];
       var winnerId = null;
-      if(teamA && !teamB) winnerId = teamA;
-      else if(teamB && !teamA) winnerId = teamB;
+      if(isFirstRound && teamA && !teamB) winnerId = teamA;
+      else if(isFirstRound && teamB && !teamA) winnerId = teamB;
       else if(teamA && teamB){
         var res = legsResult(legs);
         winnerId = res==='A' ? teamA : (res==='B' ? teamB : null);
@@ -4083,6 +4107,28 @@ function bracketMatchOverlay(){
 /* ---------- Bloque del bracket en Inicio: sale entero por defecto, pellizca
    con los dedos para ampliar/reducir y arrastra para moverte por él. ---------- */
 var bracketZoomState = {}; // { [faseId]: {scale,tx,ty,fitted,sig} } -- transitorio, no se guarda
+// Constantes de dibujo del bracket (px). BRK_H no depende del nº de partidos
+// por eliminatoria -- la tarjeta de un cruce siempre muestra el resultado ya
+// resumido (partidos ganados), no cada partido suelto.
+var BRK_W = 148, BRK_H = 56, BRK_GAPX = 28, BRK_GAP0 = 16, BRK_TOP = 22, BRK_PADX = 14;
+// Centrado recursivo, puramente geométrico (no toca el cálculo del bracket):
+// cada cruce de una ronda se sitúa justo en medio de los dos cruces de los
+// que depende, para poder trazar líneas rectas de un cruce al siguiente,
+// como un cuadro de playoffs de verdad.
+function bracketRoundYs(rounds){
+  var ys = [];
+  if(!rounds || !rounds.length) return ys;
+  var pitch0 = BRK_H + BRK_GAP0;
+  ys[0] = rounds[0].map(function(_, i){ return i*pitch0; });
+  for(var r=1;r<rounds.length;r++){
+    ys[r] = rounds[r].map(function(_, i){
+      var c0 = ys[r-1][2*i] + BRK_H/2;
+      var c1 = ys[r-1][2*i+1] + BRK_H/2;
+      return (c0+c1)/2 - BRK_H/2;
+    });
+  }
+  return ys;
+}
 function renderBracketBlock(fase){
   var bracket = fase.bracket || { teams:[], results:{}, sides:1 };
   var teams = bracket.teams || [];
@@ -4094,35 +4140,131 @@ function renderBracketBlock(fase){
   var comp = computeBracket(bracket);
   function teamLabel(id){ if(!id) return '—'; var t = teamsById[id]; return t ? t.name : '—'; }
   function isOwn(id){ return !!(id && bracket.ownTeamId===id); }
-  function matchupHtml(m){
-    if(!m) return '<div class="matchup"><div class="mempty">Esperando clasificados</div></div>';
-    var tally = legsTally(m.legs);
-    var showScore = tally.played>0;
-    var tapAttr = (m.teamA && m.teamB) ? ' onclick="openBracketMatch(\''+fase.id+'\',\''+m.key+'\')" style="cursor:pointer"' : '';
-    var rowA = '<div class="mrow"><div class="mteam'+(m.winnerId && m.winnerId===m.teamA?' win':'')+(isOwn(m.teamA)?' me':'')+'">'+esc(teamLabel(m.teamA))+'</div>'+(showScore?'<div class="mscore'+(m.winnerId===m.teamA?' win':'')+'">'+tally.wa+'</div>':'')+'</div>';
-    var rowB = '<div class="mrow"><div class="mteam'+(m.winnerId && m.winnerId===m.teamB?' win':'')+(isOwn(m.teamB)?' me':'')+'">'+esc(teamLabel(m.teamB))+'</div>'+(showScore?'<div class="mscore'+(m.winnerId===m.teamB?' win':'')+'">'+tally.wb+'</div>':'')+'</div>';
-    return '<div class="matchup"'+tapAttr+'>'+rowA+rowB+'</div>';
+
+  var boxes = '', lines = [], dots = [], maxX = 0, maxY = 0;
+  function addTop(y){ return y + BRK_TOP; }
+  function pushLabel(text, x, y){
+    boxes += '<div class="roundlabel" style="left:'+x+'px;top:'+y+'px;width:'+BRK_W+'px">'+esc(text)+'</div>';
   }
-  function roundsColumnsHtml(rounds){
-    var html = '';
-    rounds.forEach(function(matchups){
-      html += '<div class="round"><div class="roundlabel">'+esc(roundName(matchups.length))+'</div>';
-      matchups.forEach(function(m){ html += matchupHtml(m); });
-      html += '</div>';
-    });
-    return html;
+  function pushMatchupBox(m, x, y){
+    var style = 'left:'+x+'px;top:'+y+'px;width:'+BRK_W+'px';
+    var html;
+    if(!m){
+      html = '<div class="matchup" style="'+style+'"><div class="mempty">Esperando clasificados</div></div>';
+    } else {
+      var tally = legsTally(m.legs);
+      var showScore = tally.played>0;
+      var tapAttr = (m.teamA && m.teamB) ? ' onclick="openBracketMatch(\''+fase.id+'\',\''+m.key+'\')" style="'+style+';cursor:pointer"' : ' style="'+style+'"';
+      var rowA = '<div class="mrow"><div class="mteam'+(m.winnerId && m.winnerId===m.teamA?' win':'')+(isOwn(m.teamA)?' me':'')+'">'+esc(teamLabel(m.teamA))+'</div>'+(showScore?'<div class="mscore'+(m.winnerId===m.teamA?' win':'')+'">'+tally.wa+'</div>':'')+'</div>';
+      var rowB = '<div class="mrow"><div class="mteam'+(m.winnerId && m.winnerId===m.teamB?' win':'')+(isOwn(m.teamB)?' me':'')+'">'+esc(teamLabel(m.teamB))+'</div>'+(showScore?'<div class="mscore'+(m.winnerId===m.teamB?' win':'')+'">'+tally.wb+'</div>':'')+'</div>';
+      html = '<div class="matchup"'+tapAttr+'>'+rowA+rowB+'</div>';
+    }
+    boxes += html;
+    if(x+BRK_W>maxX) maxX = x+BRK_W;
+    if(y+BRK_H>maxY) maxY = y+BRK_H;
   }
-  var inner = '';
-  var sig;
+  // Traza el tramo entre una ronda de cruces (childX/childYs/childMatchups) y
+  // la ronda o cruce del que dependen (parentX/parentYs): dos "patas"
+  // horizontales desde cada hijo hasta un punto medio, una vertical partida
+  // en dos (una mitad por cada hijo) y una "espuela" hacia el cruce padre.
+  // Cada tramo se pinta en naranja SOLO si ese hijo concreto ya tiene
+  // ganador decidido -- así se ve, en cualquier momento del torneo, qué
+  // equipos ya han certificado su paso de ronda, sin esperar a que el
+  // bracket entero esté terminado. mirror=true cuando la ronda "crece" hacia
+  // la izquierda (lado B de un bracket a 2 lados).
+  function connectRound(childX, childYs, childMatchups, parentX, parentYs, mirror){
+    for(var i=0;i<parentYs.length;i++){
+      var m0 = childMatchups[2*i], m1 = childMatchups[2*i+1];
+      var y0 = childYs[2*i] + BRK_H/2, y1 = childYs[2*i+1] + BRK_H/2;
+      var spurY = parentYs[i] + BRK_H/2;
+      var childEdgeX = mirror ? childX : (childX + BRK_W);
+      var xMid = mirror ? (childX - BRK_GAPX/2) : (childX + BRK_W + BRK_GAPX/2);
+      var parentEdgeX = mirror ? (parentX + BRK_W) : parentX;
+      var win0 = !!(m0 && m0.winnerId), win1 = !!(m1 && m1.winnerId);
+      lines.push({x1:childEdgeX,y1:y0,x2:xMid,y2:y0,win:win0});
+      lines.push({x1:childEdgeX,y1:y1,x2:xMid,y2:y1,win:win1});
+      lines.push({x1:xMid,y1:y0,x2:xMid,y2:spurY,win:win0});
+      lines.push({x1:xMid,y1:y1,x2:xMid,y2:spurY,win:win1});
+      lines.push({x1:xMid,y1:spurY,x2:parentEdgeX,y2:spurY,win:win0||win1});
+      dots.push({x:xMid,y:spurY,win:win0||win1});
+    }
+  }
+  function champBoxHtml(x, y, championId, win){
+    if(x+BRK_W>maxX) maxX = x+BRK_W;
+    if(y+BRK_H>maxY) maxY = y+BRK_H;
+    return '<div class="matchup champbox'+(win?' win':'')+'" style="left:'+x+'px;top:'+y+'px;width:'+BRK_W+'px;height:'+BRK_H+'px">'+
+      (win ? '<div class="champbody">'+icon('star',14)+'<div class="name">'+esc(teamLabel(championId))+'</div></div>' : '<div class="mempty">Por decidir</div>')+
+      '</div>';
+  }
+
+  var r, i;
   if(comp.mode==='2sides'){
-    sig = teams.length+'-2-'+JSON.stringify(Object.keys(bracket.results||{}));
-    inner += roundsColumnsHtml(comp.sideA);
-    inner += '<div class="round" style="justify-content:center"><div class="roundlabel">Final</div>'+matchupHtml(comp.final[0])+'</div>';
-    inner += roundsColumnsHtml(comp.sideB.slice().reverse());
+    var RA = comp.sideA.length, RB = comp.sideB.length;
+    var ysA = bracketRoundYs(comp.sideA), ysB = bracketRoundYs(comp.sideB);
+    var xFinal = BRK_PADX + RA*(BRK_W+BRK_GAPX);
+    var xsA = [], xsB = [];
+    for(r=0;r<RA;r++) xsA[r] = BRK_PADX + r*(BRK_W+BRK_GAPX);
+    for(r=0;r<RB;r++) xsB[r] = xFinal + BRK_W + BRK_GAPX + (RB-1-r)*(BRK_W+BRK_GAPX);
+    for(r=0;r<RA;r++){
+      pushLabel(roundName(comp.sideA[r].length), xsA[r], 0);
+      for(i=0;i<comp.sideA[r].length;i++) pushMatchupBox(comp.sideA[r][i], xsA[r], addTop(ysA[r][i]));
+    }
+    for(r=0;r<RB;r++){
+      pushLabel(roundName(comp.sideB[r].length), xsB[r], 0);
+      for(i=0;i<comp.sideB[r].length;i++) pushMatchupBox(comp.sideB[r][i], xsB[r], addTop(ysB[r][i]));
+    }
+    for(r=0;r<RA-1;r++) connectRound(xsA[r], ysA[r].map(addTop), comp.sideA[r], xsA[r+1], ysA[r+1].map(addTop), false);
+    for(r=0;r<RB-1;r++) connectRound(xsB[r], ysB[r].map(addTop), comp.sideB[r], xsB[r+1], ysB[r+1].map(addTop), true);
+    var finalY;
+    if(RA>0 && RB>0) finalY = (addTop(ysA[RA-1][0])+BRK_H/2 + addTop(ysB[RB-1][0])+BRK_H/2)/2 - BRK_H/2;
+    else if(RA>0) finalY = addTop(ysA[RA-1][0]);
+    else if(RB>0) finalY = addTop(ysB[RB-1][0]);
+    else finalY = BRK_TOP;
+    pushLabel('Final', xFinal, 0);
+    pushMatchupBox(comp.final[0], xFinal, finalY);
+    if(RA>0){
+      var winA = !!(comp.sideA[RA-1][0] && comp.sideA[RA-1][0].winnerId);
+      var cA = addTop(ysA[RA-1][0]) + BRK_H/2, xMidA = xsA[RA-1] + BRK_W + BRK_GAPX/2;
+      lines.push({x1:xsA[RA-1]+BRK_W,y1:cA,x2:xMidA,y2:cA,win:winA});
+      lines.push({x1:xMidA,y1:cA,x2:xMidA,y2:finalY+BRK_H/2,win:winA});
+      lines.push({x1:xMidA,y1:finalY+BRK_H/2,x2:xFinal,y2:finalY+BRK_H/2,win:winA});
+    }
+    if(RB>0){
+      var winB = !!(comp.sideB[RB-1][0] && comp.sideB[RB-1][0].winnerId);
+      var cB = addTop(ysB[RB-1][0]) + BRK_H/2, xMidB = xsB[RB-1] - BRK_GAPX/2;
+      lines.push({x1:xsB[RB-1],y1:cB,x2:xMidB,y2:cB,win:winB});
+      lines.push({x1:xMidB,y1:cB,x2:xMidB,y2:finalY+BRK_H/2,win:winB});
+      lines.push({x1:xMidB,y1:finalY+BRK_H/2,x2:xFinal+BRK_W,y2:finalY+BRK_H/2,win:winB});
+    }
+    var champWin2 = !!comp.championId;
+    var champX2 = xFinal, champY2 = finalY + BRK_H + BRK_GAPX;
+    lines.push({x1:xFinal+BRK_W/2,y1:finalY+BRK_H,x2:xFinal+BRK_W/2,y2:champY2,win:champWin2});
+    pushLabel('Campeón', champX2, champY2-18);
+    boxes += champBoxHtml(champX2, champY2, comp.championId, champWin2);
   } else {
-    sig = teams.length+'-1-'+JSON.stringify(Object.keys(bracket.results||{}));
-    inner += roundsColumnsHtml(comp.rounds);
+    var rounds = comp.rounds, R = rounds.length, ys = bracketRoundYs(rounds), xs = [];
+    for(r=0;r<R;r++) xs[r] = BRK_PADX + r*(BRK_W+BRK_GAPX);
+    for(r=0;r<R;r++){
+      pushLabel(roundName(rounds[r].length), xs[r], 0);
+      for(i=0;i<rounds[r].length;i++) pushMatchupBox(rounds[r][i], xs[r], addTop(ys[r][i]));
+    }
+    for(r=0;r<R-1;r++) connectRound(xs[r], ys[r].map(addTop), rounds[r], xs[r+1], ys[r+1].map(addTop), false);
+    if(R>0){
+      var finalM = rounds[R-1][0];
+      var champWin = !!(finalM && finalM.winnerId);
+      var champX = xs[R-1] + BRK_W + BRK_GAPX, champY = addTop(ys[R-1][0]);
+      lines.push({x1:xs[R-1]+BRK_W,y1:champY+BRK_H/2,x2:champX,y2:champY+BRK_H/2,win:champWin});
+      pushLabel('Campeón', champX, 0);
+      boxes += champBoxHtml(champX, champY, comp.championId, champWin);
+    }
   }
+
+  var svg = '<svg style="position:absolute;top:0;left:0" width="'+maxX+'" height="'+maxY+'">';
+  lines.forEach(function(l){ svg += '<line x1="'+l.x1+'" y1="'+l.y1+'" x2="'+l.x2+'" y2="'+l.y2+'" stroke="'+(l.win?'var(--accent)':'var(--border)')+'" stroke-width="'+(l.win?2.5:2)+'"/>'; });
+  dots.forEach(function(d){ svg += '<circle cx="'+d.x+'" cy="'+d.y+'" r="2.5" fill="'+(d.win?'var(--accent)':'var(--border)')+'"/>'; });
+  svg += '</svg>';
+
+  var sig = teams.length+'-'+(comp.mode==='2sides'?2:1)+'-'+JSON.stringify(Object.keys(bracket.results||{}));
   var h = '<div class="bracketlegend">'+icon('star',10)+' nuestro equipo &middot; toca un cruce para ver/editar el resultado</div>';
   h += '<div style="display:flex;justify-content:flex-end;margin:-2px 0 8px">'+
     '<div style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:var(--accent);padding:5px 4px;cursor:pointer" onclick="openBracketTeamsEdit(\''+fase.id+'\')">'+icon('pencil',13)+'<span>Editar equipos / favorito</span></div>'+
@@ -4133,7 +4275,7 @@ function renderBracketBlock(fase){
     '<button class="zbtn" onclick="bracketZoomStep(\''+fase.id+'\',-1)">−</button>'+
     '</div>'+
     '<div class="bracketzoomouter" id="bz-'+fase.id+'" data-fase="'+fase.id+'">'+
-      '<div class="bracketzoominner" data-sig="'+esc(sig)+'"><div class="rounds">'+inner+'</div></div>'+
+      '<div class="bracketzoominner" data-sig="'+esc(sig)+'" style="width:'+maxX+'px;height:'+maxY+'px">'+svg+boxes+'</div>'+
     '</div></div>';
   return h;
 }
