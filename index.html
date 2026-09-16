@@ -2041,8 +2041,8 @@ function periodScoreChipsHtml(g){
 }
 
 /* ---------- gráfica de evolución del marcador (box score, vista Equipo) ---------- */
-var boxEvoExpanded = {}; // gameId -> bool, colapsada por defecto para no alargar la pantalla
-function toggleEvoCard(gid){ boxEvoExpanded[gid] = !boxEvoExpanded[gid]; render(); }
+var boxEvoExpanded = {}; // gameId -> bool; sin entrada = abierta por defecto (Rober la ve poco alta)
+function toggleEvoCard(gid){ boxEvoExpanded[gid] = !(boxEvoExpanded[gid]!==false); render(); }
 var evoAxisLabel = 'Periodo'; // etiqueta del periodo activa mientras se pinta el gráfico (para el tooltip)
 
 // puntos acumulados de un lado ("team"/"rival") SOLO para los periodos indicados
@@ -2144,7 +2144,7 @@ function evoChartCardHtml(g, periods){
   if(!g.events || !g.events.filter(function(e){return e.points>0;}).length) return '';
   var bands = (periods && periods.length) ? periods.slice().sort(function(a,b){return a-b;}) : null;
   if(!bands){ bands = []; for(var pp=1; pp<=g.periodsCount; pp++) bands.push(pp); }
-  var expanded = !!boxEvoExpanded[g.id];
+  var expanded = boxEvoExpanded[g.id]!==false;
   var h = '<div class="evocard">';
   h += '<div class="evotoggle" onclick="toggleEvoCard(\''+g.id+'\')"><div class="evotitle">Evolución del marcador</div>'+
        '<span class="chev'+(expanded?' open':'')+'">'+icon('chevronDown',15)+'</span></div>';
