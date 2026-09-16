@@ -284,8 +284,13 @@
      dentro de un carrusel con un único recuadro exterior -- se les quita el
      fondo/borde/separación propios para que no se vea un "doble recuadro" */
   .swipecard .shotmapcard, .swipecard .trendcard, .swipecard .periodstatcard{ background:none; border:none; border-radius:0; margin-top:0; padding-top:0; }
-  .swipeviewport{ overflow:hidden; touch-action:pan-y; flex-shrink:0; }
-  .swipetrack{ display:flex; width:200%; transition:transform 0.28s ease; }
+  /* la altura del viewport se fija por JS (setupSwipeHeights) a la altura
+     real de la página activa -- si no, al ser un flex row, todas las páginas
+     se estirarían a la altura de la más alta (mucho hueco vacío en las
+     páginas más cortas). align-items:flex-start hace que cada página mida
+     solo lo que ocupa su propio contenido, para que esa medición sea exacta. */
+  .swipeviewport{ overflow:hidden; touch-action:pan-y; flex-shrink:0; transition:height 0.28s ease; }
+  .swipetrack{ display:flex; width:200%; align-items:flex-start; transition:transform 0.28s ease; }
   .swipepage{ width:50%; flex-shrink:0; display:flex; flex-direction:column; align-items:stretch; }
   .swipedots{ display:flex; gap:5px; flex-shrink:0; }
   .swipedot{ width:14px; height:3px; border-radius:2px; background:var(--border); cursor:pointer; }
@@ -2173,6 +2178,27 @@ function setupHeatMaps(){
     if(entry) drawHeatMap(canvas, entry.points);
   });
 }
+// Se llama tras cada render(): un carrusel (swipeCarouselHtml) es un flex row
+// con todas las páginas una al lado de otra para poder deslizar -- por eso,
+// sin esto, todas las páginas se estirarían a la altura de la más alta
+// (mucho hueco vacío en las páginas más cortas, tipo "Tendencia"). Aquí se
+// mide la altura real del contenido de la página ACTIVA de cada carrusel y
+// se aplica como altura fija de su viewport, así cada página ocupa solo lo
+// que necesita.
+function setupSwipeHeights(){
+  document.querySelectorAll('.swipetrack').forEach(function(track){
+    var id = track.id || '';
+    if(id.indexOf('swTrack-')!==0) return;
+    var cid = id.slice('swTrack-'.length);
+    var n = track.children.length;
+    if(!n) return;
+    var page = getSwipePage(cid, n);
+    var cur = track.children[page];
+    var vp = track.parentElement;
+    if(!cur || !vp) return;
+    vp.style.height = cur.scrollHeight+'px';
+  });
+}
 function chooseAssist(assistPid){
   var g = S.current;
   var editId = S.routeParams.editEventId;
@@ -2758,6 +2784,7 @@ function render(){
   lastRenderedRoute = S.route;
   setupBracketZoom();
   setupHeatMaps();
+  setupSwipeHeights();
 }
 
 /* ---- setup ---- */
