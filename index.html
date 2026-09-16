@@ -589,6 +589,14 @@
   .rmeta{ font-size:11px; color:var(--text-dim); font-weight:600; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ractions{ display:flex; gap:10px; }
   .pastbadge{ font-size:9.5px; font-weight:800; letter-spacing:0.03em; text-transform:uppercase; padding:3px 8px; border-radius:999px; background:var(--surface-2); color:var(--text-dim); flex-shrink:0; }
+  .permrow{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:10px; border-top:1px solid var(--border); }
+  .permtxt{ min-width:0; }
+  .permlabel{ font-size:13px; font-weight:700; color:var(--text); }
+  .permsub{ font-size:11px; color:var(--text-dim); font-weight:600; margin-top:1px; }
+  .sw{ position:relative; width:46px; height:27px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border); flex-shrink:0; cursor:pointer; transition:background .15s ease, border-color .15s ease; }
+  .sw .knob{ position:absolute; top:2px; left:2px; width:21px; height:21px; border-radius:999px; background:var(--text-dim); transition:transform .15s ease, background .15s ease; }
+  .sw.on{ background:var(--good); border-color:var(--good); }
+  .sw.on .knob{ transform:translateX(19px); background:var(--accent-ink); }
 
   /* ---------- selector de equipo / temporada, Nueva Temporada ---------- */
   .teamrow{ display:flex; align-items:center; gap:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:13px 14px; cursor:pointer; }
@@ -934,8 +942,16 @@ function hasApprovedAccessTo(seasonId){
   if(isAdmin()) return true;
   return myAccessRows.some(function(r){ return r.season_id===seasonId && r.status==='approved'; });
 }
+// Con acceso aprobado se puede VER la temporada; para poder ESCRIBIR en ella
+// (crear partidos, tocar la plantilla, anotar en directo...) hace falta
+// además ser "colaborador" (team_season_access.can_edit) -- o admin, que
+// siempre puede. Por defecto una persona aprobada es de solo lectura.
+function hasCollabAccessTo(seasonId){
+  if(isAdmin()) return true;
+  return myAccessRows.some(function(r){ return r.season_id===seasonId && r.status==='approved' && r.can_edit===true; });
+}
 function canWriteCurrentSeason(){
-  return !!(currentSeason && currentSeason.is_current && hasApprovedAccessTo(currentSeasonId));
+  return !!(currentSeason && currentSeason.is_current && hasCollabAccessTo(currentSeasonId));
 }
 
 async function loadSeasonScopedData(){
@@ -2163,7 +2179,7 @@ function menuOverlay(){
         '<button class="iconbtn" style="width:30px;height:30px" onclick="closeMenu(); render();">'+icon('x',13)+'</button>'+
       '</div>'+
       (hasCurrent ? '<button class="fullbtn" onclick="closeMenu(); resumeCurrent();">Continuar partido en curso</button>' : '')+
-      '<button class="fullbtn" onclick="closeMenu(); startNewGame();">Empezar partido nuevo</button>'+
+      (canWriteCurrentSeason() ? '<button class="fullbtn" onclick="closeMenu(); startNewGame();">Empezar partido nuevo</button>' : '')+
       '<button class="fullbtn" onclick="closeMenu(); go(\'games\');">Volver a Partidos</button>'+
     '</div>'+
   '</div>';
@@ -2859,7 +2875,7 @@ function renderGames(){
   var h = '';
   h += '<div class="header" style="padding-bottom:12px"><div class="header-row">'+
        '<div class="htitles"><div class="title">Partidos</div></div>'+
-       '<button class="iconbtn" onclick="startNewGame()">'+icon('plus',16)+'</button>'+
+       (canWriteCurrentSeason() ? '<button class="iconbtn" onclick="startNewGame()">'+icon('plus',16)+'</button>' : '')+
        '</div></div>';
 
   h += '<div class="compsrow">'+
@@ -2876,7 +2892,7 @@ function renderGames(){
   var finished = S.games.filter(function(g){ return matchesFilter==='todas' || (g.kind||'liga')===matchesFilter; });
 
   if(!showLive && !finished.length){
-    h += '<div class="empty">Todavía no has terminado ningún partido.<br>Pulsa el + para empezar uno.</div>';
+    h += '<div class="empty">Todavía no has terminado ningún partido.'+(canWriteCurrentSeason()?'<br>Pulsa el + para empezar uno.':'')+'</div>';
   } else {
     if(showLive){
       h += '<div><div class="jlabel">En curso</div>'+matchRowHtml(liveGame,true)+'</div>';
@@ -3071,20 +3087,23 @@ function renderRoster(){
   h += '<div class="section">'+
     '<div class="countline"><div class="label" style="margin-bottom:0">'+roster.length+' jugadoras</div></div>'+
     '<div class="players">';
+  var canEditRoster = canWriteCurrentSeason();
   roster.forEach(function(p){
     var pkey = (p.dorsal+'|'+p.name).replace(/'/g,"\\'");
     h += '<div class="prow" style="cursor:pointer" onclick="openPlayerRadar(\''+pkey+'\',\'team\')">'+
       '<div class="dorsal">'+p.dorsal+'</div>'+
       '<div class="pname"><div class="nm">'+esc(p.name)+'</div></div>'+
-      '<button class="editbtn" onclick="event.stopPropagation();openEditPlayerPopup(\''+p.id+'\')">'+icon('pencil',14)+'</button></div>';
+      (canEditRoster ? '<button class="editbtn" onclick="event.stopPropagation();openEditPlayerPopup(\''+p.id+'\')">'+icon('pencil',14)+'</button>' : '')+'</div>';
   });
   h += '</div>'+
+    (canEditRoster ? (
     '<div class="addrow">'+
       '<input class="dorsalinput" id="teamPlayerDorsal" type="number" placeholder="Dorsal" onkeydown="if(event.key===\'Enter\') document.getElementById(\'teamPlayerName\').focus()">'+
       '<input id="teamPlayerName" type="text" style="flex:1;min-width:0" placeholder="Nombre del jugador" onkeydown="if(event.key===\'Enter\') addTeamPlayerFromInputs()">'+
       '<button class="addbtn" onclick="addTeamPlayerFromInputs()">'+icon('plus',18)+'</button>'+
     '</div>'+
-    (!roster.length ? '<div class="caption" style="margin-top:8px">Añade aquí a las jugadoras del equipo: aparecerán automáticamente al crear un partido nuevo.</div>' : '')+
+    (!roster.length ? '<div class="caption" style="margin-top:8px">Añade aquí a las jugadoras del equipo: aparecerán automáticamente al crear un partido nuevo.</div>' : '')
+    ) : (!roster.length ? '<div class="caption" style="margin-top:8px">Todavía no hay jugadoras en la plantilla.</div>' : ''))+
     '</div>';
   h += '</div>';
   return h;
@@ -3547,6 +3566,22 @@ async function revokeAccessRow(id){
   loadUsersScreenData();
   loadPendingAccessRequests();
 }
+async function toggleCollaborator(rowId, makeCollab){
+  if(!sb) return;
+  // Optimista: refleja el cambio al instante, y lo deshace si falla el guardado.
+  var row = usersScreenData.approved.filter(function(r){ return r.id===rowId; })[0];
+  var prev = row ? row.can_edit : undefined;
+  if(row) row.can_edit = makeCollab;
+  render();
+  try{
+    var res = await sb.from('team_season_access').update({ can_edit: makeCollab }).eq('id', rowId);
+    if(res && res.error) throw res.error;
+  }catch(e){
+    if(row) row.can_edit = prev;
+    showToast('No se ha podido guardar el cambio.');
+    render();
+  }
+}
 function seasonLabelFor(id){ var s = byIdArr(seasons, id); return s ? s.label : ''; }
 function renderAdminUsuarios(){
   if(!isAdmin()){ S.route='team'; S.routeParams={}; saveState(); return renderTeamScreen(); }
@@ -3585,7 +3620,11 @@ function renderAdminUsuarios(){
     var initials = (p.name||'?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
     h += '<div class="reqcard"><div class="rtop"><div class="avatar">'+esc(initials)+'</div>'+
       '<div class="rinfo"><div class="rname">'+esc(p.name||'')+'</div><div class="rmeta">'+esc(p.email||'')+(p.role==='admin'?' · admin':'')+'</div></div></div>'+
-      (p.role!=='admin' ? ('<div class="ractions"><button class="abtn" onclick="revokeAccessRow(\''+r.id+'\')">Quitar acceso a '+lbl+'</button></div>') : '')+
+      (p.role!=='admin' ? (
+        '<div class="permrow"><div class="permtxt"><div class="permlabel">Colaborador</div><div class="permsub">Puede crear partidos y editar la plantilla</div></div>'+
+        '<div class="sw'+(r.can_edit?' on':'')+'" onclick="toggleCollaborator(\''+r.id+'\','+(!r.can_edit)+')"><div class="knob"></div></div></div>'+
+        '<div class="ractions"><button class="abtn" onclick="revokeAccessRow(\''+r.id+'\')">Quitar acceso a '+lbl+'</button></div>'
+      ) : '')+
       '</div>';
   });
   h += '</div>';
