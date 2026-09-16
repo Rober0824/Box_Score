@@ -29,6 +29,7 @@
     --foul-r: oklch(46% 0.015 55);
     --create: oklch(80% 0.09 150);
     --loss: oklch(74% 0.01 55);
+    --rival: oklch(68% 0.15 240);
   }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; overscroll-behavior:none; }
@@ -297,6 +298,27 @@
   .periodfilterpill .tx{ font-size:11.5px; font-weight:700; color:var(--accent); }
   .periodfilterpill .clear{ font-size:11px; font-weight:800; color:var(--text-dim); text-decoration:underline; flex-shrink:0; }
 
+  /* ---- gráfica de evolución del marcador (box score, vista Equipo) ---- */
+  .evocard{ background:var(--surface); border:1px solid var(--border); border-radius:14px; margin-top:16px; overflow:hidden; }
+  .evotoggle{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; cursor:pointer; gap:10px; }
+  .evotoggle .evotitle{ font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-dim); }
+  .evotoggle .chev{ display:flex; color:var(--text-dim); transition:transform .15s ease; flex-shrink:0; }
+  .evotoggle .chev.open{ transform:rotate(180deg); }
+  .evobody{ padding:0 14px 16px; }
+  .evolegend{ display:flex; gap:16px; margin-bottom:10px; }
+  .evolegitem{ display:flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-dim); }
+  .evodot{ width:8px; height:8px; border-radius:999px; flex-shrink:0; }
+  .evosvgwrap{ position:relative; touch-action:pan-y; }
+  .evoaxis{ display:grid; margin-top:2px; }
+  .evoaxis span{ font-size:9px; font-weight:700; color:var(--text-dim); text-align:center; white-space:nowrap; }
+  .evoaxis span .sub{ display:block; font-size:8px; font-weight:600; color:var(--text-dim); opacity:.75; text-transform:none; letter-spacing:0; }
+  .evotip{ position:absolute; transform:translate(-50%,-100%); background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:7px 10px; pointer-events:none; opacity:0; transition:opacity .1s ease; white-space:nowrap; box-shadow:0 6px 18px rgba(0,0,0,.4); z-index:2; }
+  .evotip.show{ opacity:1; }
+  .evotip .ttscore{ font-family:'Oswald',sans-serif; font-size:15px; font-weight:700; }
+  .evotip .ttscore .a{ color:var(--accent); }
+  .evotip .ttscore .b{ color:var(--rival); }
+  .evotip .ttmeta{ font-size:9.5px; color:var(--text-dim); font-weight:700; margin-top:1px; }
+
   .boxcontent{ flex:1; overflow-y:auto; padding:12px 20px 20px; display:flex; flex-direction:column; gap:10px; -webkit-overflow-scrolling:touch; }
   .prow2{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
   .ptop{ display:flex; align-items:center; gap:10px; }
@@ -371,8 +393,10 @@
 
   #printArea{ display:none; }
   .printhead{ margin-bottom:18px; }
-  .printtitle{ font-family:'Oswald',sans-serif; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:0.1em; color:var(--text-dim); }
-  .printmatch{ display:flex; align-items:center; gap:14px; font-family:'Oswald',sans-serif; font-weight:700; font-size:20px; margin-top:4px; }
+  .printbrand{ display:flex; align-items:center; gap:8px; }
+  .printbrand img{ height:24px; width:24px; object-fit:contain; border-radius:6px; flex-shrink:0; }
+  .printbrandtext{ font-family:'Oswald',sans-serif; font-weight:700; font-size:16px; line-height:24px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text); }
+  .printmatch{ display:flex; align-items:center; gap:14px; font-family:'Oswald',sans-serif; font-weight:700; font-size:20px; margin-top:10px; }
   .printscore{ font-size:24px; }
   .printmeta{ font-size:12px; color:var(--text-dim); font-weight:600; margin-top:4px; }
   .printsection{ margin-top:22px; }
@@ -382,6 +406,17 @@
   .periodtable th{ color:var(--text-dim); font-weight:800; text-transform:uppercase; letter-spacing:0.04em; font-size:9.5px; }
   .periodtable td:first-child, .periodtable th:first-child{ text-align:left; font-weight:800; color:var(--text); }
   .periodtable tbody tr:last-child td{ border-bottom:none; }
+  .periodtable td.pwin{ font-weight:800; color:var(--text); }
+  /* ---- estructura de 3 páginas forzadas del PDF exportado ---- */
+  .printpage{ position:relative; min-height:178mm; padding-bottom:30px; }
+  .printpage.pagebreak{ page-break-before:always; break-before:page; }
+  .printfoot{ position:absolute; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:space-between; padding-top:8px; border-top:1px solid var(--border); font-size:10px; font-weight:700; letter-spacing:0.02em; color:var(--text-dim); }
+  .printcols{ display:flex; gap:18px; align-items:flex-start; margin-top:22px; }
+  .printcol-left{ flex:1 1 62%; min-width:0; }
+  .printcol-right{ flex:0 0 34%; }
+  .printcol-right .printsectitle{ margin-bottom:10px; }
+  .printdarkcard{ border-radius:14px; padding:4px 4px 2px; background:var(--bg); }
+  .printdarkcard .shotmapcard{ margin-top:0; }
 
   @media print{
     html, body{ background:#fff !important; height:auto !important; overflow:visible !important; }
@@ -403,7 +438,7 @@
     #app{ display:none !important; }
     #printArea{
       display:block; position:static; width:100%; padding:10px 14px 30px;
-      --bg:#ffffff; --surface:#ffffff; --surface-2:#f2efe9; --border:#d9d3c9; --text:#221a14; --text-dim:#6c6259; --accent:#c2410c; --accent-ink:#ffffff; --good:#15803d; --bad:#b91c1c;
+      --bg:#ffffff; --surface:#ffffff; --surface-2:#f2efe9; --border:#d9d3c9; --text:#221a14; --text-dim:#6c6259; --accent:#c2410c; --accent-ink:#ffffff; --good:#15803d; --bad:#b91c1c; --rival:#1d4ed8;
       background:#fff; color:#221a14;
     }
     #printArea .tablewrap{ overflow:visible; border:none; }
@@ -416,6 +451,8 @@
     #printArea .minbtn{ display:none; }
     #printArea .printsection{ page-break-inside:avoid; break-inside:avoid; }
     #printArea .periodtable th, #printArea .periodtable td{ padding:4px 5px; }
+    #printArea .printfoot{ page-break-inside:avoid; break-inside:avoid; }
+    #printArea .printcols{ page-break-inside:avoid; break-inside:avoid; }
     @page{ size:landscape; margin:10mm; }
   }
 
@@ -1997,6 +2034,125 @@ function periodScoreChipsHtml(g){
   return h;
 }
 
+/* ---------- gráfica de evolución del marcador (box score, vista Equipo) ---------- */
+var boxEvoExpanded = {}; // gameId -> bool, colapsada por defecto para no alargar la pantalla
+function toggleEvoCard(gid){ boxEvoExpanded[gid] = !boxEvoExpanded[gid]; render(); }
+var evoAxisLabel = 'Periodo'; // etiqueta del periodo activa mientras se pinta el gráfico (para el tooltip)
+
+// puntos acumulados de un lado ("team"/"rival") SOLO para los periodos indicados
+// (comprimidos y en orden, sin huecos para los periodos no seleccionados) --
+// cada banda arranca en el acumulado real de entrada, así una banda sin jugadas
+// se ve como tramo plano en vez de arrancar de 0.
+function evoBuildSeries(g, side, bands){
+  var ps = periodScores(g);
+  function cumBefore(uptoPeriod){
+    var t=0;
+    for(var p=1;p<uptoPeriod;p++) t += (ps[p]?ps[p][side]:0);
+    return t;
+  }
+  var pts = [];
+  bands.forEach(function(p, bandIdx){
+    var base = cumBefore(p);
+    pts.push({band:bandIdx, frac:0, val:base});
+    var scoring = g.events.filter(function(e){ return e.period===p && e.side===side && e.points>0; });
+    var cum = base;
+    scoring.forEach(function(e, i){
+      cum += e.points;
+      pts.push({band:bandIdx, frac:(i+1)/scoring.length, val:cum});
+    });
+  });
+  return pts;
+}
+function evoPeriodMinuteRange(g, p){
+  var mins = g.periodMinutes||8;
+  return ((p-1)*mins)+'-'+(p*mins)+' min';
+}
+// dibuja el SVG + eje X; forPrint=true omite los puntos interactivos (tooltip)
+// y añade el rango de minutos bajo cada periodo, para el PDF.
+function evoChartHtml(g, bands, forPrint){
+  evoAxisLabel = g.periodLabel || 'Periodo';
+  if(!bands || !bands.length){ bands = []; for(var pp=1;pp<=g.periodsCount;pp++) bands.push(pp); }
+  var teamPts = evoBuildSeries(g,'team',bands);
+  var rivalPts = evoBuildSeries(g,'rival',bands);
+  var maxVal = Math.max.apply(null, teamPts.concat(rivalPts).map(function(pt){return pt.val;}).concat([1]));
+  var W = 340, H = forPrint?168:150, padL=26, padR=6, padT=10, padB=6;
+  var plotW = W-padL-padR, plotH = H-padT-padB;
+  var nBands = bands.length;
+  function xOf(pt){ return padL + (pt.band+pt.frac)/nBands*plotW; }
+  function yOf(v){ return padT + plotH - (v/maxVal)*plotH; }
+  function pathFor(pts){ return pts.map(function(pt,i){ return (i===0?'M':'L')+xOf(pt).toFixed(1)+','+yOf(pt.val).toFixed(1); }).join(' '); }
+
+  var gridLines = '';
+  var steps = 4;
+  for(var s=0;s<=steps;s++){
+    var v = Math.round(maxVal/steps*s/2)*2;
+    var y = yOf(v);
+    gridLines += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,3"/>';
+    gridLines += '<text x="2" y="'+(y+3).toFixed(1)+'" font-size="8.5" font-weight="700" fill="var(--text-dim)">'+v+'</text>';
+  }
+  var bandLines = '';
+  for(var b=1;b<nBands;b++){
+    var bx = padL + b/nBands*plotW;
+    bandLines += '<line x1="'+bx.toFixed(1)+'" y1="'+padT+'" x2="'+bx.toFixed(1)+'" y2="'+(padT+plotH)+'" stroke="var(--border)" stroke-width="1"/>';
+  }
+  var dots = '';
+  if(!forPrint){
+    [{pts:teamPts,side:'team'},{pts:rivalPts,side:'rival'}].forEach(function(s){
+      var otherPts = s.side==='team' ? rivalPts : teamPts;
+      s.pts.forEach(function(pt){
+        var sameBand = otherPts.filter(function(o){ return o.band===pt.band; });
+        var px = xOf(pt);
+        var closest = sameBand.sort(function(a,b){ return Math.abs(xOf(a)-px)-Math.abs(xOf(b)-px); })[0];
+        var teamVal = s.side==='team' ? pt.val : (closest?closest.val:0);
+        var rivalVal = s.side==='rival' ? pt.val : (closest?closest.val:0);
+        var periodNum = bands[pt.band];
+        dots += '<circle class="evopt" cx="'+px.toFixed(1)+'" cy="'+yOf(pt.val).toFixed(1)+'" r="9" fill="transparent" onclick="showEvoTip(this,'+teamVal+','+rivalVal+','+periodNum+')"/>';
+      });
+    });
+  }
+  var svg = '<svg width="100%" viewBox="0 0 '+W+' '+H+'" style="display:block;overflow:visible">'+
+    gridLines + bandLines +
+    '<path d="'+pathFor(teamPts)+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'+
+    '<path d="'+pathFor(rivalPts)+'" fill="none" stroke="var(--rival)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'+
+    dots + '</svg>' +
+    (forPrint ? '' : '<div class="evotip" id="evotip"></div>');
+  var axisH = '';
+  bands.forEach(function(p){
+    axisH += '<span>'+esc(evoAxisLabel)+' '+p+(forPrint ? '<span class="sub">'+evoPeriodMinuteRange(g,p)+'</span>' : '')+'</span>';
+  });
+  var h = '<div class="evosvgwrap">'+svg+'</div>';
+  h += '<div class="evoaxis" style="grid-template-columns:repeat('+nBands+',1fr)">'+axisH+'</div>';
+  return h;
+}
+function showEvoTip(el, teamVal, rivalVal, periodNum){
+  var tip = document.getElementById('evotip');
+  if(!tip) return;
+  tip.innerHTML = '<div class="ttscore"><span class="a">'+teamVal+'</span> – <span class="b">'+rivalVal+'</span></div><div class="ttmeta">'+esc(evoAxisLabel)+' '+periodNum+'</div>';
+  tip.style.left = el.getAttribute('cx')+'px';
+  tip.style.top = (parseFloat(el.getAttribute('cy'))-10)+'px';
+  tip.classList.add('show');
+}
+// tarjeta desplegable con la gráfica, para la pantalla en vivo del box score
+// (colapsada por defecto para no alargar el resto de estadísticas)
+function evoChartCardHtml(g, periods){
+  if(!g.events || !g.events.filter(function(e){return e.points>0;}).length) return '';
+  var bands = (periods && periods.length) ? periods.slice().sort(function(a,b){return a-b;}) : null;
+  if(!bands){ bands = []; for(var pp=1; pp<=g.periodsCount; pp++) bands.push(pp); }
+  var expanded = !!boxEvoExpanded[g.id];
+  var h = '<div class="evocard">';
+  h += '<div class="evotoggle" onclick="toggleEvoCard(\''+g.id+'\')"><div class="evotitle">Evolución del marcador</div>'+
+       '<span class="chev'+(expanded?' open':'')+'">'+icon('chevronDown',15)+'</span></div>';
+  if(expanded){
+    h += '<div class="evobody">';
+    h += '<div class="evolegend"><div class="evolegitem"><div class="evodot" style="background:var(--accent)"></div>'+esc(firstWord(g.teamName))+'</div>'+
+         '<div class="evolegitem"><div class="evodot" style="background:var(--rival)"></div>'+esc(firstWord(g.rivalName||'Rival'))+'</div></div>';
+    h += evoChartHtml(g, bands, false);
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
 /* ---------- team-level aggregates (for the "Equipo" box score view) ---------- */
 function teamAggregates(g, side, eventsOverride){
   var a = {fgM:0,fgA:0,p3M:0,p3A:0,ftM:0,ftA:0,rebO:0,rebD:0,ast:0,blk:0,stl:0,to:0,foulC:0};
@@ -2715,16 +2871,26 @@ function periodScoreTableHtml(g){
   for(var p=1;p<=g.periodsCount;p++) h += '<th>'+abbr+p+'</th>';
   h += '<th>Total</th></tr></thead><tbody>';
   h += '<tr><td>'+esc(firstWord(g.teamName))+'</td>';
-  for(var p2=1;p2<=g.periodsCount;p2++) h += '<td>'+(ps[p2]?ps[p2].team:0)+'</td>';
+  for(var p2=1;p2<=g.periodsCount;p2++){
+    var sc2 = ps[p2]||{team:0,rival:0};
+    h += '<td'+(sc2.team>sc2.rival?' class="pwin"':'')+'>'+sc2.team+'</td>';
+  }
   h += '<td>'+teamScore(g)+'</td></tr>';
   h += '<tr><td>'+esc(firstWord(g.rivalName||'Rival'))+'</td>';
-  for(var p3=1;p3<=g.periodsCount;p3++) h += '<td>'+(ps[p3]?ps[p3].rival:0)+'</td>';
+  for(var p3=1;p3<=g.periodsCount;p3++){
+    var sc3 = ps[p3]||{team:0,rival:0};
+    h += '<td'+(sc3.rival>sc3.team?' class="pwin"':'')+'>'+sc3.rival+'</td>';
+  }
   h += '<td>'+rivalScore(g)+'</td></tr>';
   h += '</tbody></table>';
   return h;
 }
 
 /* ---- export / share (Exportar PDF & Compartir buttons) ---- */
+// El "Mapa de tiro" de la página 2 del PDF se queda con su tema oscuro de
+// siempre (contraste sobre el resto de la página, que va en claro) -- esto
+// reaplica localmente las variables del tema oscuro sobre esa tarjeta.
+var PRINT_DARK_VARS = '--bg: oklch(15% 0.014 55); --surface: oklch(20% 0.016 55); --surface-2: oklch(25% 0.018 55); --border: oklch(32% 0.02 55); --text: oklch(96% 0.015 85); --text-dim: oklch(68% 0.03 70); --accent: oklch(72% 0.18 45); --accent-ink: oklch(18% 0.02 55); --good: oklch(70% 0.17 145); --bad: oklch(62% 0.19 25); --rival: oklch(68% 0.15 240); color: oklch(96% 0.015 85);';
 function buildPrintHtml(g){
   var roster = g.roster.slice();
   var rows = roster.map(function(p){
@@ -2735,17 +2901,58 @@ function buildPrintHtml(g){
   rows.sort(function(a,b){return a.p.dorsal-b.p.dorsal;});
   var teamTotal = teamScore(g);
   var d = matchDateObj(g);
-  var h = '';
-  h += '<div class="printhead">';
-  h += '<div class="printtitle">Box score</div>';
-  h += '<div class="printmatch"><span>'+esc(g.teamName)+'</span><span class="printscore">'+teamTotal+' – '+rivalScore(g)+'</span><span>'+esc(g.rivalName||'Rival')+'</span></div>';
-  h += '<div class="printmeta">'+(g.finished?'Partido finalizado':'En curso')+' · '+g.periodsCount+' '+esc(g.periodLabel.toLowerCase())+(g.periodsCount!==1?'s':'')+' · '+d.toLocaleDateString('es-ES')+'</div>';
-  h += '</div>';
-  if(g.periodsCount>1){
-    h += '<div class="printsection"><div class="printsectitle">Resultado por '+esc((g.periodLabel||'periodo').toLowerCase())+'</div>'+periodScoreTableHtml(g)+'</div>';
+  var today = new Date();
+  var downloadDateStr = pad2(today.getDate())+'/'+pad2(today.getMonth()+1)+'/'+today.getFullYear();
+  var logoHtml = clubSettings.logo_url ? '<img src="'+esc(clubSettings.logo_url)+'">' : '';
+
+  function pageFoot(pageNum){
+    return '<div class="printfoot"><span>BBall Stats App | '+downloadDateStr+'</span><span>'+pageNum+'/3</span></div>';
   }
+  function headHtml(){
+    var hh = '<div class="printhead">';
+    hh += '<div class="printbrand">'+logoHtml+'<div class="printbrandtext">BBall Stats</div></div>';
+    hh += '<div class="printmatch"><span>'+esc(g.teamName)+'</span><span class="printscore">'+teamTotal+' – '+rivalScore(g)+'</span><span>'+esc(g.rivalName||'Rival')+'</span></div>';
+    hh += '<div class="printmeta">'+(g.finished?'Partido finalizado':'En curso')+' · '+g.periodsCount+' '+esc(g.periodLabel.toLowerCase())+(g.periodsCount!==1?'s':'')+' · '+d.toLocaleDateString('es-ES')+'</div>';
+    hh += '</div>';
+    return hh;
+  }
+
+  var h = '';
+
+  // ---- página 1: cabecera + estadísticas de equipo (sin mapa de tiro ni gráfica, para que quepa entera) ----
+  h += '<div class="printpage">';
+  h += '<div>';
+  h += headHtml();
   h += '<div class="printsection"><div class="printsectitle">Estadísticas de equipo</div>'+renderTeamPanel(g, {forPrint:true})+'</div>';
-  h += '<div class="printsection"><div class="printsectitle">Estadísticas de jugadoras</div>'+renderPlayersTable(g, rows, teamTotal)+'</div>';
+  h += '</div>';
+  h += pageFoot(1);
+  h += '</div>';
+
+  // ---- página 2: resultado por periodo + evolución del marcador (izquierda) | mapa de tiro (derecha) ----
+  h += '<div class="printpage pagebreak">';
+  h += '<div>';
+  h += '<div class="printcols">';
+  h += '<div class="printcol-left">';
+  if(g.periodsCount>1){
+    h += '<div class="printsection" style="margin-top:0"><div class="printsectitle">Resultado por '+esc((g.periodLabel||'periodo').toLowerCase())+'</div>'+periodScoreTableHtml(g)+'</div>';
+  }
+  h += '<div class="printsection"><div class="printsectitle">Evolución del marcador</div>'+evoChartHtml(g, null, true)+'</div>';
+  h += '</div>';
+  h += '<div class="printcol-right">';
+  h += '<div class="printsectitle">Mapa de tiro</div>';
+  h += '<div class="printdarkcard" style="'+PRINT_DARK_VARS+'">'+renderShotMap(teamZoneStats([g], null))+'</div>';
+  h += '</div>';
+  h += '</div>';
+  h += '</div>';
+  h += pageFoot(2);
+  h += '</div>';
+
+  // ---- página 3: estadísticas de jugadoras ----
+  h += '<div class="printpage pagebreak">';
+  h += '<div class="printsection" style="margin-top:0"><div class="printsectitle">Estadísticas de jugadoras</div>'+renderPlayersTable(g, rows, teamTotal)+'</div>';
+  h += pageFoot(3);
+  h += '</div>';
+
   return h;
 }
 function exportBoxScorePDF(gid){
@@ -2753,7 +2960,26 @@ function exportBoxScorePDF(gid){
   if(!g) return;
   var area = document.getElementById('printArea');
   area.innerHTML = buildPrintHtml(g);
-  setTimeout(function(){ window.print(); }, 30);
+  // Nombre de archivo por defecto al guardar/exportar el PDF: "BBall Stats_" +
+  // la fecha del partido -- el título del documento es lo que el navegador usa
+  // como nombre sugerido. Se restaura al terminar para no afectar al resto de la app.
+  var originalTitle = document.title;
+  var fd = matchDateObj(g);
+  document.title = 'BBall Stats_'+pad2(fd.getDate())+'-'+pad2(fd.getMonth()+1)+'-'+fd.getFullYear();
+  var restored = false;
+  function restoreTitle(){
+    if(restored) return;
+    restored = true;
+    document.title = originalTitle;
+    window.removeEventListener('afterprint', restoreTitle);
+  }
+  window.addEventListener('afterprint', restoreTitle);
+  setTimeout(function(){
+    window.print();
+    // Por si el navegador no dispara "afterprint" (pasa en algunos flujos de
+    // "compartir/exportar a PDF" en móvil) -- restaurar el título de todos modos.
+    setTimeout(restoreTitle, 5000);
+  }, 30);
 }
 function shareBoxScore(gid){
   var g = getGameById(gid);
@@ -2833,9 +3059,13 @@ function renderTeamPanel(g, opts){
     h += '<div class="rivalnote" style="margin-top:10px"><div class="ic">'+icon('info',16)+'</div><div class="tx">Con este filtro de periodo, las estadísticas detalladas del rival (tiros, rebotes...) que ves arriba son las del <b>partido completo</b> — solo su marcador se puede filtrar por periodo. '+esc(firstWord(g.rivalName||'Rival'))+' en '+periodNames+': <b>'+rivalPeriodPts+' pts</b>.</div></div>';
   }
   if(!opts.forPrint){
-    h += '<div class="shotmapcard" style="margin-top:16px"><div class="label shotmaptitle">Mapa de tiro'+(periods?' · '+periods.slice().sort(function(a,b){return a-b;}).map(function(p){return esc(g.periodLabel)+' '+p;}).join(' + '):'')+'</div>'+renderShotMap(teamZoneStats([g], periods))+'</div>';
+    h += evoChartCardHtml(g, periods);
+    h += shotMapCardHtml(g, periods);
   }
   return h;
+}
+function shotMapCardHtml(g, periods){
+  return '<div class="shotmapcard" style="margin-top:16px"><div class="label shotmaptitle">Mapa de tiro'+(periods?' · '+periods.slice().sort(function(a,b){return a-b;}).map(function(p){return esc(g.periodLabel)+' '+p;}).join(' + '):'')+'</div>'+renderShotMap(teamZoneStats([g], periods))+'</div>';
 }
 
 /* ---- minutes editor ---- */
