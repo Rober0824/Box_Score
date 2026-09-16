@@ -1843,6 +1843,15 @@ var ZONE_COURT_ARCS = {
   midArcD: 'M 360.0 400.0 A 125 125 0 0 0 110.0 400.0',
   paintArcD: 'M 307.0 400.0 A 72 72 0 0 0 163.0 400.0'
 };
+// El sistema de coordenadas de la cancha es 470x430, pero la línea de triples
+// no sube más arriba de y=195 (centro del arco en y=400, radio 205) -- todo
+// lo que hay entre y=0 y y=195 es fondo vacío. En la pantalla de "marcar zona
+// de tiro" (renderShotZone) se deja tal cual -- ahí no molesta y no hay que
+// tocarla. Pero en el mapa de tiro y el mapa de calor de Estadísticas (donde
+// el espacio en pantalla es limitado) se recorta ese hueco por arriba para
+// que se vea la cancha entera sin necesidad de hacer scroll.
+var COURT_CROP_TOP = 160;
+var COURT_CROP_H = 430 - COURT_CROP_TOP;
 function cancelShotZone(){
   go('stat', {playerId: S.routeParams.playerId, editEventId: S.routeParams.editEventId});
 }
@@ -2048,7 +2057,7 @@ function renderShotMap(zoneStats, interactive){
   var allZones = ZONE_DEFS.mid.map(function(z){ return Object.assign({ring:'mid'}, z); })
     .concat(ZONE_DEFS.three.map(function(z){ return Object.assign({ring:'three'}, z); }));
   var h = '<div class="courtwrap"><div class="courtbox">';
-  h += '<svg viewBox="0 0 470 430" width="100%" style="display:block">'+
+  h += '<svg viewBox="0 '+COURT_CROP_TOP+' 470 '+COURT_CROP_H+'" width="100%" style="display:block">'+
     '<path d="'+ZONE_COURT_ARCS.threeArcD+'" stroke="var(--border)" stroke-width="1.5" fill="none"/>'+
     '<path d="'+ZONE_COURT_ARCS.midArcD+'" stroke="var(--border)" stroke-width="1.5" fill="none"/>'+
     '<path d="'+ZONE_COURT_ARCS.paintArcD+'" stroke="var(--border)" stroke-width="1.5" fill="none"/>'+
@@ -2066,7 +2075,7 @@ function renderShotMap(zoneStats, interactive){
     var st = zoneStats[z.ring+':'+z.id] || {m:0,a:0};
     var pct = st.a ? Math.round(100*st.m/st.a) : 0;
     var tapClick = interactive ? ' onclick="openZonePopup(\''+z.ring+'\',\''+z.id+'\',\''+jsAttr(z.label)+'\')"' : '';
-    h += '<div class="zonelbl"'+tapClick+' style="left:'+(z.lx/470*100)+'%;top:'+(z.ly/430*100)+'%'+(interactive?';cursor:pointer':'')+'">'+
+    h += '<div class="zonelbl"'+tapClick+' style="left:'+(z.lx/470*100)+'%;top:'+((z.ly-COURT_CROP_TOP)/COURT_CROP_H*100)+'%'+(interactive?';cursor:pointer':'')+'">'+
       '<div class="zonepct">'+(st.a?pct+'%':'–')+'</div>'+
       (st.a ? '<div class="zonema">'+st.m+'/'+st.a+'</div>' : '')+
       '</div>';
@@ -2109,7 +2118,10 @@ function heatMapCardHtml(cardId, pointsFn){
   var mode = getHeatMode(cardId);
   var pts = pointsFn(mode) || [];
   var canvasId = 'heat-'+cardId;
-  heatMapRegistry[canvasId] = { points: pts };
+  // se recorta el hueco vacío de encima del triple (ver COURT_CROP_TOP) --
+  // los puntos se guardan ya trasladados a las coordenadas recortadas, que
+  // son las que usa el <canvas> (también más bajo) para dibujarlos.
+  heatMapRegistry[canvasId] = { points: pts.map(function(p){ return {x:p.x, y:p.y-COURT_CROP_TOP, made:p.made}; }) };
   var h = '<div class="shotmapcard">';
   h += '<div class="heatmodetoggle">'+
     '<button class="chip'+(mode==='attempts'?' on':'')+'" onclick="setHeatMode(\''+cardId+'\',\'attempts\')">Tiros realizados</button>'+
@@ -2117,8 +2129,8 @@ function heatMapCardHtml(cardId, pointsFn){
     '</div>';
   h += '<div class="heatsummary"><span class="val">'+pts.length+'</span> <span class="lbl">'+(mode==='attempts'?'tiros realizados':'tiros metidos')+'</span></div>';
   h += '<div class="courtwrap"><div class="courtbox">';
-  h += '<svg viewBox="0 0 470 430" width="100%" style="display:block;position:absolute;inset:0">'+courtLinesSvg()+'</svg>';
-  h += '<canvas class="heatcanvas" data-heatid="'+canvasId+'" width="470" height="430"></canvas>';
+  h += '<svg viewBox="0 '+COURT_CROP_TOP+' 470 '+COURT_CROP_H+'" width="100%" style="display:block;position:absolute;inset:0">'+courtLinesSvg()+'</svg>';
+  h += '<canvas class="heatcanvas" data-heatid="'+canvasId+'" width="470" height="'+COURT_CROP_H+'"></canvas>';
   h += '</div></div>';
   h += '<div class="heatlegend"><span class="heatlegendtxt">Menos</span><div class="heatlegendbar"></div><span class="heatlegendtxt">Más</span></div>';
   h += (pts.length ? '' : '<div class="caption" style="padding:0 10px;text-align:center">Sin tiros registrados con este filtro.</div>');
