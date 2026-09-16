@@ -299,7 +299,13 @@
   .periodfilterpill .clear{ font-size:11px; font-weight:800; color:var(--text-dim); text-decoration:underline; flex-shrink:0; }
 
   /* ---- gráfica de evolución del marcador (box score, vista Equipo) ---- */
-  .evocard{ background:var(--surface); border:1px solid var(--border); border-radius:14px; margin-top:16px; overflow:hidden; }
+  /* flex-shrink:0 es necesario -- .boxcontent es un flex column con altura
+     limitada y scroll propio; al tener "overflow:hidden" (para recortar las
+     esquinas redondeadas), su alto mínimo automático como flex item pasa a
+     ser 0 en vez del alto de su contenido, así que sin flex-shrink:0 el
+     algoritmo de flexbox lo podía comprimir hasta casi desaparecer (solo el
+     borde) en vez de dejarlo con su alto real. */
+  .evocard{ background:var(--surface); border:1px solid var(--border); border-radius:14px; margin-top:16px; overflow:hidden; flex-shrink:0; }
   .evotoggle{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; cursor:pointer; gap:10px; }
   .evotoggle .evotitle{ font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-dim); }
   .evotoggle .chev{ display:flex; color:var(--text-dim); transition:transform .15s ease; flex-shrink:0; }
