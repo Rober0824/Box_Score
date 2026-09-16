@@ -275,11 +275,20 @@
   .pvdlegend .dot{ width:8px; height:8px; border-radius:999px; display:inline-block; }
   .pstatinsight{ display:flex; align-items:center; gap:8px; background:oklch(72% 0.18 45 / 12%); border:1px solid var(--accent); border-radius:12px; padding:10px 12px; margin-top:14px; font-size:11.5px; font-weight:700; color:var(--accent); line-height:1.4; }
   .lstack{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; }
-  .swipeviewport{ overflow:hidden; border-radius:12px; touch-action:pan-y; flex-shrink:0; }
+  .swipecard{ background:var(--surface); border:1px solid var(--border); border-radius:14px; margin-top:16px; padding-top:14px; padding-bottom:10px; }
+  .swipehead{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 16px 10px; }
+  .swipeheadtext{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .swipetitle{ font-size:11px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-dim); }
+  .swipehint{ font-size:9.5px; font-weight:700; color:var(--accent); }
+  /* las tarjetas que antes vivían solas (con su propio fondo/borde) ahora van
+     dentro de un carrusel con un único recuadro exterior -- se les quita el
+     fondo/borde/separación propios para que no se vea un "doble recuadro" */
+  .swipecard .shotmapcard, .swipecard .trendcard, .swipecard .periodstatcard{ background:none; border:none; border-radius:0; margin-top:0; padding-top:0; }
+  .swipeviewport{ overflow:hidden; touch-action:pan-y; flex-shrink:0; }
   .swipetrack{ display:flex; width:200%; transition:transform 0.28s ease; }
   .swipepage{ width:50%; flex-shrink:0; display:flex; flex-direction:column; align-items:stretch; }
-  .swipedots{ display:flex; justify-content:center; gap:7px; margin:10px 0 2px; }
-  .swipedot{ width:22px; height:3px; border-radius:2px; background:var(--border); cursor:pointer; }
+  .swipedots{ display:flex; gap:5px; flex-shrink:0; }
+  .swipedot{ width:14px; height:3px; border-radius:2px; background:var(--border); cursor:pointer; }
   .swipedot.on{ background:var(--accent); }
 
   .finalpill{ display:inline-block; font-size:10px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent); background:oklch(72% 0.18 45 / 14%); border:1px solid var(--accent); border-radius:999px; padding:4px 10px; margin-bottom:10px; }
@@ -2097,7 +2106,6 @@ function heatMapCardHtml(cardId, pointsFn){
   var canvasId = 'heat-'+cardId;
   heatMapRegistry[canvasId] = { points: pts };
   var h = '<div class="shotmapcard">';
-  h += '<div class="label shotmaptitle">Mapa de calor</div>';
   h += '<div class="heatmodetoggle">'+
     '<button class="chip'+(mode==='attempts'?' on':'')+'" onclick="setHeatMode(\''+cardId+'\',\'attempts\')">Tiros realizados</button>'+
     '<button class="chip'+(mode==='makes'?' on':'')+'" onclick="setHeatMode(\''+cardId+'\',\'makes\')">Tiros metidos</button>'+
@@ -3375,16 +3383,17 @@ function renderTeamPanel(g, opts){
   }
   if(!opts.forPrint){
     h += evoChartCardHtml(g, periods);
-    h += '<div style="margin-top:16px">'+swipeCarouselHtml('box-'+g.id, [
-      {content: shotMapCardHtml(g, periods)},
-      {content: heatMapCardHtml('box-'+g.id, function(mode){ return teamShotPoints([g], periods, mode); })},
-      {content: renderBoxTrendCard(g, periods)}
-    ])+'</div>';
+    h += swipeCarouselHtml('box-'+g.id, [
+      shotMapCardHtml(g, periods),
+      {title:'Mapa de calor', content: heatMapCardHtml('box-'+g.id, function(mode){ return teamShotPoints([g], periods, mode); })},
+      renderBoxTrendCard(g, periods)
+    ]);
   }
   return h;
 }
 function shotMapCardHtml(g, periods){
-  return '<div class="shotmapcard"><div class="label shotmaptitle">Mapa de tiro'+(periods?' · '+periods.slice().sort(function(a,b){return a-b;}).map(function(p){return esc(g.periodLabel)+' '+p;}).join(' + '):'')+'</div>'+renderShotMap(teamZoneStats([g], periods))+'</div>';
+  var title = 'Mapa de tiro'+(periods?' · '+periods.slice().sort(function(a,b){return a-b;}).map(function(p){return esc(g.periodLabel)+' '+p;}).join(' + '):'');
+  return {title: title, content: '<div class="shotmapcard">'+renderShotMap(teamZoneStats([g], periods))+'</div>'};
 }
 // % de tiro del EQUIPO en UN PERIODO concreto de un partido (para la
 // tendencia por sexto de la pantalla de partido).
@@ -3412,7 +3421,7 @@ function renderBoxTrendCard(g, periods){
     {color:'var(--accent)', label:'2PT', dataFn:function(it){ return teamPeriodShotPct(g, it.period, '2pt'); }},
     {color:'var(--create)', label:'3PT', dataFn:function(it){ return teamPeriodShotPct(g, it.period, '3pt'); }}
   ];
-  var h = '<div class="trendcard"><div class="trendtitle">Tendencia por '+esc((g.periodLabel||'periodo').toLowerCase())+'</div>';
+  var h = '<div class="trendcard">';
   h += '<div class="legend"><span><i style="background:var(--reb)"></i>Tiro libre</span><span><i style="background:var(--accent)"></i>2 puntos</span><span><i style="background:var(--create)"></i>3 puntos</span></div>';
   if(!items.length){
     h += '<div class="empty" style="padding:16px 0">No hay tiros registrados todavía.</div>';
@@ -3424,7 +3433,7 @@ function renderBoxTrendCard(g, periods){
     h += '<div class="charttip">Toca un '+esc((g.periodLabel||'periodo').toLowerCase())+' en la gráfica para ver los datos exactos</div>';
   }
   h += '</div>';
-  return h;
+  return {title: 'Tendencia por '+esc((g.periodLabel||'periodo').toLowerCase()), content: h};
 }
 
 /* ---- minutes editor ---- */
@@ -5664,7 +5673,7 @@ function renderPlayerTrendCard(games, dorsal, name){
     {color:'var(--accent)', label:'2PT', dataFn:function(g){ return playerGameShotPct(g,dorsal,name,'2pt'); }},
     {color:'var(--create)', label:'3PT', dataFn:function(g){ return playerGameShotPct(g,dorsal,name,'3pt'); }}
   ];
-  var h = '<div class="trendcard"><div class="trendtitle">Tendencia de tiro</div>';
+  var h = '<div class="trendcard">';
   h += '<div class="legend"><span><i style="background:var(--reb)"></i>Tiro libre</span><span><i style="background:var(--accent)"></i>2 puntos</span><span><i style="background:var(--create)"></i>3 puntos</span></div>';
   h += '<div class="chipswrap"><div class="fasechips">'+
     '<div class="chip'+(playerTrendMonthKey==='all'?' on':'')+'" onclick="setPlayerTrendMonth(\'all\')">Por partido</div>'+
@@ -5677,7 +5686,7 @@ function renderPlayerTrendCard(games, dorsal, name){
     h += '<div class="charttip">Toca un partido en la gráfica para ver los datos exactos</div>';
   }
   h += '</div>';
-  return h;
+  return {title:'Tendencia de tiro', content: h};
 }
 // % de tiro de una zona concreta del mapa (o de tiros libres) en un partido.
 function zoneGameStat(g, zp){
@@ -5765,7 +5774,7 @@ function renderTrendCard(games){
     {color:'var(--accent)', label:'2PT', dataFn:function(g){ return teamGameShotPct(g,'2pt'); }},
     {color:'var(--create)', label:'3PT', dataFn:function(g){ return teamGameShotPct(g,'3pt'); }}
   ];
-  var h = '<div class="trendcard"><div class="trendtitle">Tendencia de tiro</div>';
+  var h = '<div class="trendcard">';
   h += '<div class="legend"><span><i style="background:var(--reb)"></i>Tiro libre</span><span><i style="background:var(--accent)"></i>2 puntos</span><span><i style="background:var(--create)"></i>3 puntos</span></div>';
   h += '<div class="chipswrap"><div class="fasechips">'+
     '<div class="chip'+(trendMonthKey==='all'?' on':'')+'" onclick="setTrendMonth(\'all\')">Por partido</div>'+
@@ -5778,7 +5787,7 @@ function renderTrendCard(games){
     h += '<div class="charttip">Toca un partido en la gráfica para ver los datos exactos</div>';
   }
   h += '</div>';
-  return h;
+  return {title:'Tendencia de tiro', content: h};
 }
 // Popup de una zona del mapa (o de "Tiros libres"): misma gráfica pero de un
 // solo dato, con su propio filtro por mes y el detalle partido a partido.
@@ -5890,7 +5899,7 @@ function renderPeriodPointsCard(agg){
   var labelLower = agg.periodLabel.toLowerCase();
   var abbr = agg.periodLabel.charAt(0).toUpperCase();
   var bestPts = agg.points.slice().sort(function(a,b){ return b.pct-a.pct; })[0];
-  var h = '<div class="periodstatcard"><div class="label">¿En qué '+esc(labelLower)+' metemos más puntos?</div>';
+  var h = '<div class="periodstatcard">';
   h += '<div class="pstatcaption">% de todos nuestros puntos anotados que vienen de cada '+esc(labelLower)+' (con el filtro de arriba).</div>';
   agg.points.forEach(function(row){
     h += '<div class="pbarrow"><div class="pbname">'+abbr+row.period+'</div><div class="pbartrack"><div class="pbarfill'+(bestPts && row.period===bestPts.period?' best':'')+'" style="width:'+row.pct+'%"></div></div><div class="pbval">'+row.pct+'%</div></div>';
@@ -5899,13 +5908,13 @@ function renderPeriodPointsCard(agg){
     h += '<div class="pstatinsight">'+icon('star',14)+' Vuestro mejor '+esc(labelLower)+' anotando: '+esc(agg.periodLabel)+' '+bestPts.period+' ('+bestPts.pct+'% de los puntos)</div>';
   }
   h += '</div>';
-  return h;
+  return {title:'¿En qué '+esc(labelLower)+' metemos más puntos?', content: h};
 }
 // -- tarjeta: % de victoria/empate/derrota en cada periodo --
 function renderPeriodResultsCard(agg){
   var labelLower = agg.periodLabel.toLowerCase();
   var abbr = agg.periodLabel.charAt(0).toUpperCase();
-  var h = '<div class="periodstatcard"><div class="label">¿En qué '+esc(labelLower)+' solemos ganar?</div>';
+  var h = '<div class="periodstatcard">';
   h += '<div class="pstatcaption">De los partidos con datos, en qué % ganáis, empatáis o perdéis cada '+esc(labelLower)+'.</div>';
   agg.results.forEach(function(row){
     h += '<div class="pvdrow"><div class="pbname">'+abbr+row.period+'</div><div class="pvdtrack">'+
@@ -5922,15 +5931,15 @@ function renderPeriodResultsCard(agg){
     h += '<div class="pstatinsight" style="color:var(--bad);background:oklch(62% 0.19 25 / 12%);border-color:var(--bad)">'+icon('info',14)+' Vuestro '+esc(labelLower)+' más flojo: '+worstLabel+' (ganáis solo el '+worst.winPct+'% de las veces)</div>';
   }
   h += '</div>';
-  return h;
+  return {title:'¿En qué '+esc(labelLower)+' solemos ganar?', content: h};
 }
 // Carrusel de 2 páginas con las dos tarjetas "por periodo" de arriba.
 function renderPeriodStatsCards(games){
   var agg = aggregatePeriodStats(games);
   if(!agg.maxPeriods || !agg.totalTeamPoints) return '';
   return swipeCarouselHtml('teamStatsPeriods', [
-    {content: renderPeriodPointsCard(agg)},
-    {content: renderPeriodResultsCard(agg)}
+    renderPeriodPointsCard(agg),
+    renderPeriodResultsCard(agg)
   ]);
 }
 function renderTeamPanelAggregate(games){
@@ -5960,9 +5969,9 @@ function renderTeamPanelAggregate(games){
   h += row(t.ast,'Asistencias'); h += row(t.blk,'Bloqueos'); h += row(t.stl,'Balones robados'); h += row(t.to,'Balones perdidos'); h += row(t.foulC,'Faltas personales');
   h += '</div>';
   h += swipeCarouselHtml('teamStatsShots', [
-    {content: '<div class="shotmapcard"><div class="label shotmaptitle" style="display:flex;align-items:center;justify-content:space-between">Mapa de tiro<span class="taphint">Toca una zona ↓</span></div>'+renderShotMap(teamZoneStats(games), true)+'</div>'},
-    {content: heatMapCardHtml('teamStats', function(mode){ return teamShotPoints(games, null, mode); })},
-    {content: renderTrendCard(games)}
+    {title:'Mapa de tiro', hint:'Toca una zona ↓', content: '<div class="shotmapcard">'+renderShotMap(teamZoneStats(games), true)+'</div>'},
+    {title:'Mapa de calor', content: heatMapCardHtml('teamStats', function(mode){ return teamShotPoints(games, null, mode); })},
+    renderTrendCard(games)
   ]);
   h += renderPeriodStatsCards(games);
   return h;
@@ -6012,19 +6021,27 @@ function getSwipePage(cid, count){
 }
 function setSwipePage(cid, i){ swipeState[cid] = i; render(); }
 function swipeCarouselHtml(cid, pages){
-  // pages: [{content: htmlString}, ...] en orden
+  // pages: [{title, hint?, content: htmlString}, ...] en orden. El título (y
+  // el hint, si lo hay) de la página actual se muestran en una cabecera fija
+  // arriba de la tarjeta -- junto con los puntos del paginador -- para que se
+  // vean sin necesidad de hacer scroll hasta el final de la tarjeta.
   var n = pages.length;
   var page = getSwipePage(cid, n);
   var stepPct = 100/n;
-  var h = '<div class="swipeviewport" ontouchstart="swSwipeStart(event,\''+cid+'\','+n+')" ontouchmove="swSwipeMove(event)" ontouchend="swSwipeEnd()" ontouchcancel="swSwipeEnd()">';
-  h += '<div class="swipetrack" id="swTrack-'+cid+'" style="width:'+(n*100)+'%;transform:translateX(-'+(page*stepPct)+'%)">';
-  pages.forEach(function(p){ h += '<div class="swipepage" style="width:'+stepPct+'%">'+p.content+'</div>'; });
-  h += '</div></div>';
+  var cur = pages[page] || {};
+  var h = '<div class="swipecard">';
+  h += '<div class="swipehead"><div class="swipeheadtext"><span class="swipetitle">'+(cur.title||'')+'</span>'+(cur.hint?'<span class="swipehint">'+cur.hint+'</span>':'')+'</div>';
   if(n>1){
     h += '<div class="swipedots">';
     pages.forEach(function(p,i){ h += '<div class="swipedot'+(i===page?' on':'')+'" onclick="setSwipePage(\''+cid+'\','+i+')"></div>'; });
     h += '</div>';
   }
+  h += '</div>';
+  h += '<div class="swipeviewport" ontouchstart="swSwipeStart(event,\''+cid+'\','+n+')" ontouchmove="swSwipeMove(event)" ontouchend="swSwipeEnd()" ontouchcancel="swSwipeEnd()">';
+  h += '<div class="swipetrack" id="swTrack-'+cid+'" style="width:'+(n*100)+'%;transform:translateX(-'+(page*stepPct)+'%)">';
+  pages.forEach(function(p){ h += '<div class="swipepage" style="width:'+stepPct+'%">'+p.content+'</div>'; });
+  h += '</div></div>';
+  h += '</div>';
   return h;
 }
 var swActiveId = null, swPages = 1, swStartX = null, swStartY = null, swDeltaX = 0, swDragging = false, swAxis = null;
@@ -6198,10 +6215,10 @@ function renderPlayerRadarPopup(){
     '<div class="radarlegend"><span><i class="dot" style="background:var(--accent)"></i>'+esc(me.name)+'</span><span><i class="dash"></i>Media del equipo</span></div>'+
     '<div class="caption" style="text-align:center;margin-top:10px">Cada eje está a escala de la jugadora con el valor más alto del equipo en ese apartado.</div>';
   h += swipeCarouselHtml('playerRadar', [
-    {content: radarPageContent},
-    {content: renderShotMap(playerZoneStats(games, me.dorsal, me.name))},
-    {content: heatMapCardHtml('playerRadar', function(mode){ return playerShotPoints(games, me.dorsal, me.name, null, mode); })},
-    {content: renderPlayerTrendCard(games, me.dorsal, me.name)}
+    {title:'Gráfico araña', content: radarPageContent},
+    {title:'Mapa de tiro', content: '<div class="shotmapcard">'+renderShotMap(playerZoneStats(games, me.dorsal, me.name))+'</div>'},
+    {title:'Mapa de calor', content: heatMapCardHtml('playerRadar', function(mode){ return playerShotPoints(games, me.dorsal, me.name, null, mode); })},
+    renderPlayerTrendCard(games, me.dorsal, me.name)
   ]);
   h += renderPlayerStatLine(me);
   h += '</div></div></div>';
