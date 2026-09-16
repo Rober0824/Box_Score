@@ -641,6 +641,33 @@
   .sw.on{ background:var(--good); border-color:var(--good); }
   .sw.on .knob{ transform:translateX(19px); background:var(--accent-ink); }
 
+  /* ---------- Admin > Analítica ---------- */
+  .anuserrow{ display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; cursor:pointer; }
+  .anutime{ text-align:right; flex-shrink:0; }
+  .anutime .val{ font-family:'Oswald',sans-serif; font-weight:700; font-size:15px; color:var(--text); }
+  .anutime .sub{ font-size:10.5px; color:var(--text-dim); font-weight:600; margin-top:1px; }
+  .anuserrow .chev{ color:var(--text-dim); flex-shrink:0; }
+  .anstatgrid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }
+  .anstatbox{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 10px; text-align:center; }
+  .anstatbox .val{ font-family:'Oswald',sans-serif; font-weight:700; font-size:18px; color:var(--text); }
+  .anstatbox .lbl{ font-size:10.5px; color:var(--text-dim); font-weight:600; margin-top:3px; }
+  .anscreencard{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:2px 14px; }
+  .anscreenrow{ padding:10px 0; border-bottom:1px solid var(--border); }
+  .anscreenrow:last-child{ border-bottom:none; }
+  .anscreentop{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:6px; }
+  .anscreenname{ font-weight:700; font-size:13px; color:var(--text); }
+  .anscreenmeta{ font-size:11px; color:var(--text-dim); font-weight:600; flex-shrink:0; }
+  .anscreenbarwrap{ height:6px; border-radius:999px; background:var(--surface-2); overflow:hidden; }
+  .anscreenbar{ height:100%; background:var(--accent); border-radius:999px; }
+  .andaygroup{ margin-top:14px; }
+  .andaygroup:first-child{ margin-top:0; }
+  .andaylabel{ font-size:11px; font-weight:800; letter-spacing:0.03em; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px; }
+  .anvisitrow{ display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+  .anvisitrow:last-child{ border-bottom:none; }
+  .anvisitdot{ width:6px; height:6px; border-radius:999px; background:var(--accent); flex-shrink:0; }
+  .anvisitname{ flex:1; min-width:0; font-size:13px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .anvisitmeta{ font-size:11px; color:var(--text-dim); font-weight:600; text-align:right; flex-shrink:0; }
+
   /* ---------- selector de equipo / temporada, Nueva Temporada ---------- */
   .teamrow{ display:flex; align-items:center; gap:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:13px 14px; cursor:pointer; }
   .teamrow.on{ border-color:var(--accent); background:oklch(72% 0.18 45 / 12%); }
@@ -738,6 +765,12 @@ var nuevaTemporadaStep = 0;      // 0 = cerrado, 1 = paso 1, 2 = paso 2
 var nuevaTemporadaDraft = null;
 var usersFilterSeasonId = null;
 var usersScreenData = { pending:[], approved:[], others:[] };
+var analyticsRangeDays = 30;   // 7 / 30 / null (Todo)
+var analyticsScreen = 'list';  // 'list' | 'detail'
+var analyticsSelectedUserId = null;
+var analyticsLoading = false;
+var analyticsUsers = [];        // [{id,name,email,totalSeconds,visitCount,lastVisitAt(Date)}]
+var analyticsVisitsByUser = {}; // userId -> [{route,entered_at(Date),duration_seconds}]
 
 function uuidv4(){
   if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -1558,6 +1591,72 @@ function go(route, params){
   render();
 }
 
+/* ---------- analítica de uso: qué pantallas visita cada persona y cuánto tiempo ----------
+   Se guarda una fila por visita en la tabla screen_visits, solo para personas con acceso
+   aprobado que no sean admin (Rober no se registra a sí mismo). El tiempo contado es solo
+   el que la app pasa en primer plano: al pasar a segundo plano (bloquear el móvil, cambiar
+   de app) se pausa el cronómetro sin cerrar la visita; al volver, se reanuda. La visita se
+   cierra (y se guarda, si dura lo suficiente para ser significativa) al cambiar de pantalla
+   o al cerrar la app. No hay ningún aviso en la app sobre esto -- decisión explícita de Rober. */
+var ROUTE_LABELS = {
+  home:'Inicio', team:'Equipo', roster:'Plantilla', admin:'Admin',
+  adminFbm:'Admin · Fuente FBM', adminUsuarios:'Admin · Usuarios', analytics:'Admin · Analítica',
+  diag:'Diagnóstico', stats:'Estadísticas', setup:'Nuevo partido',
+  lineup:'Quinteto inicial', live:'Partido en directo', stat:'Anotar estadística',
+  shotzone:'Zona de tiro', assist:'Asistencia', rivalquick:'Marcador rival rápido',
+  rivalsheet:'Ficha rival', box:'Box score', minutes:'Minutos', games:'Partidos',
+  approvals:'Solicitudes de acceso', ranking:'Clasificación', mvpHistory:'Histórico MVP',
+  standingsEdit:'Editar clasificación', playerRadar:'Radar de jugadora', matchPlayer:'Jugadora del partido'
+};
+function routeLabel(route){ return ROUTE_LABELS[route] || route || '—'; }
+
+var currentVisit = null; // { route, startedAt(ms), segStart(ms|null), accumMs }
+var VISIT_MIN_SECONDS = 2; // visitas más cortas que esto no se guardan (ruido de navegación)
+function shouldTrackVisits(){
+  return !!(sb && authUser && authProfile && !isAdmin());
+}
+function startVisit(route){
+  if(!shouldTrackVisits() || !route || AUTH_ROUTES.indexOf(route)!==-1) return;
+  currentVisit = { route: route, startedAt: Date.now(), segStart: (document.visibilityState!=='hidden' ? Date.now() : null), accumMs: 0 };
+}
+function pauseVisit(){
+  if(!currentVisit || currentVisit.segStart==null) return;
+  currentVisit.accumMs += Date.now() - currentVisit.segStart;
+  currentVisit.segStart = null;
+}
+function resumeVisit(){
+  if(!currentVisit || currentVisit.segStart!=null) return;
+  if(document.visibilityState==='hidden') return;
+  currentVisit.segStart = Date.now();
+}
+function endVisit(){
+  if(!currentVisit) return;
+  pauseVisit();
+  var v = currentVisit;
+  currentVisit = null;
+  var seconds = Math.round(v.accumMs/1000);
+  if(seconds < VISIT_MIN_SECONDS || !shouldTrackVisits()) return;
+  try{
+    sb.from('screen_visits').insert({
+      user_id: authUser.id,
+      route: v.route,
+      entered_at: new Date(v.startedAt).toISOString(),
+      duration_seconds: seconds
+    }).then(function(){}, function(){});
+  }catch(e){}
+}
+function trackRouteVisit(route){
+  if(currentVisit && currentVisit.route===route) return; // misma pantalla: no reiniciar la visita
+  endVisit();
+  startVisit(route);
+}
+try{
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState==='hidden') pauseVisit(); else resumeVisit();
+  });
+  window.addEventListener('pagehide', function(){ endVisit(); });
+}catch(e){}
+
 /* ---------- app actions: setup ---------- */
 function ensureCurrentForSetup(){
   if(!S.current) S.current = newGame();
@@ -2373,6 +2472,7 @@ function render(){
   var app = document.getElementById('app');
   var prevScroller = app.querySelector('.content, .playlist, .livecontent, .boxcontent');
   if(prevScroller && lastRenderedRoute){ scrollPositions[lastRenderedRoute] = prevScroller.scrollTop; }
+  trackRouteVisit(S.route);
   var html = '';
   if(SUPABASE_CONFIGURED && !authChecked){
     html = renderBoot();
@@ -2403,6 +2503,7 @@ function render(){
       case 'admin': html = renderAdminMenu(); break;
       case 'adminFbm': html = renderAdminFbmSource(); break;
       case 'adminUsuarios': html = renderAdminUsuarios(); break;
+      case 'analytics': html = renderAnalytics(); break;
       case 'diag': html = renderDiagnostics(); break;
       case 'stats': html = renderStats(); break;
       case 'setup': html = renderSetup(); break;
@@ -2909,7 +3010,7 @@ function buildPrintHtml(g){
   var d = matchDateObj(g);
   var today = new Date();
   var downloadDateStr = pad2(today.getDate())+'/'+pad2(today.getMonth()+1)+'/'+today.getFullYear();
-  var logoHtml = clubSettings.logo_url ? '<img src="'+esc(clubSettings.logo_url)+'">' : '';
+  var logoHtml = '<img src="icon-192.png">'; // logo de la app BBall Stats (no el escudo del equipo)
 
   function pageFoot(pageNum){
     return '<div class="printfoot"><span>BBall Stats App | '+downloadDateStr+'</span><span>'+pageNum+'/3</span></div>';
@@ -3369,6 +3470,10 @@ function renderAdminMenu(){
     '</div>'+
     '<div class="navrow" style="cursor:pointer;margin-top:10px" onclick="openAdminUsuarios()">'+
       '<div><div class="navlabel">Usuarios</div><div class="navsub">Solicitudes y accesos, por temporada</div></div>'+
+      '<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
+    '</div>'+
+    '<div class="navrow" style="cursor:pointer;margin-top:10px" onclick="openAnalytics()">'+
+      '<div><div class="navlabel">Analítica</div><div class="navsub">Qué pantallas usa cada persona y cuánto tiempo</div></div>'+
       '<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
     '</div>'+
     '</div>';
@@ -3883,6 +3988,188 @@ function renderAdminUsuarios(){
   h += '</div>';
   return h;
 }
+
+/* ---------- Admin > Analítica ---------- */
+async function openAnalytics(){
+  if(!isAdmin()) return;
+  analyticsScreen = 'list';
+  analyticsSelectedUserId = null;
+  go('analytics');
+  await loadAnalyticsData();
+}
+function selectAnalyticsRange(days){
+  analyticsRangeDays = days;
+  loadAnalyticsData();
+}
+function openAnalyticsDetail(userId){
+  analyticsScreen = 'detail';
+  analyticsSelectedUserId = userId;
+  render();
+}
+function closeAnalyticsDetail(){
+  analyticsScreen = 'list';
+  analyticsSelectedUserId = null;
+  render();
+}
+async function loadAnalyticsData(){
+  if(!sb || !isAdmin()) return;
+  analyticsLoading = true; render();
+  try{
+    var q = sb.from('screen_visits').select('user_id, route, entered_at, duration_seconds, profiles(id,name,email,role)').order('entered_at', {ascending:false});
+    if(analyticsRangeDays){
+      var cutoff = new Date(Date.now() - analyticsRangeDays*86400000);
+      q = q.gte('entered_at', cutoff.toISOString());
+    }
+    var res = await q;
+    var rows = (res && res.data) || [];
+    var byUser = {};
+    var visits = {};
+    rows.forEach(function(r){
+      if(!r.profiles || r.profiles.role==='admin') return; // por si acaso -- el admin nunca debería aparecer aquí
+      var uid = r.user_id;
+      if(!byUser[uid]) byUser[uid] = { id:uid, name:r.profiles.name||'', email:r.profiles.email||'', totalSeconds:0, visitCount:0, lastVisitAt:null };
+      var entered = new Date(r.entered_at);
+      byUser[uid].totalSeconds += (r.duration_seconds||0);
+      byUser[uid].visitCount += 1;
+      if(!byUser[uid].lastVisitAt || entered > byUser[uid].lastVisitAt) byUser[uid].lastVisitAt = entered;
+      if(!visits[uid]) visits[uid] = [];
+      visits[uid].push({ route:r.route, entered_at:entered, duration_seconds:r.duration_seconds||0 });
+    });
+    analyticsUsers = Object.keys(byUser).map(function(uid){ return byUser[uid]; })
+      .sort(function(a,b){ return (b.lastVisitAt?b.lastVisitAt.getTime():0) - (a.lastVisitAt?a.lastVisitAt.getTime():0); });
+    analyticsVisitsByUser = visits;
+  }catch(e){ analyticsUsers = []; analyticsVisitsByUser = {}; }
+  analyticsLoading = false;
+  render();
+}
+function anFmtDuration(seconds){
+  var mins = Math.round((seconds||0)/60);
+  if(mins < 1) return '<1 min';
+  if(mins < 60) return mins+' min';
+  var h = Math.floor(mins/60), m = mins%60;
+  return h+'h'+(m ? ' '+m+'min' : '');
+}
+function anFmtDayLabel(d){
+  var now = new Date();
+  var startOfDay = function(x){ return new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime(); };
+  var diffDays = Math.round((startOfDay(now)-startOfDay(d))/86400000);
+  if(diffDays===0) return 'Hoy';
+  if(diffDays===1) return 'Ayer';
+  return d.toLocaleDateString('es-ES', {day:'numeric', month:'short'}).replace('.','');
+}
+function anFmtTime(d){ return pad2(d.getHours())+':'+pad2(d.getMinutes()); }
+function anInitials(name){
+  return (name||'?').trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+}
+function anRangeLabel(){
+  if(analyticsRangeDays===7) return 'Últimos 7 días';
+  if(analyticsRangeDays===30) return 'Últimos 30 días';
+  return 'Todo el historial';
+}
+function renderAnalytics(){
+  if(!isAdmin()){ S.route='team'; S.routeParams={}; saveState(); return renderTeamScreen(); }
+  if(analyticsScreen==='detail' && analyticsSelectedUserId) return renderAnalyticsDetail();
+  var h = '<div class="header"><div class="header-row">'+
+    '<button class="iconbtn" onclick="go(\'admin\')">'+icon('back',18)+'</button>'+
+    '<div class="htitles"><div class="title">Analítica</div><div class="subtitle">Uso de la app por persona</div></div></div></div>';
+  h += '<div class="content">';
+  h += '<div class="section" style="gap:0"><div class="chiprow">'+
+    '<button class="chip'+(analyticsRangeDays===7?' on':'')+'" onclick="selectAnalyticsRange(7)">7 días</button>'+
+    '<button class="chip'+(analyticsRangeDays===30?' on':'')+'" onclick="selectAnalyticsRange(30)">30 días</button>'+
+    '<button class="chip'+(!analyticsRangeDays?' on':'')+'" onclick="selectAnalyticsRange(null)">Todo</button>'+
+    '</div></div>';
+
+  if(analyticsLoading){
+    h += '<div class="section"><div class="empty" style="padding:12px 0">Cargando...</div></div>';
+  } else {
+    h += '<div class="section"><div class="label">Usuarios ('+analyticsUsers.length+')</div>';
+    if(!analyticsUsers.length){
+      h += '<div class="empty" style="padding:12px 0">Todavía no hay actividad registrada en este periodo.</div>';
+    }
+    analyticsUsers.forEach(function(u){
+      h += '<div class="anuserrow" onclick="openAnalyticsDetail(\''+u.id+'\')">'+
+        '<div class="avatar">'+esc(anInitials(u.name))+'</div>'+
+        '<div class="rinfo"><div class="rname">'+esc(u.name)+'</div>'+
+        '<div class="rmeta">Última vez: '+(u.lastVisitAt ? esc(anFmtDayLabel(u.lastVisitAt))+' · '+esc(anFmtTime(u.lastVisitAt)) : '—')+'</div></div>'+
+        '<div class="anutime"><div class="val">'+anFmtDuration(u.totalSeconds)+'</div><div class="sub">'+u.visitCount+' visita'+(u.visitCount!==1?'s':'')+'</div></div>'+
+        '<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
+        '</div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+function renderAnalyticsDetail(){
+  var u = analyticsUsers.filter(function(x){ return x.id===analyticsSelectedUserId; })[0];
+  if(!u) return renderAnalytics();
+  var visits = (analyticsVisitsByUser[u.id]||[]).slice().sort(function(a,b){ return b.entered_at-a.entered_at; });
+
+  var h = '<div class="header"><div class="header-row">'+
+    '<button class="iconbtn" onclick="closeAnalyticsDetail()">'+icon('back',18)+'</button>'+
+    '<div class="htitles"><div class="title">Analítica</div><div class="subtitle">'+esc(anRangeLabel())+'</div></div></div></div>';
+  h += '<div class="content">';
+
+  h += '<div class="section"><div class="rtop">'+
+    '<div class="avatar">'+esc(anInitials(u.name))+'</div>'+
+    '<div class="rinfo"><div class="rname">'+esc(u.name)+'</div><div class="rmeta">'+esc(u.email)+'</div></div>'+
+    '</div></div>';
+
+  var daysActive = {};
+  visits.forEach(function(v){ daysActive[anFmtDayKey(v.entered_at)] = true; });
+  h += '<div class="section"><div class="anstatgrid">'+
+    '<div class="anstatbox"><div class="val">'+anFmtDuration(u.totalSeconds)+'</div><div class="lbl">Tiempo total</div></div>'+
+    '<div class="anstatbox"><div class="val">'+u.visitCount+'</div><div class="lbl">Visitas</div></div>'+
+    '<div class="anstatbox"><div class="val">'+Object.keys(daysActive).length+'</div><div class="lbl">Días activa</div></div>'+
+    '</div></div>';
+
+  var byScreen = {};
+  visits.forEach(function(v){
+    if(!byScreen[v.route]) byScreen[v.route] = { route:v.route, seconds:0, count:0 };
+    byScreen[v.route].seconds += v.duration_seconds;
+    byScreen[v.route].count += 1;
+  });
+  var screenList = Object.keys(byScreen).map(function(r){ return byScreen[r]; }).sort(function(a,b){ return b.seconds-a.seconds; });
+  var maxSeconds = screenList.length ? screenList[0].seconds : 1;
+  h += '<div class="section"><div class="label">Tiempo por pantalla</div><div class="anscreencard">';
+  screenList.forEach(function(s){
+    var pct = Math.max(4, Math.round(100*s.seconds/(maxSeconds||1)));
+    h += '<div class="anscreenrow">'+
+      '<div class="anscreentop"><div class="anscreenname">'+esc(routeLabel(s.route))+'</div>'+
+      '<div class="anscreenmeta">'+anFmtDuration(s.seconds)+' · '+s.count+' visita'+(s.count!==1?'s':'')+'</div></div>'+
+      '<div class="anscreenbarwrap"><div class="anscreenbar" style="width:'+pct+'%"></div></div>'+
+      '</div>';
+  });
+  h += '</div></div>';
+
+  h += '<div class="section"><div class="label">Historial</div>';
+  if(!visits.length){
+    h += '<div class="empty" style="padding:12px 0">Sin visitas en este periodo.</div>';
+  } else {
+    var groups = [];
+    var byDay = {};
+    visits.forEach(function(v){
+      var key = anFmtDayKey(v.entered_at);
+      if(!byDay[key]){ byDay[key] = { label: anFmtDayLabel(v.entered_at), items:[] }; groups.push(byDay[key]); }
+      byDay[key].items.push(v);
+    });
+    groups.forEach(function(g){
+      h += '<div class="andaygroup"><div class="andaylabel">'+esc(g.label)+'</div>';
+      g.items.forEach(function(v){
+        h += '<div class="anvisitrow"><div class="anvisitdot"></div>'+
+          '<div class="anvisitname">'+esc(routeLabel(v.route))+'</div>'+
+          '<div class="anvisitmeta">'+anFmtTime(v.entered_at)+' · '+anFmtDuration(v.duration_seconds)+'</div>'+
+          '</div>';
+      });
+      h += '</div>';
+    });
+  }
+  h += '</div>';
+
+  h += '</div>';
+  return h;
+}
+function anFmtDayKey(d){ return d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate(); }
 
 /* ---------- Inicio ---------- */
 // El ranking de Inicio se muestra como media por partido (más justo entre
