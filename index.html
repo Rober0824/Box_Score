@@ -1519,18 +1519,24 @@ var EVENT_TYPE_LABELS = {
   'ftm':'Tiro libre anotado', 'ftx':'Tiro libre fallado', 'rebO':'Rebote ofensivo', 'rebD':'Rebote defensivo',
   'ast':'Asistencia', 'stl':'Robo', 'blk':'Tapón', 'to':'Pérdida', 'foulC':'Falta cometida', 'foulR':'Falta recibida'
 };
-function playRowData(e){
+function playRowData(e, g){
+  // "g" es el partido que se está mostrando -- antes esta función siempre
+  // miraba a S.current (el partido en directo), lo cual solo funcionaba por
+  // casualidad porque su única llamada era desde la pantalla "en directo".
+  // Ahora también se usa para ver las jugadas de un partido ya finalizado
+  // (que no es S.current), así que necesita el roster del partido correcto.
+  g = g || S.current;
   var label = e.type==='rivalpts' ? 'Puntos del rival' : (EVENT_TYPE_LABELS[e.type] || e.type);
   var deltaLabel = '', deltaCls = '';
   if(e.type==='rivalpts'){ deltaLabel = '+'+e.points; deltaCls = 'bad'; }
   else if(e.points>0){ deltaLabel = '+'+e.points; deltaCls = 'good'; }
   if(e.assistPlayerId){
-    var ap = byId(S.current.roster, e.assistPlayerId);
+    var ap = byId(g.roster, e.assistPlayerId);
     if(ap) label += ' · asist. Nº'+ap.dorsal;
   }
   var who;
   if(e.side==='rival') who = 'Rival';
-  else { var p = byId(S.current.roster, e.playerId); who = p ? ('Nº'+p.dorsal+' '+firstName(p.name)) : '?'; }
+  else { var p = byId(g.roster, e.playerId); who = p ? ('Nº'+p.dorsal+' '+firstName(p.name)) : '?'; }
   return { who:who, label:label, deltaLabel:deltaLabel, deltaCls:deltaCls };
 }
 var pbpEditingId = null, pbpConfirmingId = null, pbpEditRivalId = null;
@@ -1559,24 +1565,35 @@ function pbpApplyRivalPoints(id, pts){
   pbpEditingId = null; pbpEditRivalId = null;
   saveState(); render();
 }
-function renderPlayByPlay(g){
+function renderPlayByPlay(g, opts){
+  opts = opts || {};
+  var readOnly = !!opts.readOnly;
+  // "flowing": el llamador ya está dentro de su propio contenedor con scroll
+  // (p.ej. .boxcontent en el box score de un partido ya finalizado), así que
+  // esta lista no debe intentar ocupar el resto de la pantalla ni scrollear
+  // por su cuenta -- se deja fluir como un bloque más, sin el padding propio
+  // pensado originalmente para la pantalla "en directo".
+  var headStyle = opts.flowing ? ' style="padding:0 0 8px"' : '';
+  var listStyle = opts.flowing ? ' style="padding:0;overflow:visible;flex:none"' : '';
   var events = g.events.slice().reverse();
-  var h = '<div class="playhead"><div class="label" style="margin-bottom:0">Jugadas del partido</div>'+
+  var h = '<div class="playhead"'+headStyle+'><div class="label" style="margin-bottom:0">Jugadas del partido</div>'+
     '<div class="label" style="margin-bottom:0;color:var(--text-dim)">'+events.length+' jugada'+(events.length===1?'':'s')+'</div></div>';
-  h += '<div class="playlist">';
+  h += '<div class="playlist"'+listStyle+'>';
   if(!events.length){
     h += '<div class="emptyplays">Sin jugadas registradas todavía</div>';
   }
   events.forEach(function(e){
-    var d = playRowData(e);
+    var d = playRowData(e, g);
     h += '<div class="playrow">'+
       '<div class="per">'+esc(g.periodLabel.charAt(0).toUpperCase())+e.period+'</div>'+
       '<div class="who">'+esc(d.who)+'</div>'+
       '<div class="what">'+esc(d.label)+'</div>'+
-      (d.deltaLabel ? '<div class="delta '+d.deltaCls+'">'+d.deltaLabel+'</div>' : '')+
-      '<button class="playbtn" onclick="pbpToggleEdit(\''+e.id+'\')">'+icon('pencil',14)+'</button>'+
-      '<button class="playbtn" onclick="pbpAskDelete(\''+e.id+'\')">'+icon('trash',14)+'</button>';
-    if(pbpEditingId===e.id){
+      (d.deltaLabel ? '<div class="delta '+d.deltaCls+'">'+d.deltaLabel+'</div>' : '');
+    if(!readOnly){
+      h += '<button class="playbtn" onclick="pbpToggleEdit(\''+e.id+'\')">'+icon('pencil',14)+'</button>'+
+        '<button class="playbtn" onclick="pbpAskDelete(\''+e.id+'\')">'+icon('trash',14)+'</button>';
+    }
+    if(!readOnly && pbpEditingId===e.id){
       if(pbpEditRivalId===e.id){
         h += '<div class="editpanel"><div class="editlabel">¿Cuántos puntos ha anotado el rival?</div>'+
           '<div class="editchip back" onclick="pbpBackToPlayers()">'+icon('back',12)+' Jugadoras</div>';
@@ -1595,7 +1612,7 @@ function renderPlayByPlay(g){
         h += '</div>';
       }
     }
-    if(pbpConfirmingId===e.id){
+    if(!readOnly && pbpConfirmingId===e.id){
       h += '<div class="delconfirm"><div class="msg">¿Borrar esta jugada?</div>'+
         '<button class="no" onclick="pbpCancelDelete()">Cancelar</button>'+
         '<button class="yes" onclick="pbpConfirmDelete(\''+e.id+'\')">Borrar</button></div>';
@@ -3076,7 +3093,13 @@ function renderBox(){
   h += '<div class="sortrow"><div class="sortlabel">Vista</div><div class="seg2" style="width:auto">'+
        '<button class="opt'+(boxViewMode==='team'?' on':'')+'" onclick="setBoxView(\'team\')">Equipo</button>'+
        '<button class="opt'+(boxViewMode==='players'?' on':'')+'" onclick="setBoxView(\'players\')">Jugadores</button>'+
+       '<button class="opt'+(boxViewMode==='plays'?' on':'')+'" onclick="setBoxView(\'plays\')">Jugadas</button>'+
        '</div></div>';
+
+  if(boxViewMode==='plays'){
+    h += '<div class="boxcontent">'+renderPlayByPlay(g, {readOnly:true, flowing:true})+'</div>';
+    return h;
+  }
 
   if(boxViewMode==='team'){
     var boxPeriods = (g.finished && ensureBoxPeriodFilter(g.id).length) ? ensureBoxPeriodFilter(g.id) : null;
