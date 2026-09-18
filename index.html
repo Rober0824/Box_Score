@@ -254,6 +254,11 @@
   .legend{ display:flex; gap:16px; margin-bottom:10px; flex-wrap:wrap; }
   .legend span{ display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--text-dim); }
   .legend i{ width:9px; height:9px; border-radius:999px; display:inline-block; }
+  /* Leyenda de las tarjetas de tendencia de tiro (TL/2PT/3PT): además de
+     mostrar el color de cada serie, es pulsable para aislar solo ese tipo de
+     tiro en la gráfica -- por defecto (sin filtro) se ven las 3 a la vez. */
+  .legend button{ background:none; border:none; padding:0; margin:0; font-family:inherit; display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--text-dim); cursor:pointer; transition:opacity 0.15s ease; }
+  .legend button.dim{ opacity:0.32; }
   .charttip{ font-size:9.5px; font-weight:700; color:var(--text-dim); text-align:right; margin-top:8px; }
 
   .periodstatcard{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px 16px; margin-top:16px; }
@@ -3469,7 +3474,9 @@ function teamPeriodShotPct(g, period, kind){
   return a>0 ? {m:m, a:a, pct:Math.round(1000*m/a)/10} : null;
 }
 var boxTrendSelectedIdx = {}; // gameId -> índice de periodo seleccionado en la gráfica
+var boxTrendShotFilter = {};  // gameId -> 'all'|'ft'|'2pt'|'3pt', qué serie(s) se ven
 function setBoxTrendIdx(gid, i){ boxTrendSelectedIdx[gid] = i; render(); }
+function setBoxTrendShotFilter(gid, v){ boxTrendShotFilter[gid] = v; render(); }
 // Tarjeta "Tendencia de tiro" de la pantalla de partido: en vez de un punto
 // por partido (como en Estadísticas), aquí un punto por periodo/sexto DE
 // ESTE partido -- respeta el mismo filtro de periodos que el resto del panel.
@@ -3483,8 +3490,10 @@ function renderBoxTrendCard(g, periods){
     {color:'var(--accent)', label:'2PT', dataFn:function(it){ return teamPeriodShotPct(g, it.period, '2pt'); }},
     {color:'var(--create)', label:'3PT', dataFn:function(it){ return teamPeriodShotPct(g, it.period, '3pt'); }}
   ];
+  var shotFilter = boxTrendShotFilter[g.id] || 'all';
+  series = shotTypeSeriesFiltered(series, shotFilter);
   var h = '<div class="trendcard">';
-  h += '<div class="legend"><span><i style="background:var(--reb)"></i>Tiro libre</span><span><i style="background:var(--accent)"></i>2 puntos</span><span><i style="background:var(--create)"></i>3 puntos</span></div>';
+  h += shotTypeLegendHtml(shotFilter, "setBoxTrendShotFilter.bind(null,'"+g.id+"')");
   if(!items.length){
     h += '<div class="empty" style="padding:16px 0">No hay tiros registrados todavía.</div>';
   } else {
@@ -5671,6 +5680,8 @@ function filteredStatsGames(){
 /* ---------- tendencia de tiro (Estadísticas -> Equipo) ---------- */
 var trendMonthKey = 'all';        // 'all' o 'yyyy-mm' -- filtra los partidos de la tarjeta de tendencia de equipo
 var trendSelectedIdx = null;      // partido seleccionado en esa gráfica (índice sobre la lista ya filtrada/ordenada)
+var trendShotFilter = 'all';      // 'all'|'ft'|'2pt'|'3pt' -- qué serie(s) se ven en la tarjeta de equipo
+function setTrendShotFilter(v){ trendShotFilter = v; render(); }
 var zonePopup = null;             // {ring,id,label} para una zona del mapa, o {kind:'ft',label:'Tiros libres'} -- null = cerrado
 var zoneTrendMonthKey = 'all';
 var zoneTrendSelectedIdx = null;
@@ -5723,8 +5734,10 @@ function playerGameShotPct(g, dorsal, name, kind){
 }
 var playerTrendMonthKey = 'all';
 var playerTrendSelectedIdx = null;
+var playerTrendShotFilter = 'all';
 function setPlayerTrendMonth(k){ playerTrendMonthKey = k; playerTrendSelectedIdx = null; render(); }
 function setPlayerTrendIdx(i){ playerTrendSelectedIdx = i; render(); }
+function setPlayerTrendShotFilter(v){ playerTrendShotFilter = v; render(); }
 // Tarjeta "Tendencia de tiro" de una jugadora (mismo formato que la de
 // equipo, pero filtrada a sus tiros).
 function renderPlayerTrendCard(games, dorsal, name){
@@ -5735,8 +5748,9 @@ function renderPlayerTrendCard(games, dorsal, name){
     {color:'var(--accent)', label:'2PT', dataFn:function(g){ return playerGameShotPct(g,dorsal,name,'2pt'); }},
     {color:'var(--create)', label:'3PT', dataFn:function(g){ return playerGameShotPct(g,dorsal,name,'3pt'); }}
   ];
+  series = shotTypeSeriesFiltered(series, playerTrendShotFilter);
   var h = '<div class="trendcard">';
-  h += '<div class="legend"><span><i style="background:var(--reb)"></i>Tiro libre</span><span><i style="background:var(--accent)"></i>2 puntos</span><span><i style="background:var(--create)"></i>3 puntos</span></div>';
+  h += shotTypeLegendHtml(playerTrendShotFilter, 'setPlayerTrendShotFilter');
   h += '<div class="chipswrap"><div class="fasechips">'+
     '<div class="chip'+(playerTrendMonthKey==='all'?' on':'')+'" onclick="setPlayerTrendMonth(\'all\')">Por partido</div>'+
     months.map(function(m){ return '<div class="chip'+(playerTrendMonthKey===m.key?' on':'')+'" onclick="setPlayerTrendMonth(\''+m.key+'\')">'+esc(m.label)+'</div>'; }).join('')+
@@ -5758,6 +5772,31 @@ function zoneGameStat(g, zp){
   }
   var st = teamZoneStats([g])[zp.ring+':'+zp.id];
   return (st && st.a>0) ? {m:st.m, a:st.a, pct:Math.round(1000*st.m/st.a)/10} : null;
+}
+// Leyenda pulsable TL/2PT/3PT compartida por las tarjetas de tendencia de tiro
+// (equipo, jugadora y por periodo dentro de un partido): por defecto ('all')
+// se ven las 3 series a la vez, como hasta ahora; al tocar una se aísla solo
+// esa (las otras dos quedan atenuadas) y al volver a tocarla se restauran las
+// 3. setFnName es el nombre de la función global que aplica el nuevo filtro.
+var SHOT_TYPES = [
+  {key:'ft', color:'var(--reb)', label:'Tiro libre'},
+  {key:'2pt', color:'var(--accent)', label:'2 puntos'},
+  {key:'3pt', color:'var(--create)', label:'3 puntos'}
+];
+function shotTypeLegendHtml(filterVal, setFnName){
+  var h = '<div class="legend">';
+  SHOT_TYPES.forEach(function(t){
+    var isDim = filterVal!=='all' && filterVal!==t.key;
+    var nextVal = (filterVal===t.key) ? 'all' : t.key;
+    h += '<button class="'+(isDim?'dim':'')+'" onclick="'+setFnName+'(\''+nextVal+'\')"><i style="background:'+t.color+'"></i>'+t.label+'</button>';
+  });
+  h += '</div>';
+  return h;
+}
+function shotTypeSeriesFiltered(series, filterVal){
+  if(filterVal==='all') return series;
+  var byKey = {ft:0, '2pt':1, '3pt':2};
+  return [series[byKey[filterVal]]];
 }
 // Construye el SVG de una gráfica de tendencia (1 o varias series de %, una por
 // partido). Se reutiliza tanto para la tarjeta de equipo (3 series: TL/2PT/3PT)
@@ -5836,8 +5875,9 @@ function renderTrendCard(games){
     {color:'var(--accent)', label:'2PT', dataFn:function(g){ return teamGameShotPct(g,'2pt'); }},
     {color:'var(--create)', label:'3PT', dataFn:function(g){ return teamGameShotPct(g,'3pt'); }}
   ];
+  series = shotTypeSeriesFiltered(series, trendShotFilter);
   var h = '<div class="trendcard">';
-  h += '<div class="legend"><span><i style="background:var(--reb)"></i>Tiro libre</span><span><i style="background:var(--accent)"></i>2 puntos</span><span><i style="background:var(--create)"></i>3 puntos</span></div>';
+  h += shotTypeLegendHtml(trendShotFilter, 'setTrendShotFilter');
   h += '<div class="chipswrap"><div class="fasechips">'+
     '<div class="chip'+(trendMonthKey==='all'?' on':'')+'" onclick="setTrendMonth(\'all\')">Por partido</div>'+
     months.map(function(m){ return '<div class="chip'+(trendMonthKey===m.key?' on':'')+'" onclick="setTrendMonth(\''+m.key+'\')">'+esc(m.label)+'</div>'; }).join('')+
