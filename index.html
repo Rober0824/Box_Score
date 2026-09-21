@@ -164,6 +164,12 @@
   .delconfirm .yes{ background:var(--bad); color:#fff; }
   .delconfirm .no{ background:var(--surface-2); color:var(--text); border:1px solid var(--border); }
   .emptyplays{ text-align:center; color:var(--text-dim); font-size:12.5px; padding:18px 0; }
+  .lineuprow{ display:flex; align-items:center; gap:9px; background:var(--surface-2); border:1px dashed var(--border); border-radius:12px; padding:8px 10px; color:var(--text-dim); }
+  .lineuprow.sub{ border-style:solid; }
+  .lineuprow .lltitle{ font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-dim); }
+  .lineuprow .llnames{ font-size:11.5px; font-weight:700; color:var(--text); margin-top:1px; line-height:1.5; }
+  .lineuprow .llin{ color:var(--good); }
+  .lineuprow .llout{ color:var(--bad); }
 
   .courtheader{ display:flex; align-items:center; justify-content:space-between; padding:0 18px 10px; flex-shrink:0; }
   .swaplink{ display:flex; align-items:center; gap:5px; font-size:12px; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:0.02em; }
@@ -187,6 +193,26 @@
   .ptile .nm{ font-size:9.5px; color:var(--text-dim); font-weight:700; text-align:center; padding:0 3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   .ptile.rival{ background:var(--surface-2); border-style:dashed; }
   .ptile.rival .nm{ font-size:11px; color:var(--text); font-weight:800; text-transform:uppercase; letter-spacing:0.02em; }
+  .ptile.rivp{ background:var(--surface); border:1.5px solid var(--rival); }
+  .ptile.rivp .num{ color:var(--rival); }
+  .ptile.usback{ background:var(--surface-2); border:1px dashed var(--accent); }
+  .ptile.usback .nm{ font-size:10.5px; color:var(--accent); font-weight:800; text-transform:uppercase; letter-spacing:0.02em; line-height:1.3; }
+
+  /* ---- plantilla / quinteto rival (estadísticas "Completas" por jugadora) ---- */
+  .prow.riv{ border-color:var(--rival); }
+  .prow.riv .dorsal{ border-color:var(--rival); color:var(--rival); }
+  .prow.riv.oncourt{ border-color:var(--rival); background:oklch(68% 0.15 240 / 10%); }
+  .prow.riv.oncourt .dorsal{ background:var(--rival); border-color:var(--rival); color:#fff; }
+  .prow.riv .pname .nm.ph{ color:var(--text-dim); font-style:italic; font-weight:700; }
+  .addbtn.riv{ background:var(--rival); color:#fff; }
+  .pcheck.riv.on{ background:var(--rival); border-color:var(--rival); color:#fff; }
+  .cta.riv{ background:var(--rival); color:#fff; }
+  .helpbox.riv{ border-color:var(--rival); }
+  .swaplink.riv{ color:var(--rival); }
+  .courtheader.riv .label{ color:var(--rival); }
+  .pheader.riv{ border-color:var(--rival); }
+  .pheader .av.riv{ background:var(--rival); color:#fff; }
+  .playrow.rival .who{ color:var(--rival); }
 
   .undobar{ padding:10px 18px 18px; text-align:center; flex-shrink:0; }
   .undo{ display:inline-flex; align-items:center; gap:8px; color:var(--text-dim); font-size:12.5px; font-weight:700; }
@@ -1451,6 +1477,8 @@ function newGame(){
     trackRivalFull: false,
     roster: roster,
     onCourt: [],
+    rivalRoster: [],
+    rivalOnCourt: [],
     currentPeriod: 1,
     started: false,
     finished: false,
@@ -1463,6 +1491,19 @@ function newGame(){
 
 function sortedRoster(g){
   return g.roster.slice().sort(function(a,b){ return a.dorsal-b.dorsal; });
+}
+
+/* ---- plantilla rival (estadísticas "Completas" por jugadora) ----
+   Partidos guardados antes de esta función pueden no tener g.rivalRoster/
+   g.rivalOnCourt todavía -- se inicializan aquí mismo, al vuelo, igual que
+   ensurePeriodClocks() hace con g.periodClocks. */
+function ensureRivalRoster(g){ if(!g.rivalRoster) g.rivalRoster = []; return g.rivalRoster; }
+function ensureRivalOnCourt(g){ if(!g.rivalOnCourt) g.rivalOnCourt = []; return g.rivalOnCourt; }
+function sortedRivalRoster(g){
+  return ensureRivalRoster(g).slice().sort(function(a,b){ return a.dorsal-b.dorsal; });
+}
+function rivalPlayerDisplayName(p){
+  return (p.name && p.name.trim()) ? p.name.trim() : ('Jugador '+p.dorsal);
 }
 
 /* ---------- derived stats (events are the single source of truth) ---------- */
@@ -1480,6 +1521,7 @@ function periodScores(g){
   var out = {};
   for(var p=1;p<=g.periodsCount;p++) out[p]={team:0,rival:0};
   g.events.forEach(function(e){
+    if(e.side!=='team' && e.side!=='rival') return; // los marcadores de quinteto (side:'meta') no puntúan
     if(!out[e.period]) out[e.period]={team:0,rival:0};
     out[e.period][e.side] += e.points;
   });
@@ -1514,6 +1556,35 @@ function playerStats(g, playerId){
     if((e.type==='2m'||e.type==='3m'||e.type==='ftm'||e.type==='rivalpts') && e.onCourtSnapshot && e.onCourtSnapshot.indexOf(playerId)!==-1){
       if(e.side==='team') st.plusMinus += e.points;
       else st.plusMinus -= e.points;
+    }
+  });
+  return st;
+}
+/* Desglose por jugadora rival -- mismo criterio que playerStats(), pero sobre
+   los eventos side:'rival' con playerId asignado. Solo existen estos eventos
+   "por tiro/acción" cuando se conoce a la jugadora que los hizo (grid de la
+   pantalla en directo, con quinteto rival elegido); el modo "Completas" sin
+   plantilla rival y el modo rápido "Solo marcador" siguen sin playerId y por
+   tanto no aparecen aquí (solo en el total plano g.rivalAgg). */
+function rivalPlayerStats(g, rivalPlayerId){
+  var st = {pts:0,fg2m:0,fg2a:0,fg3m:0,fg3a:0,ftm:0,fta:0,rebO:0,rebD:0,ast:0,stl:0,blk:0,to:0,foulC:0,foulR:0};
+  g.events.forEach(function(e){
+    if(e.side!=='rival' || e.playerId!==rivalPlayerId) return;
+    switch(e.type){
+      case '2m': st.fg2m++; st.fg2a++; st.pts+=2; break;
+      case '2x': st.fg2a++; break;
+      case '3m': st.fg3m++; st.fg3a++; st.pts+=3; break;
+      case '3x': st.fg3a++; break;
+      case 'ftm': st.ftm++; st.fta++; st.pts+=1; break;
+      case 'ftx': st.fta++; break;
+      case 'rebO': st.rebO++; break;
+      case 'rebD': st.rebD++; break;
+      case 'ast': st.ast++; break;
+      case 'stl': st.stl++; break;
+      case 'blk': st.blk++; break;
+      case 'to': st.to++; break;
+      case 'foulC': st.foulC++; break;
+      case 'foulR': st.foulR++; break;
     }
   });
   return st;
@@ -1654,11 +1725,16 @@ function pushEvent(g, ev){
 function lastActionLabel(g){
   if(!g.events.length) return 'Sin jugadas registradas todavía';
   var e = g.events[g.events.length-1];
+  if(e.type==='lineup') return (e.subKind==='sub' ? 'Cambio' : 'Quinteto confirmado') + ' — <b>'+esc(g.periodLabel)+' '+e.period+'</b>';
   var names = {'2m':'Tiro de 2 anotado (+2)','2x':'Tiro de 2 fallado','3m':'Tiro de 3 anotado (+3)','3x':'Tiro de 3 fallado',
     'ftm':'Tiro libre anotado (+1)','ftx':'Tiro libre fallado','rebO':'Rebote ofensivo','rebD':'Rebote defensivo',
     'ast':'Asistencia','stl':'Robo','blk':'Tapón','to':'Pérdida','foulC':'Falta cometida','foulR':'Falta recibida',
     'rivalpts':'Puntos del rival (+'+e.points+')'};
-  if(e.side==='rival') return '<b>Rival</b> — ' + (names[e.type]||e.type);
+  if(e.side==='rival'){
+    var rp = e.playerId ? byId(ensureRivalRoster(S.current), e.playerId) : null;
+    var rlabel = rp ? ('Nº'+rp.dorsal+' '+firstName(rivalPlayerDisplayName(rp))) : 'Rival';
+    return '<b>'+esc(rlabel)+'</b> — ' + (names[e.type]||e.type);
+  }
   var p = byId(S.current.roster, e.playerId);
   var label = 'Nº'+(p?p.dorsal:'?')+' <b>'+(p?firstName(p.name):'?')+'</b> — '+(names[e.type]||e.type);
   return label;
@@ -1669,7 +1745,8 @@ function firstName(full){ return (full||'').split(' ')[0]; }
 var EVENT_TYPE_LABELS = {
   '2m':'Tiro de 2 anotado', '2x':'Tiro de 2 fallado', '3m':'Tiro de 3 anotado', '3x':'Tiro de 3 fallado',
   'ftm':'Tiro libre anotado', 'ftx':'Tiro libre fallado', 'rebO':'Rebote ofensivo', 'rebD':'Rebote defensivo',
-  'ast':'Asistencia', 'stl':'Robo', 'blk':'Tapón', 'to':'Pérdida', 'foulC':'Falta cometida', 'foulR':'Falta recibida'
+  'ast':'Asistencia', 'stl':'Robo', 'blk':'Tapón', 'to':'Pérdida', 'foulC':'Falta cometida', 'foulR':'Falta recibida',
+  'lineup':'Quinteto confirmado'
 };
 function playRowData(e, g){
   // "g" es el partido que se está mostrando -- antes esta función siempre
@@ -1680,14 +1757,17 @@ function playRowData(e, g){
   g = g || S.current;
   var label = e.type==='rivalpts' ? 'Puntos del rival' : (EVENT_TYPE_LABELS[e.type] || e.type);
   var deltaLabel = '', deltaCls = '';
-  if(e.type==='rivalpts'){ deltaLabel = '+'+e.points; deltaCls = 'bad'; }
+  if(e.side==='rival' && e.points>0){ deltaLabel = '+'+e.points; deltaCls = 'bad'; }
   else if(e.points>0){ deltaLabel = '+'+e.points; deltaCls = 'good'; }
   if(e.assistPlayerId){
     var ap = byId(g.roster, e.assistPlayerId);
     if(ap) label += ' · asist. Nº'+ap.dorsal;
   }
   var who;
-  if(e.side==='rival') who = 'Rival';
+  if(e.side==='rival'){
+    var rp = e.playerId ? byId(ensureRivalRoster(g), e.playerId) : null;
+    who = rp ? ('Rival Nº'+rp.dorsal+' '+firstName(rivalPlayerDisplayName(rp))) : 'Rival';
+  }
   else { var p = byId(g.roster, e.playerId); who = p ? ('Nº'+p.dorsal+' '+firstName(p.name)) : '?'; }
   return { who:who, label:label, deltaLabel:deltaLabel, deltaCls:deltaCls };
 }
@@ -1717,6 +1797,30 @@ function pbpApplyRivalPoints(id, pts){
   pbpEditingId = null; pbpEditRivalId = null;
   saveState(); render();
 }
+// Fila de "quinteto" en el play-by-play -- tres variantes según subKind:
+// 'start'/'period' (empieza el partido o un sexto nuevo: se lista el quinteto
+// completo) y 'sub' (cambio a mitad de periodo: quién entra y quién sale).
+function lineupRowHtml(e, g){
+  function names(ids){
+    return (ids||[]).map(function(id2){ return byId(g.roster,id2); }).filter(Boolean)
+      .sort(function(a,b){ return a.dorsal-b.dorsal; })
+      .map(function(p){ return 'Nº'+p.dorsal+' '+firstName(p.name); }).join(', ');
+  }
+  if(e.subKind==='sub'){
+    var inStr = names(e.enteredIds), outStr = names(e.leftIds);
+    return '<div class="lineuprow sub">'+icon('swap',13)+
+      '<div><div class="lltitle">Cambio &middot; '+esc(g.periodLabel)+' '+e.period+'</div>'+
+      '<div class="llnames">'+
+      (inStr ? '<span class="llin">↑ '+esc(inStr)+'</span>' : '')+
+      (inStr && outStr ? '<br>' : '')+
+      (outStr ? '<span class="llout">↓ '+esc(outStr)+'</span>' : '')+
+      '</div></div></div>';
+  }
+  var namesStr = names(e.onCourtSnapshot) || 'Sin jugadoras en pista';
+  return '<div class="lineuprow">'+icon('users',13)+
+    '<div><div class="lltitle">Empiezan &middot; '+esc(g.periodLabel)+' '+e.period+'</div>'+
+    '<div class="llnames">'+esc(namesStr)+'</div></div></div>';
+}
 function renderPlayByPlay(g, opts){
   opts = opts || {};
   var readOnly = !!opts.readOnly;
@@ -1735,8 +1839,12 @@ function renderPlayByPlay(g, opts){
     h += '<div class="emptyplays">Sin jugadas registradas todavía</div>';
   }
   events.forEach(function(e){
+    if(e.type==='lineup'){
+      h += lineupRowHtml(e, g);
+      return;
+    }
     var d = playRowData(e, g);
-    h += '<div class="playrow">'+
+    h += '<div class="playrow'+(e.side==='rival'?' rival':'')+'">'+
       '<div class="per">'+esc(g.periodLabel.charAt(0).toUpperCase())+e.period+'</div>'+
       '<div class="who">'+esc(d.who)+'</div>'+
       '<div class="what">'+esc(d.label)+'</div>'+
@@ -1794,9 +1902,9 @@ var ROUTE_LABELS = {
   home:'Inicio', team:'Equipo', roster:'Plantilla', admin:'Admin',
   adminFbm:'Admin · Fuente FBM', adminUsuarios:'Admin · Usuarios', analytics:'Admin · Analítica',
   diag:'Diagnóstico', stats:'Estadísticas', setup:'Nuevo partido',
-  lineup:'Quinteto inicial', live:'Partido en directo', stat:'Anotar estadística',
+  lineup:'Quinteto inicial', rivalLineup:'Quinteto rival', live:'Partido en directo', stat:'Anotar estadística',
   shotzone:'Zona de tiro', assist:'Asistencia', rivalquick:'Marcador rival rápido',
-  rivalsheet:'Ficha rival', box:'Box score', minutes:'Minutos', games:'Partidos',
+  rivalsheet:'Ficha rival', rivalPlayerSheet:'Anotar estadística rival', box:'Box score', minutes:'Minutos', games:'Partidos',
   approvals:'Solicitudes de acceso', ranking:'Clasificación', mvpHistory:'Histórico MVP',
   standingsEdit:'Editar clasificación', playerRadar:'Radar de jugadora', matchPlayer:'Jugadora del partido'
 };
@@ -1909,16 +2017,49 @@ function removePlayer(pid){
   g.onCourt = g.onCourt.filter(function(id){return id!==pid;});
   saveState(); render();
 }
+/* ---- plantilla rival: solo dorsal es obligatorio; sin nombre se muestra
+   "Jugador N" (rivalPlayerDisplayName) hasta que se edite -- ver point 2 del
+   pedido original de Rober. Se puede añadir tanto desde Configuración como
+   desde "Cambios rival" en pleno partido (mismos ids de input, reutilizados
+   porque solo una de las dos pantallas está montada a la vez). */
+function addRivalPlayer(){
+  var nameInput = document.getElementById('newRivalName');
+  var dorsalInput = document.getElementById('newRivalDorsal');
+  var dorsal = parseInt(dorsalInput.value,10);
+  if(isNaN(dorsal)) return;
+  var name = (nameInput.value||'').trim();
+  var g = S.current;
+  ensureRivalRoster(g).push({id:uid(), dorsal:dorsal, name:name});
+  nameInput.value=''; dorsalInput.value='';
+  saveState(); render();
+  setTimeout(function(){ var el=document.getElementById('newRivalDorsal'); if(el) el.focus(); }, 0);
+}
+function removeRivalPlayer(pid){
+  var g=S.current;
+  g.rivalRoster = ensureRivalRoster(g).filter(function(p){return p.id!==pid;});
+  g.rivalOnCourt = ensureRivalOnCourt(g).filter(function(id){return id!==pid;});
+  saveState(); render();
+}
 function startGameFromSetup(){
   var g = S.current;
   if(!g.rivalName) g.rivalName = 'Rival';
   g.started = true;
+  liveTileView = 'team';
   saveState();
   go('lineup', {mode:'start'});
 }
 
 /* ---------- lineup ---------- */
 var MAX_ON_COURT = 5;
+// Qué grid se ve en la pantalla "en directo": el nuestro ('team', por defecto)
+// o el del rival ('rival', solo alcanzable con "Completas" + plantilla rival
+// cargada, tocando la casilla "Rival"). No es parte de la partida (g) --
+// es solo un estado de la propia pantalla, así que se reinicia a 'team' al
+// empezar un partido nuevo (startGameFromSetup) y se mantiene igual el resto
+// del tiempo para poder anotar varias jugadas rivales seguidas sin tener que
+// volver a tocar "Rival" cada vez.
+var liveTileView = 'team';
+function setLiveTileView(v){ liveTileView = v; render(); }
 function toggleOnCourt(pid){
   var g = S.current;
   var idx = g.onCourt.indexOf(pid);
@@ -1937,8 +2078,20 @@ function lineupTargetPeriod(){
   if(mode==='period') return S.routeParams.targetPeriod;
   return S.current.currentPeriod;
 }
+// Se rellena al entrar en la pantalla de Cambios (openSubs), con el quinteto
+// que había EN ESE MOMENTO -- para poder comparar "antes vs después" cuando
+// se confirme y así saber quién entra y quién sale exactamente (g.onCourt ya
+// se ha ido mutando en la propia pantalla de cambios a base de toques).
+var lineupPreSubOnCourt = null;
+function openSubs(){
+  var g = S.current;
+  if(!g) return;
+  lineupPreSubOnCourt = g.onCourt.slice();
+  go('lineup', {mode:'sub'});
+}
 function confirmLineup(){
   var g = S.current;
+  var mode = S.routeParams.mode;
   var newPeriod = lineupTargetPeriod();
   // el cronómetro se reinicia (queda en pausa a 00:00) al cambiar de sexto --
   // si se dejó corriendo por error, lo paramos aquí en vez de dejarlo sumando
@@ -1946,13 +2099,152 @@ function confirmLineup(){
   if(newPeriod !== g.currentPeriod) stopAllRunningClocks(g);
   g.currentPeriod = newPeriod;
   recordAppearance(g);
+  // Deja constancia en las jugadas de los cambios de quinteto: quién EMPIEZA
+  // cada periodo (quinteto inicial del partido, o el quinteto con el que
+  // arranca cada sexto nuevo) y también, aparte, cada CAMBIO a mitad de
+  // periodo -- quién entra y quién sale, no solo el quinteto resultante.
+  // pushEvent ya guarda ev.period=g.currentPeriod (recién actualizado arriba)
+  // y ev.onCourtSnapshot=g.onCourt.slice().
+  if(mode==='sub'){
+    var before = lineupPreSubOnCourt || [];
+    var after = g.onCourt;
+    var enteredIds = after.filter(function(id){ return before.indexOf(id)===-1; });
+    var leftIds = before.filter(function(id){ return after.indexOf(id)===-1; });
+    if(enteredIds.length || leftIds.length){
+      pushEvent(g, {side:'meta', type:'lineup', subKind:'sub', enteredIds:enteredIds, leftIds:leftIds, points:0});
+    }
+    lineupPreSubOnCourt = null;
+  } else {
+    pushEvent(g, {side:'meta', type:'lineup', subKind: (mode==='start'?'start':'period'), points:0});
+  }
   saveState();
-  go('live');
+  // Justo tras confirmar el quinteto INICIAL propio (no en cambios de periodo
+  // ni en "Cambios"), si el partido lleva "Completas" y ya se ha cargado la
+  // plantilla rival, se pide también su quinteto en pista antes de entrar a
+  // la pantalla en directo -- así se puede anotar rápido desde el principio.
+  if(mode==='start' && g.trackRivalFull && sortedRivalRoster(g).length>0){
+    go('rivalLineup', {mode:'start'});
+  } else {
+    go('live');
+  }
 }
 function lineupBack(){
   var mode = S.routeParams.mode;
   if(mode==='start') go('setup');
   else go('live');
+}
+
+/* ---- quinteto rival en pista (espejo de lo anterior, para "Completas") ---- */
+var MAX_RIVAL_ON_COURT = 5;
+function toggleRivalOnCourt(pid){
+  var g = S.current;
+  var onCourt = ensureRivalOnCourt(g);
+  var idx = onCourt.indexOf(pid);
+  if(idx!==-1){ onCourt.splice(idx,1); }
+  else{
+    if(onCourt.length>=MAX_RIVAL_ON_COURT){
+      showToast('Ya hay '+MAX_RIVAL_ON_COURT+' jugadoras rivales en pista. Quita una para añadir otra.');
+      return;
+    }
+    onCourt.push(pid);
+  }
+  saveState(); render();
+}
+function openRivalSubs(){
+  var g = S.current;
+  if(!g) return;
+  go('rivalLineup', {mode:'sub'});
+}
+function confirmRivalLineup(){
+  saveState();
+  go('live');
+}
+function rivalLineupBack(){
+  var mode = S.routeParams.mode;
+  if(mode==='start') go('lineup', {mode:'start'});
+  else go('live');
+}
+function renderRivalLineup(){
+  var g = S.current;
+  var roster = sortedRivalRoster(g);
+  var onCourt = ensureRivalOnCourt(g);
+  var onCount = onCourt.length;
+  var mode = S.routeParams.mode;
+  var h = '';
+  h += '<div class="header"><div class="header-row">'+
+        '<button class="iconbtn" onclick="rivalLineupBack()">'+icon('back',18)+'</button>'+
+        '<div class="htitles"><div class="title">'+(mode==='sub'?'Cambios rival':'Quinteto rival en pista')+'</div>'+
+        '<div class="subtitle" style="color:var(--rival)">'+esc(g.periodLabel)+' '+g.currentPeriod+'</div></div>'+
+       '</div></div>';
+  h += '<div class="helpbox riv" style="margin:18px 20px 0">Toca una jugadora rival para ponerla <b>en pista</b> (máx. '+MAX_RIVAL_ON_COURT+'). Así podrás asignarle sus estadísticas al registrar el partido.</div>';
+  h += '<div class="countline" style="padding:20px 20px 10px"><div class="label" style="margin-bottom:0">Plantilla rival</div><div class="count">'+onCount+' / '+MAX_RIVAL_ON_COURT+' en pista</div></div>';
+  h += '<div class="content" style="padding-top:0">';
+  h += '<div class="players">';
+  if(!roster.length){
+    h += '<div class="caption">Todavía no has añadido jugadoras rivales. Añade al menos una abajo para poder ponerla en pista.</div>';
+  }
+  roster.forEach(function(p){
+    var on = onCourt.indexOf(p.id)!==-1;
+    h += '<div class="prow riv'+(on?' oncourt':'')+'" onclick="toggleRivalOnCourt(\''+p.id+'\')">'+
+         '<div class="dorsal">'+p.dorsal+'</div>'+
+         '<div class="pname"><div class="nm'+(p.name?'':' ph')+'">'+esc(rivalPlayerDisplayName(p))+'</div><div class="tag">'+(on?'En pista':'Banquillo')+'</div></div>'+
+         '<button class="editbtn" onclick="event.stopPropagation();openEditRivalPlayerPopup(\''+p.id+'\')">'+icon('pencil',14)+'</button>'+
+         '<div class="pcheck riv'+(on?' on':'')+'">'+(on?icon('check',14):'')+'</div>'+
+         '</div>';
+  });
+  h += '</div>';
+  h += '<div class="addrow" style="margin-top:14px">'+
+       '<input class="dorsalinput" id="newRivalDorsal" type="number" placeholder="Dorsal" onkeydown="if(event.key===\'Enter\') document.getElementById(\'newRivalName\').focus()">'+
+       '<input id="newRivalName" type="text" style="flex:1;min-width:0" placeholder="Nombre (opcional)" onkeydown="if(event.key===\'Enter\') addRivalPlayer()">'+
+       '<button class="addbtn riv" onclick="addRivalPlayer()">'+icon('plus',18)+'</button>'+
+       '</div>';
+  h += '</div>';
+  h += '<div class="ctabar"><button class="cta riv" '+(onCount<1?'disabled':'')+' onclick="confirmRivalLineup()">Confirmar quinteto rival</button></div>';
+  return h;
+}
+var editRivalPlayerDraft = null;
+function openEditRivalPlayerPopup(id){
+  var p = byId(ensureRivalRoster(S.current), id);
+  if(!p) return;
+  editRivalPlayerDraft = { id:id, dorsal:p.dorsal, name:p.name||'' };
+  render();
+}
+function closeEditRivalPlayerPopup(){ editRivalPlayerDraft = null; render(); }
+function erPlayerField(field, value){
+  if(!editRivalPlayerDraft) return;
+  if(field==='dorsal') editRivalPlayerDraft.dorsal = value;
+  else if(field==='name') editRivalPlayerDraft.name = value;
+}
+function saveEditRivalPlayerPopup(){
+  if(!editRivalPlayerDraft) return;
+  var p = byId(ensureRivalRoster(S.current), editRivalPlayerDraft.id);
+  if(p){
+    var d = parseInt(editRivalPlayerDraft.dorsal,10);
+    if(!isNaN(d)) p.dorsal = d;
+    p.name = (editRivalPlayerDraft.name||'').trim();
+  }
+  editRivalPlayerDraft = null;
+  saveState(); render();
+}
+function confirmDeleteRivalPlayerFromEdit(id){
+  var p = byId(ensureRivalRoster(S.current), id);
+  var label = p ? (p.dorsal+' · '+rivalPlayerDisplayName(p)) : 'esta jugadora rival';
+  editRivalPlayerDraft = null;
+  askConfirm('Eliminar jugadora rival', 'Se eliminará a '+label+' de la plantilla rival. Esta acción no se puede deshacer.', 'Eliminar', function(){ removeRivalPlayer(id); });
+}
+function editRivalPlayerOverlay(){
+  if(!editRivalPlayerDraft) return '';
+  var d = editRivalPlayerDraft;
+  return '<div class="veil"><div class="modal">'+
+    '<div class="mhead"><div class="mtitle">Editar jugadora rival</div></div>'+
+    '<div class="section">'+
+      '<div class="rowcard"><div class="k">Dorsal</div><input type="number" value="'+d.dorsal+'" oninput="erPlayerField(\'dorsal\',this.value)"></div>'+
+      '<div class="rowcard"><div class="k">Nombre</div><input type="text" value="'+esc(d.name)+'" placeholder="Opcional" oninput="erPlayerField(\'name\',this.value)"></div>'+
+    '</div>'+
+    '<button class="fullbtn" onclick="saveEditRivalPlayerPopup()">Guardar cambios</button>'+
+    '<div class="cancel" onclick="closeEditRivalPlayerPopup()">Cancelar</div>'+
+    '<div class="cancel" style="margin-top:6px" onclick="confirmDeleteRivalPlayerFromEdit(\''+d.id+'\')">Eliminar jugadora</div>'+
+    '</div></div>';
 }
 
 /* ---------- live / stats ---------- */
@@ -2441,8 +2733,19 @@ function recordRivalFull(type){
     case 'to': agg.to++; break;
     case 'stl': agg.stl++; break;
   }
-  if(pts>0) pushEvent(g, {side:'rival', type:'rivalpts', playerId:null, points:pts});
-  else saveState();
+  // g.rivalAgg (arriba) sigue siendo SIEMPRE el total plano del equipo rival,
+  // se sepa o no qué jugadora concreta lo hizo -- de él sigue dependiendo la
+  // comparativa de equipos. Además, ahora se registra también como jugada
+  // individual (side:'rival', con playerId cuando se conoce, p.ej. al entrar
+  // desde una casilla del quinteto rival) para poder sacar su desglose por
+  // jugadora (rivalPlayerStats) y para que aparezca en el play-by-play igual
+  // que las jugadas propias.
+  var rpid = S.routeParams.rivalPlayerId || null;
+  pushEvent(g, {side:'rival', type:type, playerId:rpid, points:pts});
+  // Vuelve siempre a "en directo" (igual que recordTeamStat con las jugadoras
+  // propias) -- el grid se queda en la vista rival (liveTileView no cambia),
+  // así que anotar varias jugadas seguidas de la misma jugadora es solo
+  // "tocar su casilla otra vez" + la estadística.
   go('live');
 }
 function openRival(){
@@ -2827,7 +3130,8 @@ function icon(name, size){
     filter:'<path d="M4 5h16M7 12h10M10.5 19h3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
     play:'<path d="M7 4.5v15l13-7.5z" fill="currentColor"/>',
     pause:'<path d="M7 4.5h3.5v15H7zM13.5 4.5H17v15h-3.5z" fill="currentColor"/>',
-    resetClock:'<path d="M4 4v6h6M3.5 13a8.5 8.5 0 108-9.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>'
+    resetClock:'<path d="M4 4v6h6M3.5 13a8.5 8.5 0 108-9.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
+    stats:'<path d="M4 20V10M12 20V4M20 20v-7" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none">'+(icons[name]||'')+'</svg>';
 }
@@ -2839,6 +3143,11 @@ function topbarHtml(g, opts){
   // y "Empezar partido nuevo" ya se hace de forma explícita (con su propio aviso
   // de descartar) desde el "+" de la pantalla Partidos. Ahora es simplemente volver.
   var leftBtn = '<button class="iconbtn" onclick="go(\''+(opts.backTo||'games')+'\')">'+icon('back',18)+'</button>';
+  // El icono de Box Score (para consultar los totales del partido en curso, no
+  // solo al finalizarlo) solo se muestra donde tiene sentido: en la pantalla
+  // "en directo" misma, no en cada hoja de anotar/rival que ya reutiliza esta
+  // barra y donde añadiría ruido sin aportar nada nuevo.
+  var boxBtn = opts.showBox ? '<button class="iconbtn" onclick="go(\'box\',{gameId:\''+g.id+'\'})">'+icon('stats',15)+'</button>' : '';
   return ''+
   '<div class="topbar">'+
     leftBtn+
@@ -2846,7 +3155,7 @@ function topbarHtml(g, opts){
       '<div class="teams">'+esc(g.teamName)+' vs '+esc(g.rivalName||'Rival')+'</div>'+
       '<div class="score">'+teamScore(g)+' – '+rivalScore(g)+'</div>'+
     '</div>'+
-    '<button class="finish" onclick="confirmFinishGame()">Finalizar</button>'+
+    '<div style="display:flex;align-items:center;gap:6px">'+boxBtn+'<button class="finish" onclick="confirmFinishGame()">Finalizar</button></div>'+
   '</div>';
 }
 function tabsHtml(g){
@@ -2942,12 +3251,14 @@ function render(){
       case 'stats': html = renderStats(); break;
       case 'setup': html = renderSetup(); break;
       case 'lineup': html = renderLineup(); break;
+      case 'rivalLineup': html = renderRivalLineup(); break;
       case 'live': html = renderLive(); break;
       case 'stat': html = renderStat(); break;
       case 'shotzone': html = renderShotZone(); break;
       case 'assist': html = renderAssist(); break;
       case 'rivalquick': html = renderRivalQuick(); break;
       case 'rivalsheet': html = renderRivalSheet(); break;
+      case 'rivalPlayerSheet': html = renderRivalPlayerSheet(); break;
       case 'box': html = renderBox(); break;
       case 'minutes': html = renderMinutes(); break;
       case 'games': html = renderGames(); break;
@@ -2958,6 +3269,7 @@ function render(){
   html += confirmOverlay();
   html += editMatchOverlay();
   html += editPlayerOverlay();
+  html += editRivalPlayerOverlay();
   html += faseModalOverlay();
   html += teamSwitcherOverlay();
   html += seasonSwitcherOverlay();
@@ -3039,7 +3351,7 @@ function renderSetup(){
          '<button class="opt'+(!g.trackRivalFull?' on':'')+'" onclick="setRivalMode(false)">Solo marcador</button>'+
          '<button class="opt'+(g.trackRivalFull?' on':'')+'" onclick="setRivalMode(true)">Completas</button>'+
        '</div>'+
-       '<div class="caption">Con "Solo marcador" únicamente se registran los puntos del rival. Con "Completas" se anota también su tiro, rebotes, faltas, etc. como equipo (no por jugadora).</div>'+
+       '<div class="caption">Con "Solo marcador" únicamente se registran los puntos del rival. Con "Completas" se anota también su tiro, rebotes, faltas, etc. -- añade abajo su plantilla si quieres verlo por jugadora.</div>'+
        '</div>';
 
   h += '<div class="section">'+
@@ -3056,6 +3368,25 @@ function renderSetup(){
          '<button class="addbtn" onclick="addPlayer()">'+icon('plus',18)+'</button>'+
        '</div>'+
        '</div>';
+
+  if(g.trackRivalFull){
+    var rivalRoster = sortedRivalRoster(g);
+    h += '<div class="section">'+
+         '<div class="countline"><div class="label" style="margin-bottom:0;color:var(--rival)">Plantilla rival ('+rivalRoster.length+')</div></div>'+
+         '<div class="caption" style="margin-top:0;margin-bottom:10px">Añade las jugadoras del rival que vayas identificando. Si no sabes su nombre, dale solo el dorsal -- se llamará "Jugador N" hasta que lo edites (también podrás hacerlo luego, en pleno partido).</div>'+
+         '<div class="players">';
+    rivalRoster.forEach(function(p){
+      h += '<div class="prow riv"><div class="dorsal">'+p.dorsal+'</div><div class="pname"><div class="nm'+(p.name?'':' ph')+'">'+esc(rivalPlayerDisplayName(p))+'</div></div>'+
+           '<button class="rmbtn" onclick="removeRivalPlayer(\''+p.id+'\')">'+icon('trash',15)+'</button></div>';
+    });
+    h += '</div>'+
+         '<div class="addrow">'+
+           '<input class="dorsalinput" id="newRivalDorsal" type="number" placeholder="Dorsal" onkeydown="if(event.key===\'Enter\') document.getElementById(\'newRivalName\').focus()">'+
+           '<input id="newRivalName" type="text" style="flex:1;min-width:0" placeholder="Nombre (opcional)" onkeydown="if(event.key===\'Enter\') addRivalPlayer()">'+
+           '<button class="addbtn riv" onclick="addRivalPlayer()">'+icon('plus',18)+'</button>'+
+         '</div>'+
+         '</div>';
+  }
 
   h += '</div>';
   h += '<div class="ctabar"><button class="cta" '+(roster.length<1?'disabled':'')+' onclick="startGameFromSetup()">Ir al quinteto en pista</button></div>';
@@ -3107,26 +3438,54 @@ function renderGameClockWidget(g){
     '<div class="gcbtns"><button class="gcbtn'+(running?' pause':'')+'" onclick="toggleLiveClock()">'+icon(running?'pause':'play',20)+'</button></div>'+
     '</div>';
 }
+function handleRivalTileTap(){
+  var g = S.current;
+  if(!g.trackRivalFull){ openRival(); return; }
+  if(!sortedRivalRoster(g).length){ go('rivalsheet'); return; } // sin plantilla rival todavía -> modo plano de siempre
+  setLiveTileView('rival');
+}
+function openRivalPlayerSheet(pid){ go('rivalPlayerSheet', {rivalPlayerId: pid}); }
 function renderLive(){
   var g = S.current;
-  var onCourt = g.onCourt.map(function(id){return byId(g.roster,id);}).filter(Boolean).sort(function(a,b){return a.dorsal-b.dorsal;});
   var h = '';
-  h += topbarHtml(g);
+  h += topbarHtml(g, {showBox:true});
   h += tabsHtml(g);
   h += renderPlayByPlay(g);
   h += renderGameClockWidget(g);
-  h += '<div class="courtheader"><div class="label" style="margin-bottom:0">En pista · '+esc(g.periodLabel)+' '+g.currentPeriod+'</div>'+
-       '<button class="swaplink" onclick="go(\'lineup\',{mode:\'sub\'})">'+icon('swap',13)+' Cambios</button></div>';
-  h += '<div class="grid3">';
-  onCourt.forEach(function(p){
-    h += '<button class="ptile" onclick="openStatSheet(\''+p.id+'\')"><div class="num">'+p.dorsal+'</div><div class="nm">'+esc(firstName(p.name))+'</div></button>';
-  });
-  h += '<button class="ptile rival" onclick="openRival()"><div class="nm">Rival</div></button>';
-  h += '</div>';
-  h += '<div class="undobar"><button class="undo" '+(g.events.length?'':'disabled')+' onclick="undoLast()">'+icon('undo',15)+' Deshacer última acción</button></div>';
-  if(onCourt.length===0){
-    h += '<div class="empty">No hay jugadoras en pista. Ve a "Cambios" para poner el quinteto.</div>';
+  // Los tiles se quedan EXACTAMENTE donde estaban (un único grid3, debajo del
+  // cronómetro) para no quitarle protagonismo al play-by-play -- lo que
+  // cambia con "Completas" + plantilla rival es que la casilla "Rival" ya no
+  // abre una pantalla nueva: alterna el propio grid3 para mostrar el
+  // quinteto rival (con una casilla "Nuestro equipo" para volver).
+  var showRivalTiles = liveTileView==='rival' && g.trackRivalFull && sortedRivalRoster(g).length>0;
+  if(showRivalTiles){
+    var rivalOnCourt = ensureRivalOnCourt(g).map(function(id){return byId(g.rivalRoster,id);}).filter(Boolean).sort(function(a,b){return a.dorsal-b.dorsal;});
+    h += '<div class="courtheader riv"><div class="label" style="margin-bottom:0">En pista rival · '+esc(g.periodLabel)+' '+g.currentPeriod+'</div>'+
+         '<button class="swaplink riv" onclick="openRivalSubs()">'+icon('swap',13)+' Cambios rival</button></div>';
+    h += '<div class="grid3">';
+    rivalOnCourt.forEach(function(p){
+      h += '<button class="ptile rivp" onclick="openRivalPlayerSheet(\''+p.id+'\')"><div class="num">'+p.dorsal+'</div><div class="nm">'+esc(firstName(rivalPlayerDisplayName(p)))+'</div></button>';
+    });
+    h += '<button class="ptile usback" onclick="setLiveTileView(\'team\')"><div class="nm">Nuestro<br>equipo</div></button>';
+    h += '</div>';
+    if(rivalOnCourt.length===0){
+      h += '<div class="empty">No hay jugadoras rivales en pista. Ve a "Cambios rival" para ponerlas.</div>';
+    }
+  } else {
+    var onCourt = g.onCourt.map(function(id){return byId(g.roster,id);}).filter(Boolean).sort(function(a,b){return a.dorsal-b.dorsal;});
+    h += '<div class="courtheader"><div class="label" style="margin-bottom:0">En pista · '+esc(g.periodLabel)+' '+g.currentPeriod+'</div>'+
+         '<button class="swaplink" onclick="openSubs()">'+icon('swap',13)+' Cambios</button></div>';
+    h += '<div class="grid3">';
+    onCourt.forEach(function(p){
+      h += '<button class="ptile" onclick="openStatSheet(\''+p.id+'\')"><div class="num">'+p.dorsal+'</div><div class="nm">'+esc(firstName(p.name))+'</div></button>';
+    });
+    h += '<button class="ptile rival" onclick="handleRivalTileTap()"><div class="nm">Rival</div></button>';
+    h += '</div>';
+    if(onCourt.length===0){
+      h += '<div class="empty">No hay jugadoras en pista. Ve a "Cambios" para poner el quinteto.</div>';
+    }
   }
+  h += '<div class="undobar"><button class="undo" '+(g.events.length?'':'disabled')+' onclick="undoLast()">'+icon('undo',15)+' Deshacer última acción</button></div>';
   return h;
 }
 
@@ -3216,6 +3575,45 @@ function renderRivalSheet(){
   h += '<div class="content" style="padding-top:0">';
   h += '<div class="section"><div class="label">Tiro</div>'+
        rShotRow('Tiro de 2','2m','2x')+ rShotRow('Tiro de 3','3m','3x')+ rShotRow('Tiro libre','ftm','ftx')+
+       '</div>';
+  h += '<div class="section"><div class="statgrid4">'+
+       '<div class="glabel">Rebotes</div><div class="glabel">Faltas</div>'+
+       '<button class="gtile reb" onclick="recordRivalFull(\'rebO\')">Ofensivo</button>'+
+       '<button class="gtile reb" onclick="recordRivalFull(\'rebD\')">Defensivo</button>'+
+       '<button class="gtile foulc" onclick="recordRivalFull(\'foulC\')">Cometida</button>'+
+       '<button class="gtile foulr" onclick="recordRivalFull(\'foulR\')">Recibida</button>'+
+       '<button class="gtile create" onclick="recordRivalFull(\'ast\')">Asistencia</button>'+
+       '<button class="gtile create" onclick="recordRivalFull(\'blk\')">Tapón</button>'+
+       '<button class="gtile loss" onclick="recordRivalFull(\'to\')">Pérdida</button>'+
+       '<button class="gtile loss" onclick="recordRivalFull(\'stl\')">Robo</button>'+
+       '</div></div>';
+  h += '</div><div class="closebar"><button class="close" onclick="go(\'live\')">Cerrar</button></div>';
+  return h;
+
+  function rShotRow(label, madeType, missType){
+    return '<div class="shotrow"><div class="k">'+label+'</div><div class="shotbtns">'+
+      '<button class="sbtn good" onclick="recordRivalFull(\''+madeType+'\')">'+icon('check',17)+'</button>'+
+      '<button class="sbtn bad" onclick="recordRivalFull(\''+missType+'\')">'+icon('x',17)+'</button>'+
+      '</div></div>';
+  }
+}
+/* ---- ficha de una jugadora rival concreta (cuando hay quinteto rival) ----
+   Mismo patrón que renderRivalSheet, pero apuntando a S.routeParams.rivalPlayerId
+   -- recordRivalFull() lo recoge de ahí y así el evento queda atribuido a
+   ella. Deliberadamente SIN zona de tiro obligatoria ni pregunta de asistencia
+   (a diferencia de recordTeamStat): para el rival prima la velocidad. */
+function renderRivalPlayerSheet(){
+  var g = S.current;
+  var pid = S.routeParams.rivalPlayerId;
+  var p = byId(ensureRivalRoster(g), pid);
+  if(!p) return renderLive();
+  var st = rivalPlayerStats(g, pid);
+  var h = topbarHtml(g,{backTo:'live'})+tabsHtml(g)+feedHtml(g);
+  h += '<div class="pheader riv"><div class="av riv">'+p.dorsal+'</div><div><div class="nm">'+esc(rivalPlayerDisplayName(p))+' <span style="color:var(--rival);font-weight:800;font-size:11px">RIVAL</span></div>'+
+       '<div class="sub">'+st.pts+' PTS · '+(st.rebO+st.rebD)+' REB · en pista</div></div></div>';
+  h += '<div class="content" style="padding-top:0">';
+  h += '<div class="section"><div class="label">Tiro</div>'+
+       rShotRow('Tiro libre','ftm','ftx')+ rShotRow('Tiro de 2','2m','2x')+ rShotRow('Tiro de 3','3m','3x')+
        '</div>';
   h += '<div class="section"><div class="statgrid4">'+
        '<div class="glabel">Rebotes</div><div class="glabel">Faltas</div>'+
@@ -3367,6 +3765,43 @@ function renderPlayersTable(g, rows, teamTotal){
       '<td>'+rivalScore(g)+'</td></tr>';
   }
 
+  h += '</tbody></table></div>';
+  if(g.trackRivalFull && sortedRivalRoster(g).length){
+    h += renderRivalPlayersTable(g);
+  }
+  return h;
+}
+/* ---- desglose por jugadora rival (debajo de la tabla de jugadoras) ----
+   Solo aparece cuando hay plantilla rival cargada. El total de la fila
+   "rivalrow" de arriba (g.rivalAgg) sigue siendo la fuente de verdad del
+   total del equipo -- esta tabla es un desglose complementario, por jugadora,
+   a partir de los eventos side:'rival' con playerId. */
+function renderRivalPlayersTable(g){
+  var roster = sortedRivalRoster(g);
+  var cols = ['FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','PTS'];
+  var h = '<div class="tablewrap" style="margin-top:14px"><table class="stattable"><thead><tr><th class="stickycol">Jugadora rival</th>';
+  cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
+  h += '</tr></thead><tbody>';
+  function fg(m,a){ return m+'-'+a; }
+  roster.forEach(function(p){
+    var st = rivalPlayerStats(g, p.id);
+    h += '<tr>';
+    h += '<td class="stickycol"><div class="tcell-player"><span class="dorsal" style="width:22px;height:22px;font-size:11px;background:var(--surface-2);border:1px solid var(--rival);color:var(--rival)">'+p.dorsal+'</span><span>'+esc(rivalPlayerDisplayName(p))+'</span></div></td>';
+    h += '<td class="numcell">'+fg(st.fg2m+st.fg3m, st.fg2a+st.fg3a)+'</td>';
+    h += '<td class="numcell">'+fg(st.fg2m,st.fg2a)+'</td>';
+    h += '<td class="numcell">'+fg(st.fg3m,st.fg3a)+'</td>';
+    h += '<td class="numcell">'+fg(st.ftm,st.fta)+'</td>';
+    h += '<td class="numcell">'+st.rebO+'</td>';
+    h += '<td class="numcell">'+st.rebD+'</td>';
+    h += '<td class="numcell">'+(st.rebO+st.rebD)+'</td>';
+    h += '<td class="numcell">'+st.ast+'</td>';
+    h += '<td class="numcell">'+st.stl+'</td>';
+    h += '<td class="numcell">'+st.blk+'</td>';
+    h += '<td class="numcell">'+st.to+'</td>';
+    h += '<td class="numcell">'+st.foulC+'</td>';
+    h += '<td class="ptscell">'+st.pts+'</td>';
+    h += '</tr>';
+  });
   h += '</tbody></table></div>';
   return h;
 }
