@@ -168,6 +168,17 @@
   .courtheader{ display:flex; align-items:center; justify-content:space-between; padding:0 18px 10px; flex-shrink:0; }
   .swaplink{ display:flex; align-items:center; gap:5px; font-size:12px; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:0.02em; }
 
+  /* ---------- cronómetro de partido (opcional, en vivo) ---------- */
+  .gameclock{ margin:0 18px 12px; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .gameclock.on{ border-color:var(--accent); }
+  .gameclock .gcleft{ display:flex; flex-direction:column; gap:2px; }
+  .gameclock .gclabel{ font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); }
+  .gameclock .gctime{ font-family:'Oswald',sans-serif; font-size:28px; font-weight:700; letter-spacing:0.02em; font-variant-numeric:tabular-nums; }
+  .gameclock .gcreset{ font-size:10.5px; font-weight:700; color:var(--text-dim); display:flex; align-items:center; gap:4px; margin-top:2px; background:none; border:none; padding:0; }
+  .gameclock .gcbtns{ display:flex; align-items:center; gap:8px; }
+  .gameclock .gcbtn{ width:50px; height:50px; border-radius:999px; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .gameclock .gcbtn.pause{ background:var(--surface-2); color:var(--text); border:1px solid var(--border); }
+
   .livecontent{ flex:1; overflow-y:auto; padding:0 18px 18px; -webkit-overflow-scrolling:touch; }
   .grid3{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; padding:0 18px; flex-shrink:0; }
   .ptile{ aspect-ratio:1/1; background:var(--surface); border:1px solid var(--border); border-radius:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; }
@@ -619,6 +630,43 @@
   .radarlegend span{ display:flex; align-items:center; gap:6px; }
   .radarlegend .dot{ width:9px; height:9px; border-radius:999px; display:inline-block; }
   .radarlegend .dash{ width:14px; height:0; border-top:2px dashed var(--text-dim); display:inline-block; }
+
+  /* ---------- comparativas (Estadísticas -> Comparar equipos / jugadoras) ---------- */
+  .cmphead{ display:flex; align-items:center; gap:10px; padding:14px 20px 6px; }
+  .cmpavatar{ width:38px; height:38px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-family:'Oswald',sans-serif; font-weight:700; font-size:13px; flex-shrink:0; color:var(--accent-ink); }
+  .cmpteamcol{ flex:1; text-align:center; min-width:0; }
+  .cmpteamcol .nm{ font-weight:800; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cmpteamcol .sub{ font-size:9.5px; color:var(--text-dim); font-weight:700; margin-top:1px; }
+  .cmpvs{ font-family:'Oswald',sans-serif; font-weight:700; font-size:12px; color:var(--text-dim); flex-shrink:0; }
+  .h2hcard{ margin:10px 20px 4px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; }
+  .h2hcard .h2hstat{ text-align:center; flex:1; }
+  .h2hcard .h2hstat .v{ font-family:'Oswald',sans-serif; font-weight:700; font-size:16px; }
+  .h2hcard .h2hstat .k{ font-size:9px; color:var(--text-dim); font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-top:2px; }
+  .cmpwrap{ padding:10px 20px 6px; }
+  .cmprow{ margin-bottom:9px; }
+  .cmprowhead{ display:flex; align-items:center; gap:5px; justify-content:center; margin-bottom:6px; cursor:default; }
+  .cmprowhead.tap{ cursor:pointer; }
+  .cmplabel{ text-align:center; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-dim); }
+  .cmpchev{ color:var(--text-dim); display:flex; }
+  .cmpline{ display:flex; align-items:center; gap:8px; }
+  .cmpval{ font-family:'Oswald',sans-serif; font-weight:700; font-size:14px; width:44px; flex-shrink:0; }
+  .cmpval.left{ text-align:right; color:var(--accent); }
+  .cmpval.right{ text-align:left; color:var(--create); }
+  .cmptrack{ flex:1; display:flex; align-items:center; height:8px; }
+  .cmphalf{ flex:1; display:flex; height:8px; background:var(--surface-2); border-radius:999px; overflow:hidden; }
+  .cmphalf.left{ justify-content:flex-end; margin-right:2px; }
+  .cmphalf.right{ margin-left:2px; }
+  .cmpfill{ height:100%; border-radius:999px; }
+  .cmpfill.left{ background:var(--accent); }
+  .cmpfill.right{ background:var(--create); }
+  .cmpsub{ background:var(--surface-2); border-radius:10px; margin:2px 4px 12px; padding:9px 10px 1px; }
+  .cmpsub .cmprow{ margin-bottom:8px; }
+  .cmpsub .cmplabel{ font-size:9px; }
+  .cmpsub .cmpval{ font-size:12px; width:38px; }
+  .cmpsub .cmptrack{ height:6px; }
+  .cmpsub .cmphalf{ height:6px; }
+  .cmpnote{ padding:10px 22px 4px; text-align:center; font-size:11px; font-weight:600; color:var(--text-dim); line-height:1.4; }
+  .cmpfoot{ padding:6px 22px 22px; text-align:center; font-size:10.5px; font-weight:700; color:var(--text-dim); }
   .lrow{ display:flex; align-items:center; gap:12px; background:var(--surface-2); border-radius:12px; padding:10px 14px; }
   .lrow.top{ background:oklch(72% 0.18 45 / 14%); border:1px solid var(--accent); }
   .lrank{ width:20px; font-family:'Oswald',sans-serif; font-weight:700; color:var(--text-dim); font-size:14px; }
@@ -1481,7 +1529,11 @@ function minutesFor(g, playerId){
   var total=0, perPeriod={};
   for(var p=1;p<=g.periodsCount;p++){
     if(ov && ov[p]!=null){ perPeriod[p]=ov[p]; }
-    else if(g.periodAppearances[playerId] && g.periodAppearances[playerId].indexOf(p)!==-1){ perPeriod[p]=g.periodMinutes; }
+    else if(g.periodAppearances[playerId] && g.periodAppearances[playerId].indexOf(p)!==-1){
+      // si se ha usado el cronómetro (opcional) en este periodo, sus minutos
+      // sustituyen a la aproximación de "periodo completo si estuvo en pista"
+      perPeriod[p] = clockUsedForPeriod(g,p) ? clockMinutesForPeriod(g,p) : g.periodMinutes;
+    }
     else { perPeriod[p]=0; }
     total += perPeriod[p];
   }
@@ -1493,6 +1545,101 @@ function recordAppearance(g){
     if(!g.periodAppearances[pid]) g.periodAppearances[pid]=[];
     if(g.periodAppearances[pid].indexOf(p)===-1) g.periodAppearances[pid].push(p);
   });
+}
+
+/* ---------- cronómetro de partido (opcional) ----------
+   Por sexto/periodo, no obligatorio: {running, startedAt, accumulatedMs}.
+   Sobrevive a recargas/navegación porque el tiempo transcurrido siempre se
+   calcula a partir de un timestamp real (startedAt), nunca de un contador que
+   dependa de que la pantalla siga montada -- así funciona igual si el
+   entrenador navega a anotar una jugadora y vuelve más tarde. Cuando se ha
+   usado el reloj en un periodo (algo de tiempo acumulado o corriendo ahora
+   mismo), sus minutos sustituyen a la aproximación de "periodo completo si
+   estuvo en pista" solo para ESE periodo -- ver minutesFor().
+   */
+function ensurePeriodClocks(g){ if(!g.periodClocks) g.periodClocks = {}; return g.periodClocks; }
+function getPeriodClock(g, p){
+  var clocks = ensurePeriodClocks(g);
+  if(!clocks[p]) clocks[p] = {running:false, startedAt:null, accumulatedMs:0};
+  return clocks[p];
+}
+function clockElapsedMs(g, p){
+  var c = g.periodClocks && g.periodClocks[p];
+  if(!c) return 0;
+  var acc = c.accumulatedMs||0;
+  if(c.running && c.startedAt) acc += Math.max(0, Date.now()-c.startedAt);
+  return acc;
+}
+function clockUsedForPeriod(g, p){
+  var c = g.periodClocks && g.periodClocks[p];
+  return !!(c && ((c.accumulatedMs||0)>0 || c.running));
+}
+function clockMinutesForPeriod(g, p){
+  var mins = Math.round(clockElapsedMs(g,p)/60000);
+  return Math.max(0, Math.min(g.periodMinutes, mins));
+}
+function pauseClockAtMoment(c){
+  if(c.running){
+    c.accumulatedMs = (c.accumulatedMs||0) + Math.max(0, Date.now()-(c.startedAt||Date.now()));
+    c.running = false;
+    c.startedAt = null;
+  }
+}
+// Pausa cualquier reloj de otro periodo que se hubiera quedado corriendo en
+// segundo plano (por ejemplo si se cambió de sexto sin pulsar pausa antes).
+function stopAllRunningClocks(g){
+  var clocks = ensurePeriodClocks(g);
+  Object.keys(clocks).forEach(function(key){ pauseClockAtMoment(clocks[key]); });
+}
+function fmtClock(ms){
+  var total = Math.max(0, Math.floor(ms/1000));
+  var m = Math.floor(total/60), s = total%60;
+  return pad2(m)+':'+pad2(s);
+}
+function toggleLiveClock(){
+  var g = S.current;
+  if(!g) return;
+  var p = g.currentPeriod;
+  var c = getPeriodClock(g, p);
+  if(c.running){
+    pauseClockAtMoment(c);
+  } else {
+    stopAllRunningClocks(g);
+    c.running = true;
+    c.startedAt = Date.now();
+  }
+  saveState();
+  render();
+}
+function resetLiveClock(){
+  var g = S.current;
+  if(!g) return;
+  var c = getPeriodClock(g, g.currentPeriod);
+  c.running = false; c.startedAt = null; c.accumulatedMs = 0;
+  saveState(); render();
+}
+// Tick ligero: en vez de volver a llamar a render() (que recrearía todo el
+// DOM cada segundo -- carísimo y, en otras pantallas de la app, la causa de
+// bugs como el teclado cerrándose solo en un <input>), parcheamos directamente
+// el texto del cronómetro visible cada segundo mientras esté corriendo.
+var liveClockTickTimer = null;
+function stopLiveClockTick(){
+  if(liveClockTickTimer){ clearInterval(liveClockTickTimer); liveClockTickTimer = null; }
+}
+function maybeManageLiveClockTick(){
+  var g = S.current;
+  var running = g && S.route==='live' && g.periodClocks && g.periodClocks[g.currentPeriod] && g.periodClocks[g.currentPeriod].running;
+  if(!running){ stopLiveClockTick(); return; }
+  if(liveClockTickTimer) return; // ya en marcha
+  liveClockTickTimer = setInterval(function(){
+    var cg = S.current;
+    if(!cg || S.route!=='live'){ stopLiveClockTick(); return; }
+    var cc = cg.periodClocks && cg.periodClocks[cg.currentPeriod];
+    if(!cc || !cc.running){ stopLiveClockTick(); return; }
+    var el = document.getElementById('liveClockReadout');
+    if(!el){ stopLiveClockTick(); return; }
+    el.textContent = fmtClock(clockElapsedMs(cg, cg.currentPeriod));
+  }, 1000);
 }
 
 /* ---------- events ---------- */
@@ -1792,7 +1939,12 @@ function lineupTargetPeriod(){
 }
 function confirmLineup(){
   var g = S.current;
-  g.currentPeriod = lineupTargetPeriod();
+  var newPeriod = lineupTargetPeriod();
+  // el cronómetro se reinicia (queda en pausa a 00:00) al cambiar de sexto --
+  // si se dejó corriendo por error, lo paramos aquí en vez de dejarlo sumando
+  // tiempo del sexto anterior en segundo plano.
+  if(newPeriod !== g.currentPeriod) stopAllRunningClocks(g);
+  g.currentPeriod = newPeriod;
   recordAppearance(g);
   saveState();
   go('live');
@@ -2672,7 +2824,10 @@ function icon(name, size){
     users:'<path d="M17 20v-1.5a3.5 3.5 0 00-3.5-3.5h-5A3.5 3.5 0 005 18.5V20M9.5 11a3 3 0 100-6 3 3 0 000 6zM19 20v-1.5a3 3 0 00-2-2.83M15 4.2a3 3 0 010 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
     calendar:'<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M3 9h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
     star:'<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9L12 16.9l-5.2 2.9 1-5.9-4.3-4.2 5.9-.8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="currentColor"/>',
-    filter:'<path d="M4 5h16M7 12h10M10.5 19h3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>'
+    filter:'<path d="M4 5h16M7 12h10M10.5 19h3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
+    play:'<path d="M7 4.5v15l13-7.5z" fill="currentColor"/>',
+    pause:'<path d="M7 4.5h3.5v15H7zM13.5 4.5H17v15h-3.5z" fill="currentColor"/>',
+    resetClock:'<path d="M4 4v6h6M3.5 13a8.5 8.5 0 108-9.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none">'+(icons[name]||'')+'</svg>';
 }
@@ -2770,6 +2925,10 @@ function render(){
     html = renderPlayerRadarPopup();
   } else if(S.route==='matchPlayer'){
     html = renderMatchPlayerPopup();
+  } else if(S.route==='compareTeams'){
+    html = renderCompareTeamsPopup();
+  } else if(S.route==='comparePlayers'){
+    html = renderComparePlayersPopup();
   } else {
     switch(S.route){
       case 'home': html = renderHome(); break;
@@ -2819,6 +2978,7 @@ function render(){
   setupBracketZoom();
   setupHeatMaps();
   setupSwipeHeights();
+  maybeManageLiveClockTick();
 }
 
 /* ---- setup ---- */
@@ -2933,6 +3093,20 @@ function renderLineup(){
 }
 
 /* ---- live ---- */
+// Cronómetro opcional: el entrenador puede no tocarlo nunca (se queda en
+// 00:00, en pausa) sin que afecte a nada más de la app.
+function renderGameClockWidget(g){
+  var c = getPeriodClock(g, g.currentPeriod);
+  var running = !!c.running;
+  var ms = clockElapsedMs(g, g.currentPeriod);
+  return '<div class="gameclock'+(running?' on':'')+'">'+
+    '<div class="gcleft"><div class="gclabel">Tiempo · '+esc(g.periodLabel)+' '+g.currentPeriod+'</div>'+
+    '<div class="gctime" id="liveClockReadout">'+fmtClock(ms)+'</div>'+
+    (ms>0 && !running ? '<button class="gcreset" onclick="resetLiveClock()">'+icon('resetClock',11)+' Reiniciar</button>' : '')+
+    '</div>'+
+    '<div class="gcbtns"><button class="gcbtn'+(running?' pause':'')+'" onclick="toggleLiveClock()">'+icon(running?'pause':'play',20)+'</button></div>'+
+    '</div>';
+}
 function renderLive(){
   var g = S.current;
   var onCourt = g.onCourt.map(function(id){return byId(g.roster,id);}).filter(Boolean).sort(function(a,b){return a.dorsal-b.dorsal;});
@@ -2940,6 +3114,7 @@ function renderLive(){
   h += topbarHtml(g);
   h += tabsHtml(g);
   h += renderPlayByPlay(g);
+  h += renderGameClockWidget(g);
   h += '<div class="courtheader"><div class="label" style="margin-bottom:0">En pista · '+esc(g.periodLabel)+' '+g.currentPeriod+'</div>'+
        '<button class="swaplink" onclick="go(\'lineup\',{mode:\'sub\'})">'+icon('swap',13)+' Cambios</button></div>';
   h += '<div class="grid3">';
@@ -5937,6 +6112,7 @@ function renderStats(){
       '<button class="opt'+(statsViewMode==='team'?' on':'')+'" onclick="setStatsView(\'team\')">Equipo</button>'+
       '<button class="opt'+(statsViewMode==='players'?' on':'')+'" onclick="setStatsView(\'players\')">Jugador</button>'+
     '</div>'+
+    '<button class="iconbtn" onclick="'+(statsViewMode==='team'?'openCompareTeams()':'openComparePlayers()')+'">'+icon('swap',13)+'</button>'+
     '<button class="iconbtn'+(statsFiltersActive()?' active':'')+'" onclick="openStatsFilters()">'+icon('filter',13)+(statsFiltersActive()?'<div class="filterdot"></div>':'')+'</button>'+
     '</div>';
   if(statsFiltersActive()){
@@ -6323,6 +6499,326 @@ function renderPlayerRadarPopup(){
     renderPlayerTrendCard(games, me.dorsal, me.name)
   ]);
   h += renderPlayerStatLine(me);
+  h += '</div></div></div>';
+  return h;
+}
+
+/* ---------- comparativas (Estadísticas -> Comparar equipos / jugadoras) ----------
+   Comparten un mismo componente de fila (cmpRowHtml: barra doble centrada, con
+   filas desplegables opcionales para sub-desglose) y helpers de agregación. Las
+   dos pantallas viven SOLO en Estadísticas (Equipo y Jugador); Partidos/box score
+   no se toca. */
+function cmpBarPcts(l, r){
+  var total = l + r;
+  if(total<=0) return [50,50];
+  var lp = Math.round(l/total*100);
+  return [lp, 100-lp];
+}
+function pctRound(m,a){ return a>0 ? Math.round(m/a*100) : 0; }
+function avgStr(total, count){
+  if(!count) return '0.0';
+  return (total/count).toLocaleString('es-ES', {minimumFractionDigits:1, maximumFractionDigits:1});
+}
+function teamInitials(name){
+  var words = (name||'?').trim().split(/\s+/).filter(Boolean);
+  if(!words.length) return '?';
+  if(words.length===1) return words[0].slice(0,3).toUpperCase();
+  return words.slice(0,3).map(function(w){ return w[0]; }).join('').toUpperCase();
+}
+// Fila comparativa genérica: openMap/toggleFnName controlan qué filas están
+// desplegadas; subRows (si hay) son las filas de sub-desglose ya calculadas.
+function cmpRowHtml(openMap, toggleFnName, rowKey, label, leftVal, rightVal, leftPct, rightPct, subRows){
+  var expandable = !!(subRows && subRows.length);
+  var isOpen = expandable && !!openMap[rowKey];
+  var chev = expandable ? '<span class="cmpchev" style="transform:rotate('+(isOpen?180:0)+'deg)">'+icon('chevronDown',12)+'</span>' : '';
+  var headAttrs = expandable ? ' class="cmprowhead tap" onclick="'+toggleFnName+'(\''+rowKey+'\')"' : ' class="cmprowhead"';
+  var h = '<div class="cmprow"><div'+headAttrs+'><div class="cmplabel">'+esc(label)+'</div>'+chev+'</div><div class="cmpline">'+
+    '<div class="cmpval left">'+leftVal+'</div>'+
+    '<div class="cmptrack"><div class="cmphalf left"><div class="cmpfill left" style="width:'+leftPct+'%"></div></div>'+
+    '<div class="cmphalf right"><div class="cmpfill right" style="width:'+rightPct+'%"></div></div></div>'+
+    '<div class="cmpval right">'+rightVal+'</div></div>';
+  if(expandable && isOpen){
+    h += '<div class="cmpsub">';
+    subRows.forEach(function(sr){
+      h += cmpRowHtml(openMap, toggleFnName, rowKey+'-'+sr.key, sr.label, sr.left, sr.right, sr.leftPct, sr.rightPct, null);
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+/* ---- Comparar equipos ---- */
+var compareTeamRival = null;  // nombre del rival elegido, o null = el primero disponible
+var compareTeamOpen = {};     // rowKey -> bool, filas desplegadas
+function rivalNamesForCompare(games){
+  var set = {};
+  games.forEach(function(g){ if(g.rivalName) set[g.rivalName] = true; });
+  return Object.keys(set).sort(function(a,b){ return a.localeCompare(b,'es'); });
+}
+function openCompareTeams(){
+  compareTeamOpen = {};
+  var rivals = rivalNamesForCompare(filteredStatsGames());
+  if(!compareTeamRival || rivals.indexOf(compareTeamRival)===-1) compareTeamRival = rivals[0] || null;
+  go('compareTeams', {from:'stats'});
+}
+function setCompareTeamRival(name){ compareTeamRival = name; compareTeamOpen = {}; render(); }
+function toggleCompareTeamRow(key){ compareTeamOpen[key] = !compareTeamOpen[key]; render(); }
+// Nuestro lado: siempre disponible, sobre TODOS los partidos filtrados (temporada
+// completa con el filtro de arriba). Lado rival: solo los partidos contra ese rival
+// concreto, y solo suma estadísticas extendidas de los que tienen "Completas" activado
+// (rivalAgg solo se rellena en ese modo) -- los puntos sí están siempre (marcador).
+function teamSeasonAgg(games){
+  var t = {fgM:0,fgA:0,p3M:0,p3A:0,ftM:0,ftA:0,rebO:0,rebD:0,ast:0,blk:0,stl:0,to:0,foulC:0,pts:0,gp:0};
+  games.forEach(function(g){
+    var ta = teamAggregates(g,'team');
+    t.fgM+=ta.fgM; t.fgA+=ta.fgA; t.p3M+=ta.p3M; t.p3A+=ta.p3A; t.ftM+=ta.ftM; t.ftA+=ta.ftA;
+    t.rebO+=ta.rebO; t.rebD+=ta.rebD; t.ast+=ta.ast; t.blk+=ta.blk; t.stl+=ta.stl; t.to+=ta.to; t.foulC+=ta.foulC;
+    t.pts += teamScore(g); t.gp++;
+  });
+  return t;
+}
+function rivalSeasonAgg(rivalGames){
+  var t = {fgM:0,fgA:0,p3M:0,p3A:0,ftM:0,ftA:0,rebO:0,rebD:0,ast:0,blk:0,stl:0,to:0,foulC:0,pts:0,gp:0,fullGp:0};
+  rivalGames.forEach(function(g){
+    t.pts += rivalScore(g); t.gp++;
+    if(g.trackRivalFull){
+      var ra = rivalAggAsTeamShape(g);
+      t.fgM+=ra.fgM; t.fgA+=ra.fgA; t.p3M+=ra.p3M; t.p3A+=ra.p3A; t.ftM+=ra.ftM; t.ftA+=ra.ftA;
+      t.rebO+=ra.rebO; t.rebD+=ra.rebD; t.ast+=ra.ast; t.blk+=ra.blk; t.stl+=ra.stl; t.to+=ra.to; t.foulC+=ra.foulC;
+      t.fullGp++;
+    }
+  });
+  return t;
+}
+function renderCompareTeamsPopup(){
+  var games = filteredStatsGames();
+  var backTo = S.routeParams.from || 'stats';
+  var closeBtn = '<button class="iconbtn" onclick="go(\''+backTo+'\')">'+icon('x',15)+'</button>';
+  var rivals = rivalNamesForCompare(games);
+  if(!rivals.length){
+    return '<div class="veilfull"><div class="sheet">'+
+      '<div class="sheethead"><div><div class="shtitle">Comparar equipos</div></div>'+closeBtn+'</div>'+
+      '<div class="content"><div class="empty">No hay partidos con rival registrado todavía.</div></div>'+
+      '</div></div>';
+  }
+  var rival = (compareTeamRival && rivals.indexOf(compareTeamRival)!==-1) ? compareTeamRival : rivals[0];
+  compareTeamRival = rival;
+  var rivalGames = games.filter(function(g){ return g.rivalName===rival; });
+  var us = teamSeasonAgg(games), riv = rivalSeasonAgg(rivalGames);
+  var wins=0, losses=0, ties=0, diffSum=0;
+  rivalGames.forEach(function(g){
+    var ts=teamScore(g), rs=rivalScore(g);
+    if(ts>rs) wins++; else if(ts<rs) losses++; else ties++;
+    diffSum += (ts-rs);
+  });
+  var avgDiff = rivalGames.length ? diffSum/rivalGames.length : 0;
+  var ourName = games.length ? games[0].teamName : 'Nuestro equipo';
+  var h = '<div class="veilfull"><div class="sheet">';
+  h += '<div class="sheethead"><div><div class="shtitle">Comparar equipos</div><div class="shsub">'+esc(currentSeason?currentSeason.label:'')+'</div></div>'+closeBtn+'</div>';
+  h += '<div class="content">';
+  if(rivals.length>1){
+    h += '<div class="compsrow" style="padding-top:14px">'+rivals.map(function(r){
+      return '<button class="chip'+(r===rival?' on':'')+'" onclick="setCompareTeamRival(\''+esc(r).replace(/'/g,"\\'")+'\')">'+esc(r)+'</button>';
+    }).join('')+'</div>';
+  }
+  h += '<div class="h2hcard">'+
+    '<div class="h2hstat"><div class="v">'+rivalGames.length+'</div><div class="k">Enfrentamient'+(rivalGames.length===1?'o':'os')+'</div></div>'+
+    '<div class="h2hstat"><div class="v" style="color:'+(wins>=losses?'var(--good)':'var(--bad)')+'">'+wins+'V'+(ties?'-'+ties+'E':'')+'-'+losses+'D</div><div class="k">Balance</div></div>'+
+    '<div class="h2hstat"><div class="v" style="color:'+(avgDiff>=0?'var(--good)':'var(--bad)')+'">'+(avgDiff>=0?'+':'')+avgDiff.toFixed(1)+'</div><div class="k">Media de puntos</div></div>'+
+    '</div>';
+  h += '<div class="cmphead">'+
+    '<div class="cmpavatar" style="background:var(--accent)">'+esc(teamInitials(ourName))+'</div>'+
+    '<div class="cmpteamcol"><div class="nm" style="color:var(--accent)">'+esc(ourName)+'</div><div class="sub">Nuestra temporada</div></div>'+
+    '<div class="cmpvs">VS</div>'+
+    '<div class="cmpteamcol"><div class="nm" style="color:var(--create)">'+esc(rival)+'</div><div class="sub">'+(riv.fullGp ? 'Registrado en '+rivalGames.length+' partido'+(rivalGames.length===1?'':'s') : 'Solo marcador')+'</div></div>'+
+    '<div class="cmpavatar" style="background:var(--create)">'+esc(teamInitials(rival))+'</div>'+
+    '</div>';
+  h += '<div class="cmpwrap">';
+  var m = compareTeamOpen;
+  function bar(l,r){ return cmpBarPcts(l,r); }
+  var ptsB = bar(us.gp?us.pts/us.gp:0, riv.gp?riv.pts/riv.gp:0);
+  h += cmpRowHtml(m,'toggleCompareTeamRow','pts','Puntos / partido', avgStr(us.pts,us.gp), avgStr(riv.pts,riv.gp), ptsB[0], ptsB[1], null);
+  if(riv.fullGp){
+    function pctRow(key,label,usM,usA,rivM,rivA){
+      var usPct = pctRound(usM,usA), rivPct = pctRound(rivM,rivA);
+      var b = bar(usPct, rivPct);
+      var attB = bar(usA/(us.gp||1), rivA/(riv.fullGp||1));
+      var madeB = bar(usM/(us.gp||1), rivM/(riv.fullGp||1));
+      return cmpRowHtml(m,'toggleCompareTeamRow',key,label,usPct+'%',rivPct+'%',b[0],b[1],[
+        {key:'a',label:'Lanzados / partido',left:avgStr(usA,us.gp),right:avgStr(rivA,riv.fullGp),leftPct:attB[0],rightPct:attB[1]},
+        {key:'m',label:'Anotados / partido',left:avgStr(usM,us.gp),right:avgStr(rivM,riv.fullGp),leftPct:madeB[0],rightPct:madeB[1]}
+      ]);
+    }
+    function pgRow(key,label,usTotal,rivTotal){
+      var lp=us.gp?usTotal/us.gp:0, rp=riv.fullGp?rivTotal/riv.fullGp:0;
+      var b = bar(lp,rp);
+      return cmpRowHtml(m,'toggleCompareTeamRow',key,label,avgStr(usTotal,us.gp),avgStr(rivTotal,riv.fullGp),b[0],b[1],null);
+    }
+    h += pctRow('fgpct','% Tiros de campo', us.fgM,us.fgA, riv.fgM,riv.fgA);
+    h += pctRow('p3pct','% Triples', us.p3M,us.p3A, riv.p3M,riv.p3A);
+    h += pctRow('ftpct','% Tiros libres', us.ftM,us.ftA, riv.ftM,riv.ftA);
+    var usReb=us.rebO+us.rebD, rivReb=riv.rebO+riv.rebD;
+    var rebB = bar(us.gp?usReb/us.gp:0, riv.fullGp?rivReb/riv.fullGp:0);
+    var oB = bar(us.rebO/(us.gp||1), riv.rebO/(riv.fullGp||1));
+    var dB = bar(us.rebD/(us.gp||1), riv.rebD/(riv.fullGp||1));
+    h += cmpRowHtml(m,'toggleCompareTeamRow','reb','Rebotes / partido', avgStr(usReb,us.gp), avgStr(rivReb,riv.fullGp), rebB[0], rebB[1], [
+      {key:'o',label:'Ofensivos / partido',left:avgStr(us.rebO,us.gp),right:avgStr(riv.rebO,riv.fullGp),leftPct:oB[0],rightPct:oB[1]},
+      {key:'d',label:'Defensivos / partido',left:avgStr(us.rebD,us.gp),right:avgStr(riv.rebD,riv.fullGp),leftPct:dB[0],rightPct:dB[1]}
+    ]);
+    h += pgRow('ast','Asistencias / partido', us.ast, riv.ast);
+    h += pgRow('stl','Robos / partido', us.stl, riv.stl);
+    h += pgRow('blk','Tapones / partido', us.blk, riv.blk);
+    h += pgRow('to','Pérdidas / partido', us.to, riv.to);
+    h += pgRow('foulC','Faltas / partido', us.foulC, riv.foulC);
+  } else {
+    h += '<div class="cmpnote">Solo se registró el marcador de '+esc(rival)+' en '+(rivalGames.length===1?'este partido':'estos partidos')+'. Activa "Completas" al anotar al rival para comparar el resto de estadísticas.</div>';
+  }
+  h += '</div>';
+  h += '<div class="cmpfoot">Con el filtro de arriba de Estadísticas · pulsa una fila para desplegar el detalle</div>';
+  h += '</div></div></div>';
+  return h;
+}
+
+/* ---- Comparar jugadoras ---- */
+var comparePlayer1 = null, comparePlayer2 = null;  // 'dorsal|nombre'
+var comparePlayerOpen = {};
+function playerCompareList(games){
+  return aggregatePlayers(games).filter(function(a){ return a.gp>0; }).sort(function(a,b){ return a.dorsal-b.dorsal; });
+}
+function openComparePlayers(){
+  comparePlayerOpen = {};
+  var list = playerCompareList(filteredStatsGames());
+  var keys = list.map(function(a){ return a.dorsal+'|'+a.name; });
+  if(!comparePlayer1 || keys.indexOf(comparePlayer1)===-1) comparePlayer1 = keys[0] || null;
+  if(!comparePlayer2 || keys.indexOf(comparePlayer2)===-1 || comparePlayer2===comparePlayer1){
+    comparePlayer2 = keys.filter(function(k){ return k!==comparePlayer1; })[0] || null;
+  }
+  go('comparePlayers', {from:'stats'});
+}
+function setComparePlayer1(key){ comparePlayer1 = key; if(comparePlayer2===key) comparePlayer2 = null; render(); }
+function setComparePlayer2(key){ comparePlayer2 = key; if(comparePlayer1===key) comparePlayer1 = null; render(); }
+function toggleComparePlayerRow(key){ comparePlayerOpen[key] = !comparePlayerOpen[key]; render(); }
+function renderCompareRadarSVG(axes, aVals, bVals){
+  var cx=150, cy=150, R=92, n=axes.length;
+  var rings = [0.25,0.5,0.75,1];
+  var gridPolys = rings.map(function(f){
+    var pts = axes.map(function(_,i){ return radarPoint(cx,cy,R,i,n,f).join(','); }).join(' ');
+    return '<polygon points="'+pts+'" fill="none" stroke="var(--border)" stroke-width="1"/>';
+  }).join('');
+  var axisLines = axes.map(function(ax,i){
+    var p = radarPoint(cx,cy,R,i,n,1);
+    return '<line x1="'+cx+'" y1="'+cy+'" x2="'+p[0]+'" y2="'+p[1]+'" stroke="var(--border)" stroke-width="1"/>';
+  }).join('');
+  var labels = axes.map(function(ax,i){
+    var p = radarPoint(cx,cy,R+22,i,n,1);
+    var anchor = Math.abs(p[0]-cx)<4 ? 'middle' : (p[0]>cx?'start':'end');
+    return '<text x="'+p[0]+'" y="'+p[1]+'" fill="var(--text-dim)" font-size="10.5" font-weight="800" text-anchor="'+anchor+'" dominant-baseline="middle">'+ax.label+'</text>';
+  }).join('');
+  function poly(vals, color){
+    var pts = axes.map(function(ax,i){ return radarPoint(cx,cy,R,i,n,vals[i]).join(','); }).join(' ');
+    return '<polygon points="'+pts+'" fill="'+color+'" fill-opacity="0.18" stroke="'+color+'" stroke-width="2.5"/>';
+  }
+  function dots(vals, color){
+    return axes.map(function(ax,i){
+      var p = radarPoint(cx,cy,R,i,n,vals[i]);
+      return '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="3.2" fill="'+color+'"/>';
+    }).join('');
+  }
+  return '<div style="width:100%;max-width:320px;aspect-ratio:1/1;margin:6px auto">'+
+    '<svg viewBox="0 0 300 300" width="100%" height="100%" style="display:block">'+
+    gridPolys+axisLines+poly(bVals,'var(--create)')+poly(aVals,'var(--accent)')+dots(aVals,'var(--accent)')+dots(bVals,'var(--create)')+labels+'</svg></div>';
+}
+function renderComparePlayersPopup(){
+  var games = filteredStatsGames();
+  var backTo = S.routeParams.from || 'stats';
+  var closeBtn = '<button class="iconbtn" onclick="go(\''+backTo+'\')">'+icon('x',15)+'</button>';
+  var list = playerCompareList(games);
+  if(list.length<2){
+    return '<div class="veilfull"><div class="sheet">'+
+      '<div class="sheethead"><div><div class="shtitle">Comparar jugadoras</div></div>'+closeBtn+'</div>'+
+      '<div class="content"><div class="empty">Hacen falta al menos dos jugadoras con partidos jugados (con el filtro de arriba).</div></div>'+
+      '</div></div>';
+  }
+  var keys = list.map(function(a){ return a.dorsal+'|'+a.name; });
+  if(!comparePlayer1 || keys.indexOf(comparePlayer1)===-1) comparePlayer1 = keys[0];
+  if(!comparePlayer2 || keys.indexOf(comparePlayer2)===-1 || comparePlayer2===comparePlayer1){
+    comparePlayer2 = keys.filter(function(k){ return k!==comparePlayer1; })[0] || null;
+  }
+  var a = list.filter(function(x){ return (x.dorsal+'|'+x.name)===comparePlayer1; })[0];
+  var b = comparePlayer2 ? list.filter(function(x){ return (x.dorsal+'|'+x.name)===comparePlayer2; })[0] : null;
+  var h = '<div class="veilfull"><div class="sheet">';
+  h += '<div class="sheethead"><div><div class="shtitle">Comparar jugadoras</div><div class="shsub">'+esc(currentSeason?currentSeason.label:'')+'</div></div>'+closeBtn+'</div>';
+  h += '<div class="content">';
+  h += '<div class="jlabel" style="padding:14px 20px 6px">Jugadora 1</div>';
+  h += '<div class="compsrow">'+list.map(function(p){
+    var k=p.dorsal+'|'+p.name;
+    return '<button class="chip'+(k===comparePlayer1?' on':'')+'" onclick="setComparePlayer1(\''+k.replace(/'/g,"\\'")+'\')">Nº'+p.dorsal+' '+esc(firstName(p.name))+'</button>';
+  }).join('')+'</div>';
+  h += '<div class="jlabel" style="padding:2px 20px 6px">Jugadora 2</div>';
+  h += '<div class="compsrow">'+list.map(function(p){
+    var k=p.dorsal+'|'+p.name;
+    return '<button class="chip'+(k===comparePlayer2?' on':'')+'" onclick="setComparePlayer2(\''+k.replace(/'/g,"\\'")+'\')">Nº'+p.dorsal+' '+esc(firstName(p.name))+'</button>';
+  }).join('')+'</div>';
+  if(!b){
+    h += '<div class="empty">Elige una segunda jugadora distinta para comparar.</div></div></div></div>';
+    return h;
+  }
+  h += '<div class="cmphead">'+
+    '<div class="cmpavatar" style="background:var(--accent)">'+a.dorsal+'</div>'+
+    '<div class="cmpteamcol"><div class="nm" style="color:var(--accent)">'+esc(firstName(a.name))+'</div><div class="sub">'+a.gp+' partido'+(a.gp===1?'':'s')+'</div></div>'+
+    '<div class="cmpvs">VS</div>'+
+    '<div class="cmpteamcol"><div class="nm" style="color:var(--create)">'+esc(firstName(b.name))+'</div><div class="sub">'+b.gp+' partido'+(b.gp===1?'':'s')+'</div></div>'+
+    '<div class="cmpavatar" style="background:var(--create)">'+b.dorsal+'</div>'+
+    '</div>';
+  var axes = [
+    {key:'pts_pg', label:'PTS'}, {key:'to_pg', label:'PÉR'}, {key:'blk_pg', label:'TAP'},
+    {key:'stl_pg', label:'ROB'}, {key:'ast_pg', label:'AST'}, {key:'reb_pg', label:'REB'},
+    {key:'fg3pct', label:'3P%'}, {key:'fg2pct', label:'2P%'}, {key:'ftpct', label:'TL%'}
+  ];
+  var maxes = axes.map(function(ax){ return Math.max(1, a[ax.key]||0, b[ax.key]||0); });
+  var aVals = axes.map(function(ax,i){ return (a[ax.key]||0)/maxes[i]; });
+  var bVals = axes.map(function(ax,i){ return (b[ax.key]||0)/maxes[i]; });
+  h += renderCompareRadarSVG(axes, aVals, bVals);
+  h += '<div class="radarlegend"><span><i class="dot" style="background:var(--accent)"></i>'+esc(firstName(a.name))+'</span><span><i class="dot" style="background:var(--create)"></i>'+esc(firstName(b.name))+'</span></div>';
+  h += '<div class="cmpwrap">';
+  var m = comparePlayerOpen;
+  function bar(l,r){ return cmpBarPcts(l,r); }
+  function pgRow(key,label,aTotal,bTotal){
+    var lp=a.gp?aTotal/a.gp:0, rp=b.gp?bTotal/b.gp:0;
+    var bb = bar(lp,rp);
+    return cmpRowHtml(m,'toggleComparePlayerRow',key,label,avgStr(aTotal,a.gp),avgStr(bTotal,b.gp),bb[0],bb[1],null);
+  }
+  function pctRow(key,label,aM,aA,bM,bA){
+    var aPct = pctRound(aM,aA), bPct = pctRound(bM,bA);
+    var bb = bar(aPct,bPct);
+    var attB = bar(aA/(a.gp||1), bA/(b.gp||1));
+    var madeB = bar(aM/(a.gp||1), bM/(b.gp||1));
+    return cmpRowHtml(m,'toggleComparePlayerRow',key,label,aPct+'%',bPct+'%',bb[0],bb[1],[
+      {key:'a',label:'Lanzados / partido',left:avgStr(aA,a.gp),right:avgStr(bA,b.gp),leftPct:attB[0],rightPct:attB[1]},
+      {key:'m',label:'Anotados / partido',left:avgStr(aM,a.gp),right:avgStr(bM,b.gp),leftPct:madeB[0],rightPct:madeB[1]}
+    ]);
+  }
+  h += pgRow('pts','Puntos / partido', a.pts, b.pts);
+  h += pctRow('fgpct','% Tiros de campo', a.fg2m+a.fg3m, a.fg2a+a.fg3a, b.fg2m+b.fg3m, b.fg2a+b.fg3a);
+  h += pctRow('fg2pct','% Tiros de 2', a.fg2m,a.fg2a,b.fg2m,b.fg2a);
+  h += pctRow('fg3pct','% Triples', a.fg3m,a.fg3a,b.fg3m,b.fg3a);
+  h += pctRow('ftpct','% Tiros libres', a.ftm,a.fta,b.ftm,b.fta);
+  var oB = bar(a.rebO/(a.gp||1), b.rebO/(b.gp||1));
+  var dB = bar(a.rebD/(a.gp||1), b.rebD/(b.gp||1));
+  var rebB = bar(a.gp?a.reb/a.gp:0, b.gp?b.reb/b.gp:0);
+  h += cmpRowHtml(m,'toggleComparePlayerRow','reb','Rebotes / partido', avgStr(a.reb,a.gp), avgStr(b.reb,b.gp), rebB[0], rebB[1], [
+    {key:'o',label:'Ofensivos / partido',left:avgStr(a.rebO,a.gp),right:avgStr(b.rebO,b.gp),leftPct:oB[0],rightPct:oB[1]},
+    {key:'d',label:'Defensivos / partido',left:avgStr(a.rebD,a.gp),right:avgStr(b.rebD,b.gp),leftPct:dB[0],rightPct:dB[1]}
+  ]);
+  h += pgRow('ast','Asistencias / partido', a.ast, b.ast);
+  h += pgRow('stl','Robos / partido', a.stl, b.stl);
+  h += pgRow('blk','Tapones / partido', a.blk, b.blk);
+  h += pgRow('to','Pérdidas / partido', a.to, b.to);
+  h += pgRow('foulC','Faltas / partido', a.foulC, b.foulC);
+  h += pgRow('eff','Eficiencia (EFF) / partido', a.eff, b.eff);
+  h += '</div>';
+  h += '<div class="cmpfoot">Con el filtro de arriba de Estadísticas · pulsa una fila para desplegar el detalle</div>';
   h += '</div></div></div>';
   return h;
 }
