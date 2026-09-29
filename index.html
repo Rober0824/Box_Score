@@ -768,6 +768,7 @@
   .anvisitrow:last-child{ border-bottom:none; }
   .anvisitdot{ width:6px; height:6px; border-radius:999px; background:var(--accent); flex-shrink:0; }
   .anvisitname{ flex:1; min-width:0; font-size:13px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .anvisitdetail{ font-size:11.5px; color:var(--text-dim); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .anvisitmeta{ font-size:11px; color:var(--text-dim); font-weight:600; text-align:right; flex-shrink:0; }
 
   /* ---------- selector de equipo / temporada, Nueva Temporada ---------- */
@@ -1981,7 +1982,7 @@ function go(route, params){
 var ROUTE_LABELS = {
   home:'Inicio', team:'Equipo', roster:'Plantilla', admin:'Admin',
   adminFbm:'Admin · Fuente FBM', adminUsuarios:'Admin · Usuarios', analytics:'Admin · Analítica', adminNotif:'Admin · Notificaciones',
-  diag:'Diagnóstico', stats:'Estadísticas', setup:'Nuevo partido',
+  stats:'Estadísticas', setup:'Nuevo partido',
   lineup:'Quinteto inicial', rivalLineup:'Quinteto rival', live:'Partido en directo', stat:'Anotar estadística',
   shotzone:'Zona de tiro', assist:'Asistencia', rivalquick:'Marcador rival rápido',
   rivalsheet:'Ficha rival', rivalPlayerSheet:'Anotar estadística rival', box:'Box score', minutes:'Minutos', games:'Partidos',
@@ -1997,7 +1998,58 @@ function shouldTrackVisits(){
 }
 function startVisit(route){
   if(!shouldTrackVisits() || !route || AUTH_ROUTES.indexOf(route)!==-1) return;
-  currentVisit = { route: route, startedAt: Date.now(), segStart: (document.visibilityState!=='hidden' ? Date.now() : null), accumMs: 0 };
+  currentVisit = { route: route, startedAt: Date.now(), segStart: (document.visibilityState!=='hidden' ? Date.now() : null), accumMs: 0, detail: visitDetailForStart(route) };
+}
+// Detalle legible de qué se estaba mirando en pantallas donde el contenido concreto
+// se sabe ya al entrar (a través de S.routeParams, que en este momento -- justo tras
+// el go() que trae a esta pantalla -- todavía corresponde a ESTA visita). Se calcula
+// aquí y se guarda en currentVisit.detail porque, para cuando la visita termine
+// (endVisit), S.routeParams ya puede pertenecer a la SIGUIENTE pantalla.
+function visitDetailForStart(route){
+  try{
+    if(route==='box'){
+      var g = getGameById(S.routeParams.gameId);
+      return g ? ('vs '+(g.rivalName||'Rival')+' ('+shortDateLabel(g)+')') : null;
+    }
+    if(route==='minutes' || route==='matchPlayer'){
+      var g2 = getGameById(S.routeParams.gameId);
+      var p2 = g2 ? byId(g2.roster, S.routeParams.playerId) : null;
+      var parts = [];
+      if(p2 && p2.name) parts.push(firstName(p2.name));
+      if(g2) parts.push('vs '+(g2.rivalName||'Rival')+' ('+shortDateLabel(g2)+')');
+      return parts.length ? parts.join(' · ') : null;
+    }
+    if(route==='playerRadar'){
+      var key = S.routeParams.playerKey || '';
+      var name = key.split('|').slice(1).join('|');
+      return name || null;
+    }
+    if(route==='ranking'){
+      var rs = (typeof RANK_STATS!=='undefined' ? RANK_STATS : []).filter(function(r){ return r.key===S.routeParams.statKey; })[0];
+      return rs ? rs.label : null;
+    }
+  }catch(e){}
+  return null;
+}
+// Detalle para pantallas donde la selección se hace DESPUÉS de entrar, tocando chips
+// que solo actualizan una variable global y repintan (sin volver a llamar a go()) --
+// aquí sí hace falta leer el estado en el momento en que la visita termina, porque es
+// entonces cuando se sabe qué estaba eligiendo realmente la persona.
+function visitDetailForEnd(route){
+  try{
+    if(route==='comparePlayers'){
+      if(typeof comparePlayer1!=='undefined' && comparePlayer1 && comparePlayer2){
+        var n1 = comparePlayer1.split('|').slice(1).join('|');
+        var n2 = comparePlayer2.split('|').slice(1).join('|');
+        if(n1 && n2) return firstName(n1)+' vs '+firstName(n2);
+      }
+      return null;
+    }
+    if(route==='compareTeams'){
+      return (typeof compareTeamRival!=='undefined' && compareTeamRival) ? ('vs '+compareTeamRival) : null;
+    }
+  }catch(e){}
+  return null;
 }
 function pauseVisit(){
   if(!currentVisit || currentVisit.segStart==null) return;
@@ -2016,12 +2068,14 @@ function endVisit(){
   currentVisit = null;
   var seconds = Math.round(v.accumMs/1000);
   if(seconds < VISIT_MIN_SECONDS || !shouldTrackVisits()) return;
+  var detail = v.detail || visitDetailForEnd(v.route) || null;
   try{
     sb.from('screen_visits').insert({
       user_id: authUser.id,
       route: v.route,
       entered_at: new Date(v.startedAt).toISOString(),
-      duration_seconds: seconds
+      duration_seconds: seconds,
+      detail: detail
     }).then(function(){}, function(){});
   }catch(e){}
 }
@@ -3123,65 +3177,6 @@ var menuOpen = false;
 function toggleMenu(){ menuOpen = !menuOpen; render(); }
 function closeMenu(){ menuOpen=false; }
 
-/* ---------- technical diagnostics (temporary, for the bottom-nav safe-area bug) ---------- */
-function renderDiagnostics(){
-  var h = '<div class="header"><div class="header-row">'+
-    '<button class="iconbtn" onclick="go(\'team\')">'+icon('back',18)+'</button>'+
-    '<div class="htitles"><div class="title">Diagnóstico técnico</div></div></div></div>';
-  h += '<div class="content">';
-  h += '<div class="section"><div class="label">Medidas reales de tu pantalla</div>'+
-    '<pre id="diagOutput" style="white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;line-height:1.7;color:var(--text)">Calculando…</pre>'+
-    '<div class="caption" style="margin-top:10px">Haz una captura de esta pantalla (con la barra de estado visible) y envíasela a Claude.</div>'+
-    '</div>';
-  // hidden probes: reading their computed padding gives the real safe-area-inset pixel values on this device
-  h += '<div id="diagProbeTop" style="position:absolute;visibility:hidden;height:0;padding-top:env(safe-area-inset-top)"></div>';
-  h += '<div id="diagProbeBottom" style="position:absolute;visibility:hidden;height:0;padding-bottom:env(safe-area-inset-bottom)"></div>';
-  h += '</div>';
-  h += renderBottomNav('team');
-  setTimeout(fillDiagnostics, 30);
-  return h;
-}
-function fillDiagnostics(){
-  var el = document.getElementById('diagOutput');
-  if(!el) return;
-  var app = document.getElementById('app');
-  var nav = document.querySelector('.bottomnav');
-  var appRect = app ? app.getBoundingClientRect() : null;
-  var navRect = nav ? nav.getBoundingClientRect() : null;
-  var appCS = app ? getComputedStyle(app) : null;
-  var navCS = nav ? getComputedStyle(nav) : null;
-  var probeTop = document.getElementById('diagProbeTop');
-  var probeBottom = document.getElementById('diagProbeBottom');
-  var safeTop = probeTop ? getComputedStyle(probeTop).paddingTop : '?';
-  var safeBottom = probeBottom ? getComputedStyle(probeBottom).paddingBottom : '?';
-  var vv = window.visualViewport;
-  var trueBottom = vv ? vv.height : window.innerHeight;
-  var gapBelowNav = navRect ? Math.round(trueBottom - navRect.bottom) : null;
-  var gapVsScreen = navRect ? Math.round(window.screen.height - navRect.bottom) : null;
-  var lines = [
-    'standalone (app instalada): ' + (window.navigator.standalone===true),
-    'devicePixelRatio: ' + window.devicePixelRatio,
-    'screen.width x height (pantalla física): ' + window.screen.width + ' x ' + window.screen.height,
-    'screen.availWidth x availHeight: ' + window.screen.availWidth + ' x ' + window.screen.availHeight,
-    'window.innerWidth x innerHeight: ' + window.innerWidth + ' x ' + window.innerHeight,
-    'visualViewport w x h: ' + (vv ? (Math.round(vv.width)+' x '+Math.round(vv.height)) : 'n/a'),
-    'documentElement client W x H: ' + document.documentElement.clientWidth + ' x ' + document.documentElement.clientHeight,
-    '---',
-    'safe-area-inset-top (medido): ' + safeTop,
-    'safe-area-inset-bottom (medido): ' + safeBottom,
-    '---',
-    '#app top/bottom/height: ' + (appRect ? (Math.round(appRect.top)+' / '+Math.round(appRect.bottom)+' / '+Math.round(appRect.height)) : 'n/a'),
-    '#app padding-top/bottom: ' + (appCS ? (appCS.paddingTop+' / '+appCS.paddingBottom) : 'n/a'),
-    '---',
-    '.bottomnav top/bottom/height: ' + (navRect ? (Math.round(navRect.top)+' / '+Math.round(navRect.bottom)+' / '+Math.round(navRect.height)) : 'n/a'),
-    '.bottomnav padding: ' + (navCS ? navCS.padding : 'n/a'),
-    '---',
-    'HUECO vs viewport reportado: ' + (gapBelowNav!=null ? gapBelowNav+' px' : 'n/a'),
-    'HUECO vs pantalla física (screen.height): ' + (gapVsScreen!=null ? gapVsScreen+' px' : 'n/a')
-  ];
-  el.textContent = lines.join('\n');
-}
-
 /* ================= RENDER ================= */
 function icon(name, size){
   size = size||18;
@@ -3328,7 +3323,6 @@ function render(){
       case 'adminUsuarios': html = renderAdminUsuarios(); break;
       case 'adminNotif': html = renderAdminNotif(); break;
       case 'analytics': html = renderAnalytics(); break;
-      case 'diag': html = renderDiagnostics(); break;
       case 'stats': html = renderStats(); break;
       case 'setup': html = renderSetup(); break;
       case 'lineup': html = renderLineup(); break;
@@ -4431,7 +4425,6 @@ function renderTeamScreen(){
         '<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
       '</div>' : '')+
     '<button class="cta ghost" style="margin-top:10px;cursor:pointer" onclick="doLogout()">Cerrar sesión</button>'+
-    '<div class="caption" style="margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline" onclick="go(\'diag\')">Diagnóstico técnico</div>'+
     '</div>';
 
   h += '</div>';
@@ -5068,7 +5061,7 @@ async function loadAnalyticsData(){
   if(!sb || !isAdmin()) return;
   analyticsLoading = true; render();
   try{
-    var q = sb.from('screen_visits').select('user_id, route, entered_at, duration_seconds, profiles(id,name,email,role)').order('entered_at', {ascending:false});
+    var q = sb.from('screen_visits').select('user_id, route, entered_at, duration_seconds, detail, profiles(id,name,email,role)').order('entered_at', {ascending:false});
     if(analyticsRangeDays){
       var cutoff = new Date(Date.now() - analyticsRangeDays*86400000);
       q = q.gte('entered_at', cutoff.toISOString());
@@ -5086,7 +5079,7 @@ async function loadAnalyticsData(){
       byUser[uid].visitCount += 1;
       if(!byUser[uid].lastVisitAt || entered > byUser[uid].lastVisitAt) byUser[uid].lastVisitAt = entered;
       if(!visits[uid]) visits[uid] = [];
-      visits[uid].push({ route:r.route, entered_at:entered, duration_seconds:r.duration_seconds||0 });
+      visits[uid].push({ route:r.route, entered_at:entered, duration_seconds:r.duration_seconds||0, detail:r.detail||null });
     });
     analyticsUsers = Object.keys(byUser).map(function(uid){ return byUser[uid]; })
       .sort(function(a,b){ return (b.lastVisitAt?b.lastVisitAt.getTime():0) - (a.lastVisitAt?a.lastVisitAt.getTime():0); });
@@ -5210,7 +5203,10 @@ function renderAnalyticsDetail(){
       h += '<div class="andaygroup"><div class="andaylabel">'+esc(g.label)+'</div>';
       g.items.forEach(function(v){
         h += '<div class="anvisitrow"><div class="anvisitdot"></div>'+
-          '<div class="anvisitname">'+esc(routeLabel(v.route))+'</div>'+
+          '<div style="flex:1;min-width:0">'+
+            '<div class="anvisitname">'+esc(routeLabel(v.route))+'</div>'+
+            (v.detail ? '<div class="anvisitdetail">'+esc(v.detail)+'</div>' : '')+
+          '</div>'+
           '<div class="anvisitmeta">'+anFmtTime(v.entered_at)+' · '+anFmtDuration(v.duration_seconds)+'</div>'+
           '</div>';
       });
