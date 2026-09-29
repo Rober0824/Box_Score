@@ -248,13 +248,21 @@ async function scrapeStandings(browser, url, target) {
       });
     });
  
+    // OJO: NO se trata como error fatal que todavía no haya tabla de
+    // CLASIFICACIÓN -- eso es justo lo que pasa al principio de una
+    // temporada/fase, antes de que se juegue nada: la FBM ya tiene publicado
+    // el CALENDARIO pero la clasificación no existe todavía porque no hay
+    // resultados que puntuar. Si lanzáramos un error aquí, nunca llegaríamos
+    // a intentar leer el calendario -- que es justo lo único que sí hay. Se
+    // deja standings=[] (writeStandings ya lo trata como "nada que guardar
+    // todavía" más abajo) y se sigue con el calendario de todas formas.
     if (!rows || !rows.length) {
-      throw new Error('Found the filters but no CLASIFICACIÓN table/rows on the page. The FBM site may have changed its markup.');
+      console.warn('No se ha encontrado todavía una tabla de CLASIFICACIÓN con filas (normal si la fase aún no ha empezado a jugarse) -- se sigue con el calendario.');
     }
  
     const calendar = await scrapeCalendarFromPage(page);
  
-    return { standings: rows, calendar };
+    return { standings: rows || [], calendar };
   } finally {
     await page.close();
   }
@@ -350,6 +358,13 @@ async function scrapeCalendarFromPage(page) {
 }
  
 async function writeStandings(rows, ownTeamName, seasonId, faseId) {
+  if (!rows.length) {
+    // Todavía no hay clasificación publicada para esta fase (normal antes de
+    // que se juegue nada) -- se deja lo que ya hubiera tal cual, igual que
+    // hace writeCalendar, en vez de borrarlo por una lectura vacía puntual.
+    console.warn('No hay filas de clasificación que guardar para esta fase todavía -- se deja lo que ya hubiera en Supabase tal cual.');
+    return;
+  }
   const ownNormalized = normalize(ownTeamName);
   const payload = rows.map(r => ({
     position: r.position,
