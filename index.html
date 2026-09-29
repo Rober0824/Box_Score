@@ -580,6 +580,8 @@
   .calscroll::-webkit-scrollbar-thumb{ background:var(--border); border-radius:999px; }
   .calfade{ position:relative; }
   .calfade::after{ content:''; position:absolute; left:0; right:6px; bottom:0; height:22px; background:linear-gradient(to bottom, transparent, var(--bg)); pointer-events:none; border-radius:0 0 14px 14px; }
+  .caljornadahint{ display:flex; align-items:center; justify-content:center; gap:6px; font-size:10.5px; color:var(--text-dim); font-weight:600; margin-top:10px; opacity:0.8; }
+  .caljornadahint svg{ flex-shrink:0; }
 
   /* ---- clasificación manual (editor) ---- */
   .teamcard{ background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
@@ -5508,6 +5510,83 @@ function renderCalendarTable(rows){
   return '<div class="calfade"><div class="calscroll">'+list+'</div></div>';
 }
 
+// Lista ordenada de números de jornada presentes en el calendario de una fase.
+function calJornadaNums(rows){
+  var seen = {};
+  var nums = [];
+  rows.forEach(function(m){
+    var j = m.jornada||0;
+    if(!seen[j]){ seen[j]=true; nums.push(j); }
+  });
+  nums.sort(function(a,b){ return a-b; });
+  return nums;
+}
+// Qué jornada se abre por defecto: mientras no se haya jugado ninguna, la
+// primera. En cuanto se juega una, se sigue mostrando esa (para poder ver el
+// resultado) hasta el martes siguiente a su fecha -- a partir de ese martes,
+// salta sola a la próxima jornada por jugar. Se usa el partido del propio
+// equipo de cada jornada como referencia (siempre hay uno, al ser liga
+// regular); si por lo que sea no estuviera, se usa el primer partido de esa
+// jornada.
+function defaultJornadaForCalendar(rows){
+  var nums = calJornadaNums(rows);
+  if(!nums.length) return null;
+  var byJornada = {};
+  rows.forEach(function(m){ (byJornada[m.jornada]=byJornada[m.jornada]||[]).push(m); });
+  function refMatch(j){
+    var own = byJornada[j].filter(function(m){ return m.is_own_match; });
+    return own.length ? own[0] : byJornada[j][0];
+  }
+  var lastPlayed = 0;
+  nums.forEach(function(j){
+    var ref = refMatch(j);
+    if(ref.score_local!=null && ref.score_visitante!=null) lastPlayed = j;
+  });
+  if(lastPlayed===0) return nums[0];
+  var nextJ = nums.filter(function(j){ return j>lastPlayed; })[0];
+  if(!nextJ) return lastPlayed; // era la última jornada -- no hay "siguiente"
+  var playedDate = new Date(refMatch(lastPlayed).fecha+'T00:00:00');
+  if(isNaN(playedDate.getTime())) return nextJ;
+  var tuesday = new Date(playedDate);
+  tuesday.setDate(tuesday.getDate()+1);
+  while(tuesday.getDay()!==2){ tuesday.setDate(tuesday.getDate()+1); } // 2 = martes
+  var today = new Date(); today.setHours(0,0,0,0);
+  return (today >= tuesday) ? nextJ : lastPlayed;
+}
+// Chips "Jornada N" + carrusel deslizable (reutiliza el mismo mecanismo de
+// arrastre táctil que el resto de carruseles de la app -- swSwipeStart/Move/End
+// y swipeState -- solo que sin la cabecera de puntos, porque aquí las chips ya
+// hacen de selector). swipeState['cal-'+faseId] se recuerda por fase, igual
+// que faseViewMode, así que cambiar de fase no resetea en qué jornada estabas.
+function renderCalendarJornadas(faseId, calRows){
+  var nums = calJornadaNums(calRows);
+  var cid = 'cal-'+faseId;
+  if(swipeState[cid]==null){
+    var defJ = defaultJornadaForCalendar(calRows);
+    var defIdx = nums.indexOf(defJ);
+    swipeState[cid] = defIdx===-1 ? 0 : defIdx;
+  }
+  var page = getSwipePage(cid, nums.length);
+  var selJornada = nums[page];
+  var h = '<div class="chipswrap"><div class="fasechips">';
+  nums.forEach(function(j,i){
+    h += '<div class="chip'+(j===selJornada?' on':'')+'" onclick="setSwipePage(\''+cid+'\','+i+')">Jornada '+j+'</div>';
+  });
+  h += '</div><div class="fadeedge"></div></div>';
+  var stepPct = 100/nums.length;
+  h += '<div class="swipeviewport" ontouchstart="swSwipeStart(event,\''+cid+'\','+nums.length+')" ontouchmove="swSwipeMove(event)" ontouchend="swSwipeEnd()" ontouchcancel="swSwipeEnd()">';
+  h += '<div class="swipetrack" id="swTrack-'+cid+'" style="width:'+(nums.length*100)+'%;transform:translateX(-'+(page*stepPct)+'%)">';
+  nums.forEach(function(j){
+    var rowsForJ = calRows.filter(function(m){ return m.jornada===j; });
+    h += '<div class="swipepage" style="width:'+stepPct+'%">'+renderCalendarTable(rowsForJ)+'</div>';
+  });
+  h += '</div></div>';
+  if(nums.length>1){
+    h += '<div class="caljornadahint">'+icon('back',13)+'Desliza para cambiar de jornada'+icon('chevronRight',13)+'</div>';
+  }
+  return h;
+}
+
 /* ---------- Editor de clasificación manual (por fase) ---------- */
 var manualClasifOpen = false;
 var manualClasifFaseId = null;
@@ -6293,7 +6372,7 @@ function renderHome(){
     if(!calRows.length){
       h += '<div class="empty" style="padding:20px">Todavía no se ha publicado el calendario de esta fase.</div>';
     } else {
-      h += renderCalendarTable(calRows);
+      h += renderCalendarJornadas(selFase.id, calRows);
     }
   } else {
     // Con menos de 2 fases configuradas, se mantiene el comportamiento de
