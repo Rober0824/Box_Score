@@ -560,6 +560,15 @@
   .st-val{ width:28px; text-align:center; color:var(--text-dim); font-weight:600; font-size:11px; }
   .st-pts{ width:30px; text-align:center; font-family:'Oswald',sans-serif; font-weight:700; color:var(--text); }
 
+  /* ---- calendario (Inicio -> Clasificación, interruptor por fase) ---- */
+  .calrow{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .calrow + .calrow{ margin-top:8px; }
+  .calrow.own{ border-color:var(--accent); background:oklch(72% 0.18 45 / 8%); }
+  .calrow .cname{ font-weight:800; font-size:13px; line-height:1.35; }
+  .calrow .cdate{ font-size:10.5px; color:var(--text-dim); font-weight:600; margin-top:3px; }
+  .calrow .cscore{ font-family:'Oswald',sans-serif; font-size:16px; font-weight:700; white-space:nowrap; flex-shrink:0; }
+  .calrow .cscore.pending{ font-size:11px; font-family:'Manrope',sans-serif; font-weight:700; color:var(--text-dim); }
+
   /* ---- clasificación manual (editor) ---- */
   .teamcard{ background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
   .teamhead{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
@@ -924,6 +933,13 @@ var authError = '';
 var clubSettings = { team_name:'', category:'', logo_url:'', photo_url:'', fbm_url:'', fbm_fases:[] };
 var selectedFaseId = null;
 var standings = [];
+var calendarEntries = [];
+// Interruptor Clasificación/Calendario de Inicio: se recuerda de forma
+// independiente por cada fase (clave = fase.id), para que cambiar de fase no
+// resetee lo que estabas viendo en la otra. Solo aplica a fases de liga (auto
+// o manual-clasificación); las fases en modo bracket no lo usan todavía.
+var faseViewMode = {};
+function selectFaseView(faseId, view){ faseViewMode[faseId] = view; render(); }
 var teamRoster = [];
 var cloudSaveTimer = null;
 var assetUploadBusy = false;
@@ -1214,11 +1230,15 @@ function canWriteCurrentSeason(){
 }
 
 async function loadSeasonScopedData(){
-  if(!sb || !currentSeasonId){ standings=[]; teamRoster=[]; S.games=[]; S.current=null; render(); return; }
+  if(!sb || !currentSeasonId){ standings=[]; calendarEntries=[]; teamRoster=[]; S.games=[]; S.current=null; render(); return; }
   try{
     var st = await sb.from('standings_entries').select('*').eq('season_id', currentSeasonId).order('position',{ascending:true});
     standings = (st && st.data) || [];
   }catch(e){ standings = []; }
+  try{
+    var ce = await sb.from('calendar_entries').select('*').eq('season_id', currentSeasonId).order('fecha',{ascending:true});
+    calendarEntries = (ce && ce.data) || [];
+  }catch(e){ calendarEntries = []; }
   try{
     var pl = await sb.from('players').select('*').eq('season_id', currentSeasonId).eq('active',true).order('dorsal',{ascending:true});
     teamRoster = (pl && pl.data) || [];
@@ -5432,6 +5452,50 @@ function renderStandingsTable(rows){
   return h;
 }
 
+/* ---------------------------------------------------------------------
+   Calendario (Inicio -> Clasificación, interruptor por fase). Solo para
+   fases de liga (auto o manual-clasificación) -- las fases en modo bracket
+   no tienen calendario todavía. Los datos vienen de calendar_entries,
+   escritos por el mismo robot de la FBM que ya rellena standings_entries
+   (ver scrape-standings.mjs), agrupados por fase_id igual que la
+   clasificación.
+   --------------------------------------------------------------------- */
+function calendarForFase(faseId){
+  if(!faseId) return [];
+  return calendarEntries.filter(function(r){ return r.fase_id===faseId; });
+}
+function fmtCalFecha(iso){
+  if(!iso) return '';
+  var d = new Date(iso+'T00:00:00');
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('es-ES');
+}
+function renderCalendarTable(rows){
+  var byJornada = {};
+  var order = [];
+  rows.forEach(function(m){
+    var j = m.jornada||0;
+    if(!byJornada[j]){ byJornada[j]=[]; order.push(j); }
+    byJornada[j].push(m);
+  });
+  order.sort(function(a,b){ return a-b; });
+  var h = '';
+  order.forEach(function(j){
+    var matches = byJornada[j];
+    h += '<div style="margin-bottom:12px"><div class="jlabel" style="margin-bottom:6px">Jornada '+j+' &middot; '+esc(fmtCalFecha(matches[0].fecha))+'</div>';
+    matches.forEach(function(m){
+      var played = m.score_local!=null && m.score_visitante!=null;
+      h += '<div class="calrow'+(m.is_own_match?' own':'')+'">'+
+        '<div style="min-width:0"><div class="cname">'+esc(m.local)+' &ndash; '+esc(m.visitante)+'</div>'+
+        '<div class="cdate">'+(played?'Jugado':(esc(m.hora||'')+(m.hora?' &middot; ':'')+'por jugar'))+'</div></div>'+
+        '<div class="cscore'+(played?'':' pending')+'">'+(played?(m.score_local+' &ndash; '+m.score_visitante):'vs')+'</div>'+
+        '</div>';
+    });
+    h += '</div>';
+  });
+  return h;
+}
+
 /* ---------- Editor de clasificación manual (por fase) ---------- */
 var manualClasifOpen = false;
 var manualClasifFaseId = null;
@@ -6178,14 +6242,24 @@ function renderHome(){
   var faseManualTipo = selFase ? (selFase.manualTipo||'clasificacion') : 'clasificacion';
   var modoTagLabel = faseModo==='manual' ? (faseManualTipo==='bracket' ? 'Bracket' : 'Clasificación manual') : 'Actualizada automáticamente';
   var showBracketPencil = faseModo==='manual' && faseManualTipo==='bracket' && selFase && selFase.bracket && (selFase.bracket.teams||[]).length;
+  // El interruptor Clasificación/Calendario solo existe para fases de liga
+  // (auto o manual-clasificación) con una fase real seleccionada -- las fases
+  // en modo bracket todavía no tienen calendario. Cada fase recuerda su
+  // propia vista (faseViewMode), así que cambiar de chip de fase no resetea
+  // lo que tenías abierto en otra.
+  var isBracketFase = faseModo==='manual' && faseManualTipo==='bracket';
+  var showCalToggle = !!selFase && !isBracketFase;
+  var curView = showCalToggle ? (faseViewMode[selFase.id] || 'clasificacion') : 'clasificacion';
+  var sectionTitle = (showCalToggle && curView==='calendario') ? 'Calendario' : 'Clasificación';
 
   h += '<div class="section"><div class="label" style="display:flex;align-items:center;justify-content:space-between">'+
-    '<span>Clasificación <span class="upd">'+esc(modoTagLabel)+'</span></span>'+
-    (faseModo==='manual'
-      ? (faseManualTipo==='bracket'
-          ? (showBracketPencil ? '<button class="iconbtn" style="width:26px;height:26px" onclick="openBracketTeamsEdit(\''+selFase.id+'\')">'+icon('pencil',13)+'</button>' : '')
-          : '<button class="iconbtn" style="width:26px;height:26px" onclick="openManualClasifEditor(\''+(selFase?selFase.id:'')+'\')">'+icon('pencil',13)+'</button>')
-      : '<button class="iconbtn" style="width:26px;height:26px" onclick="openStandingsEditor()">'+icon('pencil',13)+'</button>')+
+    '<span>'+sectionTitle+' <span class="upd">'+esc(modoTagLabel)+'</span></span>'+
+    ((showCalToggle && curView==='calendario') ? ''
+      : (faseModo==='manual'
+        ? (faseManualTipo==='bracket'
+            ? (showBracketPencil ? '<button class="iconbtn" style="width:26px;height:26px" onclick="openBracketTeamsEdit(\''+selFase.id+'\')">'+icon('pencil',13)+'</button>' : '')
+            : '<button class="iconbtn" style="width:26px;height:26px" onclick="openManualClasifEditor(\''+(selFase?selFase.id:'')+'\')">'+icon('pencil',13)+'</button>')
+        : '<button class="iconbtn" style="width:26px;height:26px" onclick="openStandingsEditor()">'+icon('pencil',13)+'</button>'))+
     '</div>';
   if(fasesForChips.length >= 2){
     h += '<div class="chipswrap"><div class="fasechips">';
@@ -6194,8 +6268,21 @@ function renderHome(){
     });
     h += '</div><div class="fadeedge"></div></div>';
   }
-  if(faseModo==='manual' && faseManualTipo==='bracket'){
+  if(showCalToggle){
+    h += '<div class="seg2" style="margin-bottom:10px">'+
+      '<button class="opt'+(curView==='clasificacion'?' on':'')+'" onclick="selectFaseView(\''+selFase.id+'\',\'clasificacion\')">Clasificación</button>'+
+      '<button class="opt'+(curView==='calendario'?' on':'')+'" onclick="selectFaseView(\''+selFase.id+'\',\'calendario\')">Calendario</button>'+
+      '</div>';
+  }
+  if(isBracketFase){
     h += renderBracketBlock(selFase);
+  } else if(curView==='calendario'){
+    var calRows = calendarForFase(selFase.id);
+    if(!calRows.length){
+      h += '<div class="empty" style="padding:20px">Todavía no se ha publicado el calendario de esta fase.</div>';
+    } else {
+      h += renderCalendarTable(calRows);
+    }
   } else {
     // Con menos de 2 fases configuradas, se mantiene el comportamiento de
     // siempre para el modo automático (sin filtrar por fase_id -- por si algún
