@@ -568,6 +568,18 @@
   .calrow .cdate{ font-size:10.5px; color:var(--text-dim); font-weight:600; margin-top:3px; }
   .calrow .cscore{ font-family:'Oswald',sans-serif; font-size:16px; font-weight:700; white-space:nowrap; flex-shrink:0; }
   .calrow .cscore.pending{ font-size:11px; font-family:'Manrope',sans-serif; font-weight:700; color:var(--text-dim); }
+  /* Encabezados "Jornada N" del calendario en naranja para que se distingan
+     mejor -- solo en el calendario (el .jlabel normal, gris, se sigue usando
+     tal cual en Partidos y en el comparador de jugadoras). */
+  .caljlabel{ color:var(--accent); }
+  /* Caja con scroll propio para no alargar el resto de Inicio con las 10
+     jornadas seguidas -- desvanecido abajo para dar a entender que hay más. */
+  .calscroll{ max-height:380px; overflow-y:auto; padding-right:6px; margin-right:-6px; scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+  .calscroll::-webkit-scrollbar{ width:5px; }
+  .calscroll::-webkit-scrollbar-track{ background:transparent; }
+  .calscroll::-webkit-scrollbar-thumb{ background:var(--border); border-radius:999px; }
+  .calfade{ position:relative; }
+  .calfade::after{ content:''; position:absolute; left:0; right:6px; bottom:0; height:22px; background:linear-gradient(to bottom, transparent, var(--bg)); pointer-events:none; border-radius:0 0 14px 14px; }
 
   /* ---- clasificación manual (editor) ---- */
   .teamcard{ background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
@@ -5479,21 +5491,21 @@ function renderCalendarTable(rows){
     byJornada[j].push(m);
   });
   order.sort(function(a,b){ return a-b; });
-  var h = '';
+  var list = '';
   order.forEach(function(j){
     var matches = byJornada[j];
-    h += '<div style="margin-bottom:12px"><div class="jlabel" style="margin-bottom:6px">Jornada '+j+' &middot; '+esc(fmtCalFecha(matches[0].fecha))+'</div>';
+    list += '<div style="margin-bottom:12px"><div class="jlabel caljlabel" style="margin-bottom:6px">Jornada '+j+' &middot; '+esc(fmtCalFecha(matches[0].fecha))+'</div>';
     matches.forEach(function(m){
       var played = m.score_local!=null && m.score_visitante!=null;
-      h += '<div class="calrow'+(m.is_own_match?' own':'')+'">'+
+      list += '<div class="calrow'+(m.is_own_match?' own':'')+'">'+
         '<div style="min-width:0"><div class="cname">'+esc(m.local)+' &ndash; '+esc(m.visitante)+'</div>'+
         '<div class="cdate">'+(played?'Jugado':(esc(m.hora||'')+(m.hora?' &middot; ':'')+'por jugar'))+'</div></div>'+
         '<div class="cscore'+(played?'':' pending')+'">'+(played?(m.score_local+' &ndash; '+m.score_visitante):'vs')+'</div>'+
         '</div>';
     });
-    h += '</div>';
+    list += '</div>';
   });
-  return h;
+  return '<div class="calfade"><div class="calscroll">'+list+'</div></div>';
 }
 
 /* ---------- Editor de clasificación manual (por fase) ---------- */
@@ -6261,7 +6273,7 @@ function renderHome(){
             : '<button class="iconbtn" style="width:26px;height:26px" onclick="openManualClasifEditor(\''+(selFase?selFase.id:'')+'\')">'+icon('pencil',13)+'</button>')
         : '<button class="iconbtn" style="width:26px;height:26px" onclick="openStandingsEditor()">'+icon('pencil',13)+'</button>'))+
     '</div>';
-  if(fasesForChips.length >= 2){
+  if(fasesForChips.length >= 1){
     h += '<div class="chipswrap"><div class="fasechips">';
     fasesForChips.forEach(function(f){
       h += '<div class="chip'+(f.id===selectedFaseId?' on':'')+'" onclick="selectFase(\''+f.id+'\')">'+esc(f.label||'Fase')+'</div>';
