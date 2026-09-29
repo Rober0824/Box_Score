@@ -75,6 +75,9 @@
   .fasechips .chip{ white-space:nowrap; flex-shrink:0; }
   .fadeedge{ position:absolute; top:0; right:0; bottom:2px; width:36px; background:linear-gradient(to right, transparent, var(--bg)); pointer-events:none; }
 
+  .jchipswrap .fasechips{ gap:6px; }
+  .jchipswrap .chip{ padding:6px 10px; font-size:11px; border-radius:8px; }
+
   .navrow{ display:flex; align-items:center; justify-content:space-between; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px; gap:10px; }
   .navrow .navlabel{ font-weight:700; font-size:14px; color:var(--text); }
   .navrow .navsub{ font-size:11.5px; color:var(--text-dim); margin-top:2px; }
@@ -5568,9 +5571,9 @@ function renderCalendarJornadas(faseId, calRows){
   }
   var page = getSwipePage(cid, nums.length);
   var selJornada = nums[page];
-  var h = '<div class="chipswrap"><div class="fasechips">';
+  var h = '<div class="chipswrap jchipswrap" id="jchips-'+cid+'"><div class="fasechips">';
   nums.forEach(function(j,i){
-    h += '<div class="chip'+(j===selJornada?' on':'')+'" onclick="setSwipePage(\''+cid+'\','+i+')">Jornada '+j+'</div>';
+    h += '<div class="chip'+(j===selJornada?' on':'')+'" onclick="setJornadaPage(\''+cid+'\','+i+')">Jornada '+j+'</div>';
   });
   h += '</div><div class="fadeedge"></div></div>';
   var stepPct = 100/nums.length;
@@ -6382,7 +6385,7 @@ function renderHome(){
     var rowsForFase = (faseModo==='auto' && fasesForChips.length<2) ? standings : standingsForFase(selFase?selFase.id:null);
     var shownStandings = faseModo==='manual' ? sortedStandingsForDisplay(rowsForFase) : rowsForFase;
     if(!shownStandings.length){
-      h += '<div class="empty" style="padding:20px">'+(faseModo==='manual' ? 'Todavía no has añadido ningún equipo. Toca el lápiz para empezar.' : 'Todavía no has añadido la clasificación.')+'</div>';
+      h += '<div class="empty" style="padding:20px">'+(faseModo==='manual' ? 'Todavía no has añadido ningún equipo. Toca el lápiz para empezar.' : 'Todavía no hay ninguna clasificación.')+'</div>';
     } else {
       h += renderStandingsTable(shownStandings);
     }
@@ -7033,6 +7036,19 @@ function getSwipePage(cid, count){
   return Math.max(0, Math.min(count-1, p));
 }
 function setSwipePage(cid, i){ swipeState[cid] = i; render(); }
+// Chips de jornada: además de cambiar de página, hay que asegurarse de que la
+// chip seleccionada quede visible dentro de su fila con scroll horizontal
+// (si no, al pinchar "Jornada 7" la fila se queda igual y parece que sigue en
+// Jornada 1). Cada fila de chips de jornada tiene su propio id ("jchips-"+cid),
+// así que esto nunca toca otras filas de chips (fases, meses, filtros...).
+function scrollJornadaChipIntoView(cid){
+  try{
+    var wrap = document.getElementById('jchips-'+cid);
+    var on = wrap && wrap.querySelector('.chip.on');
+    if(on) on.scrollIntoView({ inline:'center', block:'nearest' });
+  }catch(e){}
+}
+function setJornadaPage(cid, i){ swipeState[cid] = i; render(); scrollJornadaChipIntoView(cid); }
 function swipeCarouselHtml(cid, pages){
   // pages: [{title, hint?, content: htmlString}, ...] en orden. El título (y
   // el hint, si lo hay) de la página actual se muestran en una cabecera fija
@@ -7098,6 +7114,7 @@ function swSwipeEnd(){
     else if(swDeltaX > threshold && page > 0) page--;
     swipeState[swActiveId] = page;
     render();
+    scrollJornadaChipIntoView(swActiveId);
   }
   swDeltaX = 0; swAxis = null;
 }
