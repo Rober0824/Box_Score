@@ -1608,9 +1608,14 @@ function periodScores(g){
   });
   return out;
 }
-function playerStats(g, playerId){
+// periods: array opcional de nº de periodo (p.ej. el filtro de la pantalla de
+// box score) -- si se pasa, solo se cuentan los eventos de esos periodos; sin
+// él (uso normal en el resto de la app: temporada, resumen del partido...) se
+// cuenta el partido completo, igual que antes.
+function playerStats(g, playerId, periods){
   var st = {pts:0,fg2m:0,fg2a:0,fg3m:0,fg3a:0,ftm:0,fta:0,rebO:0,rebD:0,ast:0,stl:0,blk:0,to:0,foulC:0,foulR:0,plusMinus:0};
   g.events.forEach(function(e){
+    if(periods && periods.indexOf(e.period)===-1) return;
     if(e.side==='team' && e.playerId===playerId){
       switch(e.type){
         case '2m': st.fg2m++; st.fg2a++; st.pts+=2; break;
@@ -1634,6 +1639,7 @@ function playerStats(g, playerId){
   });
   // plus/minus: for every scoring event (team or rival) while this player was on court
   g.events.forEach(function(e){
+    if(periods && periods.indexOf(e.period)===-1) return;
     if((e.type==='2m'||e.type==='3m'||e.type==='ftm'||e.type==='rivalpts') && e.onCourtSnapshot && e.onCourtSnapshot.indexOf(playerId)!==-1){
       if(e.side==='team') st.plusMinus += e.points;
       else st.plusMinus -= e.points;
@@ -3717,11 +3723,15 @@ function renderBox(){
   var gid = S.routeParams.gameId || (S.current && S.current.id);
   var g = getGameById(gid);
   if(!g) return renderGames();
+  // filtro de periodo (chips de arriba): se calcula una vez y se usa tanto en
+  // la vista "Equipo" como en "Jugadores", para que las dos respeten el mismo filtro.
+  var boxPeriods = (g.finished && ensureBoxPeriodFilter(g.id).length) ? ensureBoxPeriodFilter(g.id) : null;
   var roster = g.roster.slice();
   var rows = roster.map(function(p){
-    var st = playerStats(g,p.id);
+    var st = playerStats(g,p.id,boxPeriods);
     var mf = minutesFor(g,p.id);
-    return {p:p, st:st, eff:eff(st), min:mf.total};
+    var minVal = boxPeriods ? boxPeriods.reduce(function(s,per){ return s+(mf.perPeriod[per]||0); }, 0) : mf.total;
+    return {p:p, st:st, eff:eff(st), min:minVal};
   });
   rows.sort(function(a,b){return a.p.dorsal-b.p.dorsal;});
 
@@ -3755,7 +3765,6 @@ function renderBox(){
   }
 
   if(boxViewMode==='team'){
-    var boxPeriods = (g.finished && ensureBoxPeriodFilter(g.id).length) ? ensureBoxPeriodFilter(g.id) : null;
     h += '<div class="boxcontent">'+renderTeamPanel(g, {periods: boxPeriods})+'</div>';
     h += '<div class="actions"><button class="abtn" onclick="exportBoxScorePDF(\''+g.id+'\')">Exportar PDF</button><button class="abtn" onclick="shareBoxScore(\''+g.id+'\')">Compartir</button></div>';
     return h;
@@ -5232,7 +5241,9 @@ var RANK_STATS = [
   {key:'fg2pct', label:'% de 2'},
   {key:'fg3pct', label:'% de 3'},
   {key:'ftpct', label:'% de TL'},
-  {key:'eff_pg', label:'Eficiencia'}
+  {key:'eff_pg', label:'Eficiencia'},
+  {key:'blk_pg', label:'Tapones'},
+  {key:'min_pg', label:'Minutos'}
 ];
 function allFinishedGames(){ return S.games; }
 function aggregatePlayers(games){
@@ -5240,12 +5251,14 @@ function aggregatePlayers(games){
   games.forEach(function(g){
     (g.roster||[]).forEach(function(p){
       var st = playerStats(g, p.id);
+      var mf = minutesFor(g, p.id);
       var key = p.dorsal+'|'+p.name;
-      if(!byKey[key]) byKey[key] = { dorsal:p.dorsal, name:p.name, pts:0, reb:0, rebO:0, rebD:0, ast:0, stl:0, blk:0, to:0, foulC:0, fg2m:0, fg2a:0, fg3m:0, fg3a:0, ftm:0, fta:0, plusMinus:0, gp:0 };
+      if(!byKey[key]) byKey[key] = { dorsal:p.dorsal, name:p.name, pts:0, reb:0, rebO:0, rebD:0, ast:0, stl:0, blk:0, to:0, foulC:0, fg2m:0, fg2a:0, fg3m:0, fg3a:0, ftm:0, fta:0, plusMinus:0, gp:0, min:0 };
       var a = byKey[key];
       a.pts += st.pts; a.reb += (st.rebO+st.rebD); a.rebO += st.rebO; a.rebD += st.rebD; a.ast += st.ast; a.stl += st.stl; a.blk += st.blk; a.to += st.to; a.foulC += st.foulC;
       a.fg2m += st.fg2m; a.fg2a += st.fg2a; a.fg3m += st.fg3m; a.fg3a += st.fg3a; a.ftm += st.ftm; a.fta += st.fta;
       a.plusMinus += st.plusMinus;
+      a.min += mf.total;
       if(st.fg2a||st.fg3a||st.fta||st.pts||st.rebO||st.rebD||st.ast||st.stl||st.blk||st.to||st.foulC) a.gp += 1;
     });
   });
@@ -5267,6 +5280,7 @@ function aggregatePlayers(games){
     a.rebO_pg = a.gp>0 ? a.rebO/a.gp : 0;
     a.reb_pg = a.gp>0 ? a.reb/a.gp : 0;
     a.eff_pg = a.gp>0 ? a.eff/a.gp : 0;
+    a.min_pg = a.gp>0 ? a.min/a.gp : 0;
   });
   return list;
 }
@@ -6798,7 +6812,7 @@ function renderTeamPanelAggregate(games){
 }
 function renderPlayersTableAggregate(games){
   var list = aggregatePlayers(games).sort(function(a,b){ return a.dorsal-b.dorsal; });
-  var cols = ['PJ','FG','2PT','3PT','FT','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
+  var cols = ['PJ','MIN','FG','2PT','3PT','FT','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
   var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
@@ -6807,6 +6821,7 @@ function renderPlayersTableAggregate(games){
     var pm = a.plusMinus;
     h += '<tr style="cursor:pointer" onclick="openPlayerRadar(\''+(a.dorsal+'|'+a.name).replace(/\'/g,"\\\\'")+'\',\'stats\')"><td class="stickycol"><div class="tcell-player"><span class="dorsal" style="width:22px;height:22px;font-size:11px">'+a.dorsal+'</span><span>'+esc(a.name)+'</span></div></td>'+
       '<td class="numcell">'+a.gp+'</td>'+
+      '<td class="numcell">'+a.min+'\'</td>'+
       '<td class="numcell">'+fg(a.fg2m+a.fg3m, a.fg2a+a.fg3a)+'</td>'+
       '<td class="numcell">'+fg(a.fg2m,a.fg2a)+'</td>'+
       '<td class="numcell">'+fg(a.fg3m,a.fg3a)+'</td>'+
