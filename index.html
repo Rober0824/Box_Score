@@ -585,6 +585,20 @@
   .calfade::after{ content:''; position:absolute; left:0; right:6px; bottom:0; height:22px; background:linear-gradient(to bottom, transparent, var(--bg)); pointer-events:none; border-radius:0 0 14px 14px; }
   .caljornadahint{ display:flex; align-items:center; justify-content:center; gap:6px; font-size:10.5px; color:var(--text-dim); font-weight:600; margin-top:10px; opacity:0.8; }
   .caljornadahint svg{ flex-shrink:0; }
+  /* Indicadores en la fila de un partido propio: check verde = ya tiene
+     estadísticas metidas; badge rojo = se está anotando ahora mismo. El
+     lápiz (solo admin) crea el partido si no existe o abre su edición. */
+  .statsbadge{ display:flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:999px; background:oklch(72% 0.17 150 / 18%); color:oklch(72% 0.17 150); flex-shrink:0; }
+  .livebadge{ display:flex; align-items:center; gap:4px; font-size:9.5px; font-weight:800; letter-spacing:0.04em; color:#fff; background:#e23; border-radius:999px; padding:3px 7px 3px 6px; flex-shrink:0; text-transform:uppercase; }
+  .livedot{ width:6px; height:6px; border-radius:999px; background:#fff; animation:livepulse 1.4s ease-in-out infinite; }
+  @keyframes livepulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .editpencil{ width:30px; height:30px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--text-dim); flex-shrink:0; }
+  .editpencil:active{ opacity:0.7; }
+  /* Partidos: agrupación por Fase (cuando el club tiene más de una) y, dentro,
+     por Jornada -- para que dos "Jornada 1" de fases distintas no se mezclen
+     bajo el mismo título. */
+  .fasegroup + .fasegroup{ margin-top:20px; }
+  .faseheader{ font-size:12.5px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent); margin-bottom:4px; }
 
   /* ---- clasificación manual (editor) ---- */
   .teamcard{ background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
@@ -1589,6 +1603,13 @@ function newGame(){
     rivalName: '',
     kind: 'liga',
     jornada: null,
+    // Enlace opcional a una fila del calendario (fase_id de clubSettings.fbm_fases
+    // + número de jornada): lo rellena startNewGame() cuando el partido se crea
+    // desde el calendario de Inicio (tocando el lápiz de un partido propio), para
+    // poder "reconocer" luego que ese partido es el de esa jornada de esa fase --
+    // sin depender del id de la fila de calendar_entries, que el robot de la FBM
+    // borra y vuelve a crear en cada pasada (ver gameForFaseJornada).
+    faseId: null,
     periodsCount: 6,
     periodLabel: 'Sexto',
     periodMinutes: 8,
@@ -2943,19 +2964,21 @@ function finishGame(){
 function confirmFinishGame(){
   askConfirm('Finalizar partido', '¿Seguro que quieres finalizar el partido? No podrás seguir anotando.', 'Finalizar', finishGame);
 }
-function startNewGame(){
+// overrides (opcional): campos para precargar el partido nuevo, p.ej. al
+// crearlo desde una fila del calendario -- {faseId, jornada, rivalName, matchDate, kind}.
+function startNewGame(overrides){
   if(!canWriteCurrentSeason()){ showToast('Esta temporada es solo de consulta.'); return; }
+  function begin(){
+    S.current = newGame();
+    if(overrides) Object.assign(S.current, overrides);
+    saveState();
+    go('setup');
+  }
   if(S.current && !S.current.finished){
-    askConfirm('Nuevo partido', 'Tienes un partido en curso sin terminar. ¿Quieres descartarlo y empezar uno nuevo?', 'Descartar y empezar', function(){
-      S.current = newGame();
-      saveState();
-      go('setup');
-    });
+    askConfirm('Nuevo partido', 'Tienes un partido en curso sin terminar. ¿Quieres descartarlo y empezar uno nuevo?', 'Descartar y empezar', begin);
     return;
   }
-  S.current = newGame();
-  saveState();
-  go('setup');
+  begin();
 }
 function resumeCurrent(){ go(S.current.started ? 'live' : 'setup'); }
 function maybeOfferResume(){
@@ -3386,6 +3409,7 @@ function render(){
   html += menuOverlay();
   html += confirmOverlay();
   html += editMatchOverlay();
+  html += infoSheetOverlay();
   html += editPlayerOverlay();
   html += editRivalPlayerOverlay();
   html += faseModalOverlay();
@@ -4301,12 +4325,44 @@ function renderGames(){
     var torneoGames = finished.filter(function(g){ return g.kind==='torneo'; });
     var amistosoGames = finished.filter(function(g){ return g.kind==='amistoso'; });
 
-    var byJornada = {};
-    ligaGames.forEach(function(g){ var j=g.jornada||0; (byJornada[j]=byJornada[j]||[]).push(g); });
-    Object.keys(byJornada).sort(function(a,b){return b-a;}).forEach(function(j){
-      h += '<div><div class="jlabel">'+(j==='0'?'Liga':'Jornada '+j)+'</div>'+
-        byJornada[j].map(function(g){ return matchRowHtml(g,false); }).join('')+'</div>';
+    // Un club puede tener varias fases (1ª Fase, 2ª Fase, Play Off...) y cada
+    // una numera sus propias jornadas desde 1 -- así que antes de agrupar por
+    // "Jornada N" hay que separar primero por Fase (cuando el partido viene
+    // enlazado a una, ver gameForFaseJornada/tapCalendarEditPencil), o la
+    // Jornada 1 de una fase se mezclaría con la Jornada 1 de otra. Los
+    // partidos sin fase (creados a mano con el +, o de antes de tener esta
+    // función) se siguen agrupando igual que siempre, sin cabecera de fase.
+    var fasesConocidas = clubSettings.fbm_fases || [];
+    var faseById = {};
+    fasesConocidas.forEach(function(f){ faseById[f.id] = f; });
+    var ligaPorFase = {};
+    var faseOrder = [];
+    var ligaSinFase = [];
+    ligaGames.forEach(function(g){
+      if(g.faseId && faseById[g.faseId]){
+        if(!ligaPorFase[g.faseId]){ ligaPorFase[g.faseId]=[]; faseOrder.push(g.faseId); }
+        ligaPorFase[g.faseId].push(g);
+      } else {
+        ligaSinFase.push(g);
+      }
     });
+    faseOrder.sort(function(a,b){
+      return fasesConocidas.map(function(f){return f.id;}).indexOf(a) - fasesConocidas.map(function(f){return f.id;}).indexOf(b);
+    });
+    function jornadaGroupsHtml(games){
+      var byJornada = {};
+      games.forEach(function(g){ var j=g.jornada||0; (byJornada[j]=byJornada[j]||[]).push(g); });
+      var out = '';
+      Object.keys(byJornada).sort(function(a,b){return b-a;}).forEach(function(j){
+        out += '<div style="margin-top:10px"><div class="jlabel">'+(j==='0'?'Liga':'Jornada '+j)+'</div>'+
+          byJornada[j].map(function(g){ return matchRowHtml(g,false); }).join('')+'</div>';
+      });
+      return out;
+    }
+    faseOrder.forEach(function(faseId){
+      h += '<div class="fasegroup"><div class="faseheader">'+esc(faseById[faseId].label||'Fase')+'</div>'+jornadaGroupsHtml(ligaPorFase[faseId])+'</div>';
+    });
+    if(ligaSinFase.length){ h += '<div class="fasegroup">'+jornadaGroupsHtml(ligaSinFase)+'</div>'; }
     if(torneoGames.length){ h += '<div><div class="jlabel">Torneo</div>'+torneoGames.map(function(g){return matchRowHtml(g,false);}).join('')+'</div>'; }
     if(amistosoGames.length){ h += '<div><div class="jlabel">Amistosos</div>'+amistosoGames.map(function(g){return matchRowHtml(g,false);}).join('')+'</div>'; }
   }
@@ -4335,7 +4391,7 @@ function openEditMatch(id){
   if(!isAdmin()) return;
   var g = getGameById(id);
   if(!g) return;
-  editMatchDraft = { id:id, rivalName:g.rivalName||'', kind:g.kind||'liga', jornada:g.jornada||1, matchDate:matchDateStr(g) };
+  editMatchDraft = { id:id, rivalName:g.rivalName||'', kind:g.kind||'liga', jornada:g.jornada||1, matchDate:matchDateStr(g), _origJornada: g.jornada };
   render();
 }
 function closeEditMatch(){ editMatchDraft = null; render(); }
@@ -4355,6 +4411,10 @@ async function saveEditMatch(){
   g.kind = editMatchDraft.kind;
   g.jornada = editMatchDraft.kind==='amistoso' ? null : (editMatchDraft.jornada||1);
   g.matchDate = editMatchDraft.matchDate;
+  // Si se cambia el partido a Torneo/Amistoso, o se cambia su jornada, ya no
+  // corresponde necesariamente a la fila de calendario con la que se creó --
+  // se suelta el enlace para no dejarlo apuntando a un partido equivocado.
+  if(g.kind!=='liga' || g.jornada!==editMatchDraft._origJornada) g.faseId = null;
   editMatchDraft = null;
   saveState(); render();
   if(sb){ try{ var res = await pushMatch(g); if(res && res.error) showToast('No se ha podido guardar el cambio.'); }catch(e){ showToast('No se ha podido guardar el cambio.'); } }
@@ -5481,13 +5541,72 @@ function calendarForFase(faseId){
   if(!faseId) return [];
   return calendarEntries.filter(function(r){ return r.fase_id===faseId; });
 }
+// Enlace Calendario <-> Partidos. Un partido "pertenece" a la jornada N de una
+// fase si g.faseId y g.jornada coinciden con la fila del calendario -- nunca
+// se usa el id de calendar_entries (el robot de la FBM borra y reinserta esas
+// filas en cada pasada, así que su id no es estable de un día para otro).
+function gameForFaseJornada(faseId, jornada){
+  if(!faseId || jornada==null) return null;
+  if(S.current && !S.current.finished && S.current.faseId===faseId && S.current.jornada===jornada){
+    return { game: S.current, live: true };
+  }
+  var found = S.games.filter(function(g){ return g.faseId===faseId && g.jornada===jornada; })[0];
+  return found ? { game: found, live: false } : null;
+}
+function normTeamName(s){
+  return (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+}
+// Nombre del rival de una fila de calendario (el lado que NO es "nuestro
+// equipo") -- misma comparación "normalizada" (sin acentos, mayúsculas) que
+// usa el robot de la FBM para marcar is_own_match, para que coincida aunque
+// el nombre esté escrito con alguna diferencia de mayúsculas o acentos.
+function calRivalName(m){
+  var own = normTeamName(clubSettings.team_name||'');
+  return normTeamName(m.local)===own ? m.visitante : m.local;
+}
+// Popup informativo simple (solo "Entendido", sin acción) -- se usa cuando se
+// toca un partido del calendario que todavía no tiene estadísticas metidas.
+var infoSheet = null;
+function showInfoSheet(title, msg){ infoSheet = {title:title, msg:msg}; render(); }
+function closeInfoSheet(){ infoSheet = null; render(); }
+function infoSheetOverlay(){
+  if(!infoSheet) return '';
+  return '<div class="veil" onclick="closeInfoSheet()"><div class="modal" onclick="event.stopPropagation()">'+
+    '<div class="mhead"><div class="mtitle">'+esc(infoSheet.title)+'</div>'+
+    '<div class="msub">'+esc(infoSheet.msg)+'</div></div>'+
+    '<button class="fullbtn" onclick="closeInfoSheet()">Entendido</button>'+
+    '</div></div>';
+}
+// Tocar la fila de un partido propio en el calendario.
+function tapCalendarMatch(faseId, jornada){
+  var m = gameForFaseJornada(faseId, jornada);
+  if(!m){ showInfoSheet('Sin estadísticas', 'Este partido aún no tiene estadísticas.'); return; }
+  if(m.live){ resumeCurrent(); return; }
+  openArchivedGame(m.game.id);
+}
+// Tocar el lápiz (solo admin) de un partido propio en el calendario: crea el
+// partido precargado si no existe todavía, o abre su edición si ya existe.
+function tapCalendarEditPencil(faseId, jornada, rivalName, matchDate, ev){
+  if(ev) ev.stopPropagation();
+  if(!isAdmin()) return;
+  var m = gameForFaseJornada(faseId, jornada);
+  if(!m){
+    startNewGame({ faseId: faseId, jornada: jornada, rivalName: rivalName, matchDate: matchDate, kind: 'liga' });
+    return;
+  }
+  if(m.live){ resumeCurrent(); return; }
+  openEditMatch(m.game.id);
+}
 function fmtCalFecha(iso){
   if(!iso) return '';
   var d = new Date(iso+'T00:00:00');
   if(isNaN(d.getTime())) return '';
   return d.toLocaleDateString('es-ES');
 }
-function renderCalendarTable(rows){
+// faseId: se necesita para poder enlazar cada fila "propia" con su partido
+// (gameForFaseJornada) y para que el lápiz de admin sepa en qué fase crear el
+// partido nuevo si todavía no existe.
+function renderCalendarTable(rows, faseId){
   var byJornada = {};
   var order = [];
   rows.forEach(function(m){
@@ -5502,10 +5621,24 @@ function renderCalendarTable(rows){
     list += '<div style="margin-bottom:12px"><div class="jlabel caljlabel" style="margin-bottom:6px">Jornada '+j+' &middot; '+esc(fmtCalFecha(matches[0].fecha))+'</div>';
     matches.forEach(function(m){
       var played = m.score_local!=null && m.score_visitante!=null;
-      list += '<div class="calrow'+(m.is_own_match?' own':'')+'">'+
+      var isOwn = !!m.is_own_match;
+      var linked = (isOwn && faseId) ? gameForFaseJornada(faseId, j) : null;
+      var statusBadge = '';
+      if(linked){
+        statusBadge = linked.live
+          ? '<div class="livebadge"><div class="livedot"></div>En directo</div>'
+          : '<div class="statsbadge" title="Ya tiene estadísticas">'+icon('check',13)+'</div>';
+      }
+      var pencil = (isOwn && isAdmin())
+        ? '<div class="editpencil" onclick="tapCalendarEditPencil(\''+faseId+'\','+j+',\''+esc(calRivalName(m))+'\',\''+esc(m.fecha)+'\',event)">'+icon('pencil',14)+'</div>'
+        : '';
+      var rowAttrs = isOwn ? ' onclick="tapCalendarMatch(\''+faseId+'\','+j+')" style="cursor:pointer"' : '';
+      list += '<div class="calrow'+(isOwn?' own':'')+'"'+rowAttrs+'>'+
         '<div style="min-width:0"><div class="cname">'+esc(m.local)+' &ndash; '+esc(m.visitante)+'</div>'+
         '<div class="cdate">'+(played?'Jugado':(esc(m.hora||'')+(m.hora?' &middot; ':'')+'por jugar'))+'</div></div>'+
+        '<div class="cright" style="display:flex;align-items:center;gap:8px;flex-shrink:0">'+statusBadge+
         '<div class="cscore'+(played?'':' pending')+'">'+(played?(m.score_local+' &ndash; '+m.score_visitante):'vs')+'</div>'+
+        pencil+'</div>'+
         '</div>';
     });
     list += '</div>';
@@ -5581,7 +5714,7 @@ function renderCalendarJornadas(faseId, calRows){
   h += '<div class="swipetrack" id="swTrack-'+cid+'" style="width:'+(nums.length*100)+'%;transform:translateX(-'+(page*stepPct)+'%)">';
   nums.forEach(function(j){
     var rowsForJ = calRows.filter(function(m){ return m.jornada===j; });
-    h += '<div class="swipepage" style="width:'+stepPct+'%">'+renderCalendarTable(rowsForJ)+'</div>';
+    h += '<div class="swipepage" style="width:'+stepPct+'%">'+renderCalendarTable(rowsForJ, faseId)+'</div>';
   });
   h += '</div></div>';
   if(nums.length>1){
