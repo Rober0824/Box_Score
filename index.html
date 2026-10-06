@@ -154,6 +154,12 @@
   .playrow .delta{ font-family:'Oswald',sans-serif; font-size:12.5px; font-weight:700; flex-shrink:0; }
   .playrow .delta.good{ color:var(--good); }
   .playrow .delta.bad{ color:var(--bad); }
+  /* ---- etiquetas de origen de la jugada (robo / rebote of. / contraataque) ---- */
+  .playrow-tags{ display:flex; gap:5px; flex-wrap:wrap; width:100%; order:5; padding-left:30px; margin-top:-2px; }
+  .playtag{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:800; letter-spacing:0.02em; padding:2px 7px; border-radius:999px; flex-shrink:0; white-space:nowrap; }
+  .playtag.stl{ background:oklch(72% 0.17 150 / 16%); color:oklch(72% 0.17 150); }
+  .playtag.reb{ background:var(--reb); color:var(--accent-ink); opacity:0.9; }
+  .playtag.fb{ background:oklch(70% 0.17 145 / 18%); color:var(--good); }
   .playbtn{ width:26px; height:26px; border-radius:999px; display:flex; align-items:center; justify-content:center; color:var(--text-dim); flex-shrink:0; }
   .playbtn:active{ color:var(--text); }
   .editpanel{ width:100%; border-top:1px solid var(--border); margin-top:8px; padding-top:8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
@@ -259,6 +265,27 @@
   .achip:active{ border-color:var(--accent); }
   .achip .av{ width:32px; height:32px; border-radius:999px; background:var(--bg); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-family:'Oswald',sans-serif; font-weight:600; font-size:13px; flex-shrink:0; }
   .achip .nm{ font-weight:700; font-size:13.5px; }
+  /* ---- origen de la canasta (robo / rebote of. / contraataque) ---- */
+  .origintypes{ display:flex; gap:8px; margin-top:4px; }
+  .origintypes .chip{ flex:1; text-align:center; }
+  .fbchiprow{ margin-top:8px; }
+  .chip.fb{ display:inline-flex; align-items:center; gap:6px; }
+  .chip.fb.on{ background:oklch(70% 0.17 145 / 18%); border-color:var(--good); color:var(--good); }
+  .originwho{ margin-top:14px; }
+  .originwholabel{ font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; }
+  .originsuggest{ display:flex; align-items:flex-start; gap:10px; background:oklch(72% 0.18 45 / 12%); border:1.5px solid var(--accent); border-radius:14px; padding:13px 14px; margin-bottom:16px; }
+  .originsuggest .ic{ color:var(--accent); flex-shrink:0; margin-top:1px; }
+  .originsuggest .tx{ flex:1; font-size:13px; font-weight:700; line-height:1.4; }
+  .originsuggest .tx b{ color:var(--accent); }
+  .originsuggest-actions{ display:flex; gap:8px; margin-top:10px; }
+  .originsuggest-actions button{ flex:1; padding:9px; border-radius:10px; font-weight:800; font-size:12px; }
+  .originsuggest-actions .yes{ background:var(--accent); color:var(--accent-ink); }
+  .originsuggest-actions .no{ background:none; border:1px solid var(--border); color:var(--text-dim); }
+  .rivaltagcard{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-top:12px; }
+  .rivaltaglabel{ font-size:11.5px; color:var(--text-dim); font-weight:700; margin-bottom:10px; }
+  .rivaltaglabel b{ color:var(--text); }
+  .rivaltagrow{ display:flex; gap:6px; flex-wrap:wrap; }
+  .rivaltagrow .chip{ flex:1; min-width:72px; text-align:center; padding:9px 6px; font-size:11.5px; }
   .fullbtn{ width:100%; text-align:center; padding:14px; border-radius:12px; border:1px solid var(--border); color:var(--text-dim); font-weight:700; font-size:14px; }
   .fullbtn:active{ border-color:var(--accent); color:var(--text); }
   .cancel{ text-align:center; font-size:12.5px; color:var(--text-dim); text-decoration:underline; font-weight:600; }
@@ -1656,6 +1683,56 @@ function rivalScore(g){
   g.events.forEach(function(e){ if(e.side==='rival') s+=e.points; });
   return s;
 }
+/* ---- origen de los puntos (robo / rebote ofensivo / contraataque) ----
+   Propias: origin ('steal'|'offReb'|ausente) y fastBreak (bool) son
+   independientes -- una canasta puede ser, a la vez, tras robo Y de
+   contraataque, así que las tres cuentas que devuelve teamOriginPoints NO
+   tienen por qué sumar el total de puntos del equipo (no es un reparto).
+   Rival: un único campo exclusivo ('steal'|'offReb'|'fastbreak'|ausente),
+   siguiendo cómo lo describió Rober. */
+function teamOriginPoints(events){
+  var out = {steal:0, offReb:0, fastbreak:0};
+  (events||[]).forEach(function(e){
+    if(e.side!=='team' || !(e.points>0)) return;
+    if(e.origin==='steal') out.steal += e.points;
+    else if(e.origin==='offReb') out.offReb += e.points;
+    if(e.fastBreak) out.fastbreak += e.points;
+  });
+  return out;
+}
+function rivalOriginPoints(events){
+  var out = {steal:0, offReb:0, fastbreak:0};
+  (events||[]).forEach(function(e){
+    if(e.side!=='rival' || !(e.points>0)) return;
+    if(e.origin==='steal') out.steal += e.points;
+    else if(e.origin==='offReb') out.offReb += e.points;
+    else if(e.origin==='fastbreak') out.fastbreak += e.points;
+  });
+  return out;
+}
+// Agregado de temporada (o del filtro de partidos que toque), en % sobre el
+// total de puntos de cada lado -- para la tarjeta "¿De dónde vienen los
+// puntos?" de Estadísticas -> Equipo.
+function aggregateOriginStats(games){
+  var teamPts=0, rivalPts=0;
+  var team = {steal:0, offReb:0, fastbreak:0};
+  var rival = {steal:0, offReb:0, fastbreak:0};
+  (games||[]).forEach(function(g){
+    teamPts += teamScore(g);
+    rivalPts += rivalScore(g);
+    var t = teamOriginPoints(g.events);
+    var r = rivalOriginPoints(g.events);
+    team.steal+=t.steal; team.offReb+=t.offReb; team.fastbreak+=t.fastbreak;
+    rival.steal+=r.steal; rival.offReb+=r.offReb; rival.fastbreak+=r.fastbreak;
+  });
+  function pct(v, denom){ return denom>0 ? Math.round(v/denom*100) : 0; }
+  return {
+    teamPts: teamPts, rivalPts: rivalPts,
+    steal: { teamPct: pct(team.steal, teamPts), rivalPct: pct(rival.steal, rivalPts) },
+    offReb: { teamPct: pct(team.offReb, teamPts), rivalPct: pct(rival.offReb, rivalPts) },
+    fastbreak: { teamPct: pct(team.fastbreak, teamPts), rivalPct: pct(rival.fastbreak, rivalPts) }
+  };
+}
 function periodScores(g){
   var out = {};
   for(var p=1;p<=g.periodsCount;p++) out[p]={team:0,rival:0};
@@ -1916,6 +1993,29 @@ function playRowData(e, g){
   else { var p = byId(g.roster, e.playerId); who = p ? ('Nº'+p.dorsal+' '+firstName(p.name)) : '?'; }
   return { who:who, label:label, deltaLabel:deltaLabel, deltaCls:deltaCls };
 }
+// Etiquetas de origen (robo / rebote of. / contraataque) debajo de la fila de
+// la jugada, igual que en el mockup aprobado -- propias y rival comparten
+// visual pero no estructura: propias pueden combinar origin+fastBreak (dos
+// cosas a la vez, p.ej. robo Y contraataque), rival es un único campo
+// exclusivo con 'fastbreak' como una categoría más.
+function playOriginTagsHtml(e, g){
+  var tags = '';
+  if(e.side==='rival'){
+    if(e.origin==='steal') tags += '<span class="playtag stl">↩ tras robo</span>';
+    else if(e.origin==='offReb') tags += '<span class="playtag reb">↻ tras rebote of.</span>';
+    else if(e.origin==='fastbreak') tags += '<span class="playtag fb">⚡ contraataque</span>';
+  } else {
+    if(e.origin==='steal'){
+      var sp = e.originPlayerId ? byId(g.roster, e.originPlayerId) : null;
+      tags += '<span class="playtag stl">↩ tras robo'+(sp?(' de Nº'+sp.dorsal):'')+'</span>';
+    } else if(e.origin==='offReb'){
+      var rp2 = e.originPlayerId ? byId(g.roster, e.originPlayerId) : null;
+      tags += '<span class="playtag reb">↻ tras rebote of.'+(rp2?(' de Nº'+rp2.dorsal):'')+'</span>';
+    }
+    if(e.fastBreak) tags += '<span class="playtag fb">⚡ contraataque</span>';
+  }
+  return tags ? ('<div class="playrow-tags">'+tags+'</div>') : '';
+}
 var pbpEditingId = null, pbpConfirmingId = null, pbpEditRivalId = null;
 function pbpToggleEdit(id){ pbpConfirmingId=null; pbpEditRivalId=null; pbpEditingId = (pbpEditingId===id ? null : id); render(); }
 function pbpAskDelete(id){ pbpEditingId=null; pbpEditRivalId=null; pbpConfirmingId=id; render(); }
@@ -1993,7 +2093,8 @@ function renderPlayByPlay(g, opts){
       '<div class="per">'+esc(g.periodLabel.charAt(0).toUpperCase())+e.period+'</div>'+
       '<div class="who">'+esc(d.who)+'</div>'+
       '<div class="what">'+esc(d.label)+'</div>'+
-      (d.deltaLabel ? '<div class="delta '+d.deltaCls+'">'+d.deltaLabel+'</div>' : '');
+      (d.deltaLabel ? '<div class="delta '+d.deltaCls+'">'+d.deltaLabel+'</div>' : '')+
+      playOriginTagsHtml(e, g);
     if(!readOnly){
       h += '<button class="playbtn" onclick="pbpToggleEdit(\''+e.id+'\')">'+icon('pencil',14)+'</button>'+
         '<button class="playbtn" onclick="pbpAskDelete(\''+e.id+'\')">'+icon('trash',14)+'</button>';
@@ -2048,7 +2149,7 @@ var ROUTE_LABELS = {
   adminFbm:'Admin · Fuente FBM', adminUsuarios:'Admin · Usuarios', analytics:'Admin · Analítica', adminNotif:'Admin · Notificaciones',
   stats:'Estadísticas', setup:'Nuevo partido',
   lineup:'Quinteto inicial', rivalLineup:'Quinteto rival', live:'Partido en directo', stat:'Anotar estadística',
-  shotzone:'Zona de tiro', assist:'Asistencia', rivalquick:'Marcador rival rápido',
+  shotzone:'Zona de tiro', assist:'Asistencia', origin:'Origen de la canasta', rivalquick:'Marcador rival rápido',
   rivalsheet:'Ficha rival', rivalPlayerSheet:'Anotar estadística rival', box:'Box score', minutes:'Minutos', games:'Partidos',
   approvals:'Solicitudes de acceso', ranking:'Clasificación', mvpHistory:'Histórico MVP',
   standingsEdit:'Editar clasificación', playerRadar:'Radar de jugadora', matchPlayer:'Jugadora del partido'
@@ -2881,7 +2982,7 @@ function chooseAssist(assistPid){
   var e = editId ? byId(g.events, editId) : g.events[g.events.length-1];
   if(e) e.assistPlayerId = assistPid;
   saveState();
-  go('live');
+  goToOrigin();
 }
 function skipAssist(){
   var editId = S.routeParams.editEventId;
@@ -2891,6 +2992,108 @@ function skipAssist(){
     if(e) delete e.assistPlayerId;
     saveState();
   }
+  goToOrigin();
+}
+function goToOrigin(){
+  var editId = S.routeParams.editEventId;
+  resetOriginDraft(editId);
+  go('origin', {playerId: S.routeParams.playerId, type: S.routeParams.type, points: S.routeParams.points, editEventId: editId});
+}
+
+/* ---- origen de la canasta (robo / rebote ofensivo / contraataque) ----
+   Paso nuevo justo después de la asistencia, para las canastas propias de 2 y
+   3 puntos (tiros libres fuera, no tienen "origen" de jugada). A diferencia
+   de la asistencia (un solo toque = elegir y listo), aquí hay dos cosas que
+   se pueden combinar a la vez (de dónde viene + si es contraataque), así que
+   se usa un pequeño borrador en memoria (originDraft) con un botón "Guardar"
+   explícito -- el mismo patrón que ya se usa en otros formularios de más de
+   un campo (p.ej. editMatchDraft). "Omitir, sin más detalles" equivale a
+   guardar sin nada marcado (jugada "estática", sin contraataque). */
+var originDraft = null; // {type: null|'steal'|'offReb', playerId: null|string, fastBreak: bool}
+var originSuggestion = null; // {type, playerId, dorsal, name, ts} o null si no hay nada reciente que sugerir
+var originSuggestionDismissed = false;
+function resetOriginDraft(editId){
+  var g = S.current;
+  var e = editId ? byId(g.events, editId) : g.events[g.events.length-1];
+  originDraft = { type: (e && e.origin) || null, playerId: (e && e.originPlayerId) || null, fastBreak: !!(e && e.fastBreak) };
+  originSuggestionDismissed = false;
+  originSuggestion = editId ? null : computeOriginSuggestion(g); // no se sugiere nada al reeditar una jugada pasada
+}
+// Si justo antes de esta canasta hubo un robo o un rebote ofensivo propios muy
+// recientes (siguiendo la jugada), se sugiere directamente en vez de obligar
+// a volver a elegir de cero. "Muy reciente" = últimos 20 segundos reales.
+function computeOriginSuggestion(g){
+  if(!g || !g.events || !g.events.length) return null;
+  var now = Date.now();
+  // el último evento es la propia canasta que se acaba de anotar (ya
+  // empujada por pickShotZone antes de llegar aquí) -- hay que empezar a
+  // mirar desde el anterior, si no la condición de corte de abajo
+  // ('2m'/'3m' de por medio) saltaría en la primera vuelta y nunca
+  // sugeriría nada.
+  for(var i=g.events.length-2; i>=0; i--){
+    var e = g.events[i];
+    if(e.side==='team' && (e.type==='stl' || e.type==='rebO')){
+      if(now - (e.ts||0) <= 20000){
+        var p = byId(g.roster, e.playerId);
+        return { type: e.type==='stl' ? 'steal' : 'offReb', playerId: e.playerId, dorsal: p?p.dorsal:'?', name: p?p.name:'', ts: e.ts };
+      }
+      return null; // la más reciente ya es demasiado vieja -- no seguir buscando más atrás
+    }
+    // cualquier otro tipo de jugada de por medio (otro tiro, un cambio...) ya
+    // rompe la relación directa con la canasta actual
+    if(e.type==='2m' || e.type==='3m' || e.type==='lineup') return null;
+  }
+  return null;
+}
+function acceptOriginSuggestion(){
+  if(!originSuggestion) return;
+  originDraft.type = originSuggestion.type;
+  originDraft.playerId = originSuggestion.playerId;
+  originSuggestionDismissed = true;
+  saveOrigin();
+}
+function dismissOriginSuggestion(){
+  originSuggestionDismissed = true;
+  render();
+}
+function setOriginType(type){
+  originDraft.type = (originDraft.type===type) ? null : type;
+  if(!originDraft.type) originDraft.playerId = null;
+  render();
+}
+function toggleOriginFastBreak(){
+  originDraft.fastBreak = !originDraft.fastBreak;
+  render();
+}
+function pickOriginWho(pid){
+  originDraft.playerId = (originDraft.playerId===pid) ? null : pid;
+  render();
+}
+function applyOriginDraftToEvent(){
+  var g = S.current;
+  var editId = S.routeParams.editEventId;
+  var e = editId ? byId(g.events, editId) : g.events[g.events.length-1];
+  if(!e) return;
+  if(originDraft.type){ e.origin = originDraft.type; } else { delete e.origin; }
+  if(originDraft.type && originDraft.playerId){ e.originPlayerId = originDraft.playerId; } else { delete e.originPlayerId; }
+  if(originDraft.fastBreak){ e.fastBreak = true; } else { delete e.fastBreak; }
+  saveState();
+}
+function saveOrigin(){
+  applyOriginDraftToEvent();
+  originDraft = null; originSuggestion = null;
+  go('live');
+}
+function skipOrigin(){
+  var editId = S.routeParams.editEventId;
+  if(editId){
+    // al reeditar, "omitir" quita explícitamente lo que hubiera -- igual que skipAssist
+    var g = S.current;
+    var e = byId(g.events, editId);
+    if(e){ delete e.origin; delete e.originPlayerId; delete e.fastBreak; }
+    saveState();
+  }
+  originDraft = null; originSuggestion = null;
   go('live');
 }
 function undoAssistShot(){
@@ -2949,6 +3152,37 @@ function recordRivalFull(type){
 function openRival(){
   if(S.current.trackRivalFull) go('rivalsheet');
   else go('rivalquick');
+}
+
+/* ---- origen de los puntos del rival (robo / rebote of. / contraataque) ----
+   A diferencia de las jugadas propias, aquí es un único campo exclusivo
+   (no hay "asistencia" que combinar y, siguiendo cómo lo pidió Rober --
+   "todo lo que no fuese eso, sería estático" -- contraataque es una
+   categoría más, no una casilla aparte). Sin campo = estático. No bloquea
+   nada: se puede anotar y pasar de largo sin tocarla. */
+function qualifiesForRivalOriginTag(e){
+  return !!(e && e.side==='rival' && e.points>0 && (e.type==='rivalpts' || e.type==='2m' || e.type==='3m' || e.type==='ftm'));
+}
+function rivalOriginTagStripHtml(e){
+  var cur = e.origin || 'static';
+  function tag(val, label, extraClass){
+    return '<button class="chip'+(extraClass?(' '+extraClass):'')+(cur===val?' on':'')+'" onclick="setRivalOrigin(\''+val+'\')">'+label+'</button>';
+  }
+  return '<div class="rivaltagcard"><div class="rivaltaglabel">¿De dónde viene ese último <b>+'+e.points+' del rival</b>? (opcional)</div>'+
+    '<div class="rivaltagrow">'+
+    tag('static','Estático')+
+    tag('steal','Robo')+
+    tag('offReb','Reb. of.')+
+    tag('fastbreak','⚡ C.ataque','fb')+
+    '</div></div>';
+}
+function setRivalOrigin(value){
+  var g = S.current;
+  var e = g.events[g.events.length-1];
+  if(!qualifiesForRivalOriginTag(e)) return;
+  if(value==='static'){ delete e.origin; } else { e.origin = value; }
+  saveState();
+  render();
 }
 
 /* ---------- finish / games ---------- */
@@ -3397,6 +3631,7 @@ function render(){
       case 'stat': html = renderStat(); break;
       case 'shotzone': html = renderShotZone(); break;
       case 'assist': html = renderAssist(); break;
+      case 'origin': html = renderOrigin(); break;
       case 'rivalquick': html = renderRivalQuick(); break;
       case 'rivalsheet': html = renderRivalSheet(); break;
       case 'rivalPlayerSheet': html = renderRivalPlayerSheet(); break;
@@ -3627,6 +3862,17 @@ function renderLive(){
       h += '<div class="empty">No hay jugadoras en pista. Ve a "Cambios" para poner el quinteto.</div>';
     }
   }
+  // Tira no bloqueante para etiquetar de dónde viene el último punto del
+  // rival (robo / rebote of. / contraataque) -- aparece aquí, en "en
+  // directo", y no en las pantallas de marcar rival (rivalquick/rivalsheet),
+  // porque ambas vuelven de inmediato a 'live' tras un solo toque ("para el
+  // rival prima la velocidad"), así que no hay dónde más mostrarla sin
+  // interrumpir ese flujo. Estática por defecto: si no se toca nada, no
+  // cambia nada.
+  var lastEv = g.events[g.events.length-1];
+  if(qualifiesForRivalOriginTag(lastEv)){
+    h += rivalOriginTagStripHtml(lastEv);
+  }
   h += '<div class="undobar"><button class="undo" '+(g.events.length?'':'disabled')+' onclick="undoLast()">'+icon('undo',15)+' Deshacer última acción</button></div>';
   return h;
 }
@@ -3692,6 +3938,60 @@ function renderAssist(){
   h += '</div>'+
     '<button class="fullbtn" onclick="skipAssist()">Sin asistencia</button>'+
     '<div class="cancel" onclick="undoAssistShot()">'+undoLabel+'</div>'+
+    '</div></div>';
+  return h;
+}
+
+/* ---- origen de la canasta (robo / rebote ofensivo / contraataque) ---- */
+function renderOrigin(){
+  var g = S.current;
+  var scorerId = S.routeParams.playerId;
+  var scorer = byId(g.roster, scorerId);
+  var typeLabel = S.routeParams.type==='3m' ? 'Tiro de 3' : 'Tiro de 2';
+  var editId = S.routeParams.editEventId;
+  var e = editId ? byId(g.events, editId) : g.events[g.events.length-1];
+  if(!originDraft) resetOriginDraft(editId);
+  var assistTxt = '';
+  if(e && e.assistPlayerId){
+    var ap = byId(g.roster, e.assistPlayerId);
+    if(ap) assistTxt = ' · asistencia de '+esc(ap.name);
+  }
+  var mates = g.onCourt.map(function(id){return byId(g.roster,id);}).filter(function(p){return p && p.id!==scorerId;}).sort(function(a,b){return a.dorsal-b.dorsal;});
+  var h = renderStat(); // background context stays visible, igual que en la asistencia
+  var showSuggest = !!(originSuggestion && !originSuggestionDismissed);
+  h += '<div class="veil"><div class="modal">'+
+    '<div class="mhead"><div class="mtitle">¿De dónde viene la jugada?</div>'+
+    '<div class="msub">Nº'+(scorer?scorer.dorsal:'?')+' <b>'+esc(scorer?scorer.name:'')+'</b> acaba de anotar un '+typeLabel+' (+'+S.routeParams.points+')'+assistTxt+'</div></div>';
+  if(showSuggest){
+    var who = originSuggestion.type==='steal' ? 'robo' : 'rebote ofensivo';
+    var secs = Math.max(0, Math.round((Date.now()-(originSuggestion.ts||Date.now()))/1000));
+    var when = secs<2 ? 'Hace un momento' : ('Hace '+secs+' segundos');
+    h += '<div class="originsuggest"><div class="ic">💡</div><div class="tx">'+when+' marcaste un <b>'+who+' de '+esc(originSuggestion.name)+'</b>. ¿Viene de ahí esta canasta?'+
+      '<div class="originsuggest-actions">'+
+      '<button class="yes" onclick="acceptOriginSuggestion()">Sí, es esta jugada</button>'+
+      '<button class="no" onclick="dismissOriginSuggestion()">No, elegir otra cosa</button>'+
+      '</div></div></div>';
+  }
+  var dimStyle = showSuggest ? ' style="opacity:0.4"' : '';
+  h += '<div class="origintypes"'+dimStyle+'>'+
+    '<button class="chip'+(originDraft.type===null?' on':'')+'" onclick="setOriginType(null)">Estático</button>'+
+    '<button class="chip'+(originDraft.type==='steal'?' on':'')+'" onclick="setOriginType(\'steal\')">Robo</button>'+
+    '<button class="chip'+(originDraft.type==='offReb'?' on':'')+'" onclick="setOriginType(\'offReb\')">Rebote of.</button>'+
+    '</div>'+
+    '<div class="fbchiprow"'+dimStyle+'>'+
+    '<button class="chip fb'+(originDraft.fastBreak?' on':'')+'" onclick="toggleOriginFastBreak()">⚡ Contraataque</button>'+
+    '</div>';
+  if(!showSuggest && originDraft.type && mates.length){
+    var whoLabel = originDraft.type==='steal' ? '¿Quién hizo el robo? (opcional)' : '¿Quién cogió el rebote? (opcional)';
+    h += '<div class="originwho"><div class="originwholabel">'+whoLabel+'</div><div class="assistgrid">';
+    mates.forEach(function(p){
+      var sel = originDraft.playerId===p.id;
+      h += '<button class="achip"'+(sel?' style="border-color:var(--accent)"':'')+' onclick="pickOriginWho(\''+p.id+'\')"><div class="av">'+p.dorsal+'</div><div class="nm">'+esc(p.name)+'</div></button>';
+    });
+    h += '</div></div>';
+  }
+  h += '<button class="fullbtn" style="margin-top:16px" onclick="saveOrigin()">Guardar</button>'+
+    '<div class="cancel" onclick="skipOrigin()">Omitir, sin más detalles</div>'+
     '</div></div>';
   return h;
 }
@@ -4208,7 +4508,8 @@ function renderTeamPanel(g, opts){
     h += swipeCarouselHtml('box-'+g.id, [
       shotMapCardHtml(g, periods),
       {title:'Mapa de calor', content: heatMapCardHtml('box-'+g.id, function(mode){ return teamShotPoints([g], periods, mode); })},
-      renderBoxTrendCard(g, periods)
+      renderBoxTrendCard(g, periods),
+      originPointsCardHtml(g, periods)
     ]);
   }
   return h;
@@ -4260,6 +4561,25 @@ function renderBoxTrendCard(g, periods){
   }
   h += '</div>';
   return {title: 'Tendencia por '+esc((g.periodLabel||'periodo').toLowerCase()), content: h};
+}
+// Tarjeta "Origen de los puntos" de ESTE partido (barras enfrentadas
+// nosotros/rival, en puntos). Vive como página más del mismo carrusel que ya
+// tiene mapa de tiro/mapa de calor/tendencia -- no una tarjeta nueva suelta.
+function originPointsCardHtml(g, periods){
+  var events = periods ? g.events.filter(function(e){ return periods.indexOf(e.period)!==-1; }) : g.events;
+  var team = teamOriginPoints(events);
+  var rival = rivalOriginPoints(events);
+  var h = '<div class="periodstatcard" style="margin-top:0;background:none;border:none;padding:0 16px">';
+  h += '<div class="pstatcaption">De dónde han venido los puntos en este partido.</div>';
+  function row(key, label){
+    var pcts = cmpBarPcts(team[key], rival[key]);
+    h += cmpRowHtml({}, '', key, label, team[key], rival[key], pcts[0], pcts[1], null);
+  }
+  row('steal', 'Tras robo');
+  row('offReb', 'Tras rebote ofensivo');
+  row('fastbreak', 'De contraataque');
+  h += '</div>';
+  return {title:'Origen de los puntos', content: h};
 }
 
 /* ---- minutes editor ---- */
@@ -5380,6 +5700,89 @@ function aggregatePlayers(games){
     a.min_pg = a.gp>0 ? a.min/a.gp : 0;
   });
   return list;
+}
+// Procedencia de las canastas (2/3 anotados, los tiros libres no tienen
+// "origen") de UNA jugadora concreta, a lo largo de los partidos dados.
+// Las cuentas son independientes entre sí (no un reparto del 100%): una
+// misma canasta puede ser, a la vez, tras robo Y de contraataque.
+function playerOriginBreakdown(games, dorsal, name){
+  var total=0, steal=0, offReb=0, fastbreak=0, staticCount=0;
+  (games||[]).forEach(function(g){
+    var p = (g.roster||[]).filter(function(r){ return r.dorsal===dorsal && r.name===name; })[0];
+    if(!p) return;
+    g.events.forEach(function(e){
+      if(e.side==='team' && e.playerId===p.id && e.points>0 && (e.type==='2m' || e.type==='3m')){
+        total++;
+        var tagged = false;
+        if(e.origin==='steal'){ steal++; tagged=true; }
+        else if(e.origin==='offReb'){ offReb++; tagged=true; }
+        if(e.fastBreak){ fastbreak++; tagged=true; }
+        if(!tagged) staticCount++;
+      }
+    });
+  });
+  return { total:total, steal:steal, offReb:offReb, fastbreak:fastbreak, static:staticCount };
+}
+// Cuántos de los robos y rebotes ofensivos propios de esta jugadora acaban
+// en canasta (suya o de una compañera), a lo largo de los partidos dados.
+function playerProductiveOrigins(games, dorsal, name){
+  var totalSteals=0, stealsScored=0, totalOffRebs=0, offRebsScored=0;
+  (games||[]).forEach(function(g){
+    var p = (g.roster||[]).filter(function(r){ return r.dorsal===dorsal && r.name===name; })[0];
+    if(!p) return;
+    g.events.forEach(function(e){
+      if(e.side!=='team') return;
+      if(e.type==='stl' && e.playerId===p.id) totalSteals++;
+      if(e.type==='rebO' && e.playerId===p.id) totalOffRebs++;
+      if(e.points>0 && e.origin==='steal' && e.originPlayerId===p.id) stealsScored++;
+      if(e.points>0 && e.origin==='offReb' && e.originPlayerId===p.id) offRebsScored++;
+    });
+  });
+  return { totalSteals:totalSteals, stealsScored:stealsScored, totalOffRebs:totalOffRebs, offRebsScored:offRebsScored };
+}
+// Las dos tarjetas de "origen" de la ficha de jugadora (Estadísticas ->
+// Jugadora): de dónde vienen sus canastas, y cuánto rinden sus propios
+// robos/rebotes ofensivos. Se devuelve '' (sin tarjetas) si no hay datos
+// todavía, igual que el resto de tarjetas opcionales de esta ficha.
+function renderPlayerOriginCards(games, dorsal, name){
+  var h = '';
+  var ob = playerOriginBreakdown(games, dorsal, name);
+  if(ob.total>0){
+    var rows = [
+      {key:'steal', label:'Robo', v: ob.steal},
+      {key:'offReb', label:'Reb. of.', v: ob.offReb},
+      {key:'fastbreak', label:'C.ataque', v: ob.fastbreak},
+      {key:'static', label:'Estático', v: ob.static}
+    ];
+    var bestRow = rows.slice().sort(function(a,b){ return b.v-a.v; })[0];
+    h += '<div class="periodstatcard">';
+    h += '<div class="pstatcaption">Procedencia de sus canastas anotadas esta temporada ('+ob.total+' canasta'+(ob.total===1?'':'s')+'). Una canasta puede contar en más de una categoría (p.ej. tras robo y de contraataque).</div>';
+    rows.forEach(function(r){
+      var pct = Math.round(r.v/ob.total*100);
+      h += '<div class="pbarrow"><div class="pbname">'+r.label+'</div><div class="pbartrack"><div class="pbarfill'+(r===bestRow && r.v>0?' best':'')+'" style="width:'+pct+'%"></div></div><div class="pbval">'+r.v+'</div></div>';
+    });
+    if(bestRow && bestRow.v>0 && bestRow.key!=='static'){
+      var pct2 = Math.round(bestRow.v/ob.total*100);
+      var viaTxt = bestRow.key==='steal' ? 'justo después de un robo' : (bestRow.key==='offReb' ? 'tras un rebote ofensivo' : 'de contraataque');
+      h += '<div class="pstatinsight">'+icon('star',14)+' '+pct2+'% de sus canastas vienen '+viaTxt+' — su mejor vía de anotación.</div>';
+    }
+    h += '</div>';
+  }
+  var po = playerProductiveOrigins(games, dorsal, name);
+  if(po.totalSteals>0 || po.totalOffRebs>0){
+    h += '<div class="periodstatcard">';
+    h += '<div class="pstatcaption">Cuántos de sus propios robos y rebotes ofensivos acaban en canasta (suya o de una compañera).</div>';
+    if(po.totalSteals>0){
+      var sp = Math.round(po.stealsScored/po.totalSteals*100);
+      h += '<div class="teamstatrow"><div class="tsval">'+po.stealsScored+' / '+po.totalSteals+'</div><div class="tslabel">Robos que acaban en canasta</div><div class="tsval right">'+sp+'%</div></div>';
+    }
+    if(po.totalOffRebs>0){
+      var rp = Math.round(po.offRebsScored/po.totalOffRebs*100);
+      h += '<div class="teamstatrow"><div class="tsval">'+po.offRebsScored+' / '+po.totalOffRebs+'</div><div class="tslabel">Reb. ofensivos que acaban en canasta</div><div class="tsval right">'+rp+'%</div></div>';
+    }
+    h += '</div>';
+  }
+  return h;
 }
 function rankLeader(list, key){
   var withPct = ['fg2pct','fg3pct','ftpct'].indexOf(key)!==-1;
@@ -7081,13 +7484,43 @@ function renderPeriodResultsCard(agg){
   h += '</div>';
   return {title:'¿En qué '+esc(labelLower)+' solemos ganar?', content: h};
 }
-// Carrusel de 2 páginas con las dos tarjetas "por periodo" de arriba.
+// -- tarjeta: de dónde vienen los puntos propios y del rival (temporada / filtro actual) --
+function renderOriginSeasonCard(games){
+  var stats = aggregateOriginStats(games);
+  var h = '<div class="periodstatcard">';
+  h += '<div class="pstatcaption">De dónde vienen vuestros puntos frente a los que concedéis.</div>';
+  function row(key, label){
+    var pcts = cmpBarPcts(stats[key].teamPct, stats[key].rivalPct);
+    h += cmpRowHtml({}, '', key, label, stats[key].teamPct+'%', stats[key].rivalPct+'%', pcts[0], pcts[1], null);
+  }
+  row('steal', 'Tras robo');
+  row('offReb', 'Tras rebote ofensivo');
+  row('fastbreak', 'De contraataque');
+  var cats = [
+    {key:'steal', warnLabel:'en transición tras pérdida'},
+    {key:'offReb', warnLabel:'en segundas opciones'},
+    {key:'fastbreak', warnLabel:'en contraataque'}
+  ];
+  var worst = cats.slice().sort(function(a,b){ return stats[b.key].rivalPct - stats[a.key].rivalPct; })[0];
+  if(worst && stats[worst.key].rivalPct>=20){
+    h += '<div class="pstatinsight" style="color:var(--bad);background:oklch(62% 0.19 25 / 12%);border-color:var(--bad)">'+icon('info',14)+' Concedéis bastante '+esc(worst.warnLabel)+' ('+stats[worst.key].rivalPct+'% de los puntos del rival) — podría valer la pena trabajarlo.</div>';
+  } else {
+    var best = cats.slice().sort(function(a,b){ return stats[b.key].teamPct - stats[a.key].teamPct; })[0];
+    if(best && stats[best.key].teamPct>=20){
+      h += '<div class="pstatinsight">'+icon('star',14)+' Buena parte de vuestros puntos viene '+esc(best.warnLabel)+' ('+stats[best.key].teamPct+'%).</div>';
+    }
+  }
+  h += '</div>';
+  return {title:'¿De dónde vienen los puntos?', content: h};
+}
+// Carrusel de 3 páginas con las tarjetas "por periodo" / origen de arriba.
 function renderPeriodStatsCards(games){
   var agg = aggregatePeriodStats(games);
   if(!agg.maxPeriods || !agg.totalTeamPoints) return '';
   return swipeCarouselHtml('teamStatsPeriods', [
     renderPeriodPointsCard(agg),
-    renderPeriodResultsCard(agg)
+    renderPeriodResultsCard(agg),
+    renderOriginSeasonCard(games)
   ]);
 }
 function renderTeamPanelAggregate(games){
@@ -7383,6 +7816,7 @@ function renderPlayerRadarPopup(){
     {title:'Mapa de calor', content: heatMapCardHtml('playerRadar', function(mode){ return playerShotPoints(games, me.dorsal, me.name, null, mode); })},
     renderPlayerTrendCard(games, me.dorsal, me.name)
   ]);
+  h += renderPlayerOriginCards(games, me.dorsal, me.name);
   h += renderPlayerStatLine(me);
   h += '</div></div></div>';
   return h;
