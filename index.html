@@ -883,6 +883,12 @@ function saveState(game){
 }
 
 var S = loadState();
+// Red de seguridad: si una sesión anterior se cerró a media edición de una jugada de un
+// partido ya finalizado (ver pbpPickPlayer / editingPastGameId más abajo), S.current se
+// había quedado "prestado" como ese partido antiguo para reutilizar las pantallas del
+// directo. Se detecta porque ya tiene finished=true -- algo que nunca ocurre en un
+// partido realmente en curso -- y se limpia (el partido sigue intacto en S.games).
+if(S.current && S.current.finished){ S.current = null; }
 /* Cada vez que se abre la app (icono, refresco) debe arrancar SIEMPRE en Inicio.
    Si hay un partido en curso sin terminar, se ofrece continuarlo mediante un
    popup (ver maybeOfferResume) en lugar de navegar directamente a él. */
@@ -1447,11 +1453,47 @@ function edPlayerField(field, value){
 async function saveEditPlayerPopup(){
   if(!editPlayerDraft) return;
   var id = editPlayerDraft.id;
-  var dorsal = editPlayerDraft.dorsal;
+  var original = teamRoster.filter(function(x){ return x.id===id; })[0];
+  var originalName = original ? original.name : null;
+  var originalDorsal = original ? original.dorsal : null;
+  var dorsal = parseInt(editPlayerDraft.dorsal,10);
+  if(isNaN(dorsal)) dorsal = originalDorsal;
   var name = editPlayerDraft.name;
   editPlayerDraft = null;
   await updateTeamPlayer(id, 'dorsal', dorsal);
   await updateTeamPlayer(id, 'name', name);
+  // Los partidos ya jugados guardan su propia copia de la plantilla (cada jugadora se
+  // identifica ahí por dorsal+nombre, no por este id -- ver aggregatePlayers/playerZoneStats),
+  // así que cambiar el dorsal aquí NO los toca automáticamente. Si el dorsal ha cambiado,
+  // se le ofrece corregirlos también, caso por caso.
+  if(originalName && dorsal!==originalDorsal){
+    askConfirm('Corregir partidos anteriores',
+      'Has cambiado el dorsal de '+originalName+' de '+originalDorsal+' a '+dorsal+'. ¿Quieres corregirlo también en los partidos que ya se jugaron con el dorsal anterior?',
+      'Sí, corregir también',
+      function(){ applyDorsalToPastGames(originalName, dorsal); },
+      'No, solo a partir de ahora');
+  }
+}
+// Aplica un nuevo dorsal, por nombre, a la copia de la plantilla guardada en cada partido
+// (pasado, y también el partido en directo si hay uno abierto) -- ver nota en saveEditPlayerPopup.
+async function applyDorsalToPastGames(name, newDorsal){
+  var touched = [];
+  function fix(g){
+    var p = (g.roster||[]).filter(function(rp){ return rp.name===name; })[0];
+    if(p && p.dorsal!==newDorsal){ p.dorsal = newDorsal; touched.push(g); }
+  }
+  S.games.forEach(fix);
+  if(S.current) fix(S.current);
+  if(!touched.length){ render(); return; }
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }catch(e){}
+  render();
+  if(sb){
+    for(var i=0;i<touched.length;i++){
+      if(touched[i].started===false) continue; // partido de "Nuevo partido" todavía sin empezar -- nada que corregir en la nube
+      try{ await pushMatch(touched[i]); }catch(e){}
+    }
+  }
+  showToast('Dorsal corregido en '+touched.length+' partido'+(touched.length===1?'':'s')+' anterior'+(touched.length===1?'':'es')+'.');
 }
 function confirmDeletePlayerFromEdit(id){
   var p = teamRoster.filter(function(x){ return x.id===id; })[0];
@@ -2017,30 +2059,72 @@ function playOriginTagsHtml(e, g){
   return tags ? ('<div class="playrow-tags">'+tags+'</div>') : '';
 }
 var pbpEditingId = null, pbpConfirmingId = null, pbpEditRivalId = null;
+// id de un partido ya FINALIZADO (en S.games) cuyo play-by-play se está reeditando desde
+// la pestaña "Jugadas" del box score, reutilizando las mismas pantallas de anotar en
+// directo (stat/shotzone/assist/origin) -- ver pbpPickPlayer y exitPastGameEdit.
+var editingPastGameId = null;
+// Resuelve el partido sobre el que debe actuar una edición inline del play-by-play
+// (borrar jugada / corregir puntos del rival) que NO navega a otra pantalla: usa
+// S.current solo si de verdad coincide con el partido que se estaba viendo; si no,
+// busca el partido por id en S.games -- así funciona igual se esté viendo el partido
+// en directo o uno ya finalizado.
+function resolveEditGame(gameId){
+  if(S.current && (!gameId || S.current.id===gameId)) return S.current;
+  return gameId ? byId(S.games, gameId) : null;
+}
 function pbpToggleEdit(id){ pbpConfirmingId=null; pbpEditRivalId=null; pbpEditingId = (pbpEditingId===id ? null : id); render(); }
 function pbpAskDelete(id){ pbpEditingId=null; pbpEditRivalId=null; pbpConfirmingId=id; render(); }
 function pbpCancelDelete(){ pbpConfirmingId=null; render(); }
-function pbpConfirmDelete(id){
-  var g = S.current;
+function pbpConfirmDelete(id, gameId){
+  var g = resolveEditGame(gameId);
+  if(!g) return;
   g.events = g.events.filter(function(e){ return e.id!==id; });
   pbpConfirmingId=null;
-  saveState(); render();
+  saveState(g); render();
 }
 /* full re-entry flow: pick (or confirm) who really made the play, then walk the same
    screens used when recording it live (stat sheet -> shot zone -> assist), editing the
-   existing event in place instead of creating a new one */
-function pbpPickPlayer(id, pid){
+   existing event in place instead of creating a new one.
+   Cuando gameId no es el partido en directo actual (es decir, se está editando una
+   jugada de un partido ya FINALIZADO desde su box score), S.current se "presta"
+   temporalmente para ese partido antiguo -- así TODA la maquinaria existente de
+   anotar/editar (que lee S.current directamente) funciona sin tocarla. Se restaura
+   al salir del flujo, ver exitPastGameEdit(). Si hay de verdad otro partido en
+   directo en curso, no se permite -- primero hay que terminarlo. */
+function pbpPickPlayer(id, pid, gameId){
   pbpEditingId = null; pbpEditRivalId = null;
+  if(gameId && (!S.current || S.current.id!==gameId)){
+    if(S.current){ showToast('Termina primero el partido en directo para poder editar un partido pasado.'); return; }
+    var target = byId(S.games, gameId);
+    if(!target) return;
+    editingPastGameId = gameId;
+    S.current = target;
+  }
   go('stat', {playerId: pid, editEventId: id});
 }
 function pbpPickRival(id){ pbpEditRivalId = id; render(); }
 function pbpBackToPlayers(){ pbpEditRivalId = null; render(); }
-function pbpApplyRivalPoints(id, pts){
-  var g = S.current;
+function pbpApplyRivalPoints(id, pts, gameId){
+  var g = resolveEditGame(gameId);
+  if(!g) return;
   var e = byId(g.events, id);
   if(e){ e.side='rival'; e.type='rivalpts'; e.points=pts; delete e.playerId; delete e.zone; delete e.assistPlayerId; }
   pbpEditingId = null; pbpEditRivalId = null;
-  saveState(); render();
+  saveState(g); render();
+}
+// Vuelve de reeditar una jugada de un partido ya finalizado a su box score (pestaña
+// Jugadas), deshaciendo el "préstamo" de S.current hecho en pbpPickPlayer.
+function exitPastGameEdit(){
+  var gid = editingPastGameId;
+  editingPastGameId = null;
+  S.current = null;
+  go('box', {gameId: gid, fromGames:true});
+}
+// Al terminar (o cancelar) de corregir una jugada: si se estaba reeditando un partido
+// pasado, vuelve a su box score; si es el flujo normal de un partido en directo, sigue
+// igual que siempre.
+function liveOrExit(){
+  if(editingPastGameId){ exitPastGameEdit(); } else { go('live'); }
 }
 // Fila de "quinteto" en el play-by-play -- tres variantes según subKind:
 // 'start'/'period' (empieza el partido o un sexto nuevo: se lista el quinteto
@@ -2104,7 +2188,7 @@ function renderPlayByPlay(g, opts){
         h += '<div class="editpanel"><div class="editlabel">¿Cuántos puntos ha anotado el rival?</div>'+
           '<div class="editchip back" onclick="pbpBackToPlayers()">'+icon('back',12)+' Jugadoras</div>';
         [1,2,3].forEach(function(v){
-          h += '<div class="editchip'+(e.type==='rivalpts'&&e.points===v?' sel':'')+'" onclick="pbpApplyRivalPoints(\''+e.id+'\','+v+')">+'+v+'</div>';
+          h += '<div class="editchip'+(e.type==='rivalpts'&&e.points===v?' sel':'')+'" onclick="pbpApplyRivalPoints(\''+e.id+'\','+v+',\''+g.id+'\')">+'+v+'</div>';
         });
         h += '</div>';
       } else {
@@ -2112,7 +2196,7 @@ function renderPlayByPlay(g, opts){
         h += '<div class="editpanel"><div class="editlabel">¿Quién hizo esta jugada? Elige para volver a marcar la acción entera</div>';
         snapshotPlayers.forEach(function(p){
           var isCur = (e.side!=='rival' && e.playerId===p.id);
-          h += '<div class="editchip'+(isCur?' sel':'')+'" onclick="pbpPickPlayer(\''+e.id+'\',\''+p.id+'\')">Nº'+p.dorsal+' '+esc(firstName(p.name))+'</div>';
+          h += '<div class="editchip'+(isCur?' sel':'')+'" onclick="pbpPickPlayer(\''+e.id+'\',\''+p.id+'\',\''+g.id+'\')">Nº'+p.dorsal+' '+esc(firstName(p.name))+'</div>';
         });
         h += '<div class="editchip'+(e.side==='rival'?' sel':'')+'" onclick="pbpPickRival(\''+e.id+'\')">Rival</div>';
         h += '</div>';
@@ -2121,7 +2205,7 @@ function renderPlayByPlay(g, opts){
     if(!readOnly && pbpConfirmingId===e.id){
       h += '<div class="delconfirm"><div class="msg">¿Borrar esta jugada?</div>'+
         '<button class="no" onclick="pbpCancelDelete()">Cancelar</button>'+
-        '<button class="yes" onclick="pbpConfirmDelete(\''+e.id+'\')">Borrar</button></div>';
+        '<button class="yes" onclick="pbpConfirmDelete(\''+e.id+'\',\''+g.id+'\')">Borrar</button></div>';
     }
     h += '</div>';
   });
@@ -2315,6 +2399,41 @@ function removePlayer(pid){
   g.roster = g.roster.filter(function(p){return p.id!==pid;});
   g.onCourt = g.onCourt.filter(function(id){return id!==pid;});
   saveState(); render();
+}
+/* ---- cambiar el dorsal de una jugadora solo para ESTE partido (sin tocar la
+   plantilla general) -- la copia de la plantilla de cada partido ya es propia
+   (ver newGame: cada jugadora recibe un id nuevo al crear el partido), así que
+   basta con editar aquí el dorsal de esta copia antes de empezar a jugar. */
+var editSetupPlayerDraft = null;
+function openEditSetupPlayerPopup(id){
+  var p = byId(S.current.roster, id);
+  if(!p) return;
+  editSetupPlayerDraft = { id:id, dorsal:p.dorsal };
+  render();
+}
+function closeEditSetupPlayerPopup(){ editSetupPlayerDraft = null; render(); }
+function esPlayerDorsalField(value){
+  if(!editSetupPlayerDraft) return;
+  editSetupPlayerDraft.dorsal = value;
+}
+function saveEditSetupPlayerPopup(){
+  if(!editSetupPlayerDraft) return;
+  var p = byId(S.current.roster, editSetupPlayerDraft.id);
+  var d = parseInt(editSetupPlayerDraft.dorsal,10);
+  if(p && !isNaN(d)) p.dorsal = d;
+  editSetupPlayerDraft = null;
+  saveState(); render();
+}
+function editSetupPlayerOverlay(){
+  if(!editSetupPlayerDraft) return '';
+  var d = editSetupPlayerDraft;
+  return '<div class="veil"><div class="modal">'+
+    '<div class="mhead"><div class="mtitle">Dorsal para este partido</div>'+
+    '<div class="msub">Este cambio solo afecta a este partido -- no modifica la plantilla general del equipo.</div></div>'+
+    '<div class="section"><div class="rowcard"><div class="k">Dorsal</div><input type="number" value="'+d.dorsal+'" oninput="esPlayerDorsalField(this.value)"></div></div>'+
+    '<button class="fullbtn" onclick="saveEditSetupPlayerPopup()">Guardar</button>'+
+    '<div class="cancel" onclick="closeEditSetupPlayerPopup()">Cancelar</div>'+
+    '</div></div>';
 }
 /* ---- plantilla rival: solo dorsal es obligatorio; sin nombre se muestra
    "Jugador N" (rivalPlayerDisplayName) hasta que se edite -- ver point 2 del
@@ -2548,7 +2667,7 @@ function editRivalPlayerOverlay(){
 
 /* ---------- live / stats ---------- */
 function openStatSheet(pid){ go('stat', {playerId: pid}); }
-function closeStatSheet(){ go('live'); }
+function closeStatSheet(){ liveOrExit(); }
 function switchPeriod(p){
   if(p===S.current.currentPeriod) return;
   go('lineup', {mode:'period', targetPeriod:p});
@@ -2575,7 +2694,7 @@ function recordTeamStat(type){
   } else {
     pushEvent(g, {side:'team', type:type, playerId:pid, points:pts});
   }
-  go('live');
+  liveOrExit();
 }
 
 /* ---- shot zone (mandatory court position for every 2pt/3pt shot) ---- */
@@ -2660,7 +2779,7 @@ function pickShotZone(ev, id){
   if(type==='2m' || type==='3m'){
     go('assist', {playerId: pid, type: type, points: pts, editEventId: editId});
   } else {
-    go('live');
+    liveOrExit();
   }
 }
 function renderShotZone(){
@@ -3082,7 +3201,7 @@ function applyOriginDraftToEvent(){
 function saveOrigin(){
   applyOriginDraftToEvent();
   originDraft = null; originSuggestion = null;
-  go('live');
+  liveOrExit();
 }
 function skipOrigin(){
   var editId = S.routeParams.editEventId;
@@ -3094,7 +3213,7 @@ function skipOrigin(){
     saveState();
   }
   originDraft = null; originSuggestion = null;
-  go('live');
+  liveOrExit();
 }
 function undoAssistShot(){
   var editId = S.routeParams.editEventId;
@@ -3187,6 +3306,11 @@ function setRivalOrigin(value){
 
 /* ---------- finish / games ---------- */
 function finishGame(){
+  // Guarda de seguridad: nunca debería poder llegar aquí mientras S.current es en
+  // realidad un partido ya finalizado "prestado" para reeditar una jugada (el botón
+  // Finalizar está oculto en ese modo) -- si pasara, volver a finalizarlo lo duplicaría
+  // en S.games.
+  if(editingPastGameId) return;
   var g = S.current;
   g.finished = true;
   g.finishedAt = Date.now();
@@ -3231,8 +3355,8 @@ function getGameById(id){
 /* ---------- confirm modal + toast (avoid native confirm/alert: unreliable in some mobile/PWA contexts) ---------- */
 var confirmModal = null;
 var pendingConfirmCb = null;
-function askConfirm(title, msg, yesLabel, onYes){
-  confirmModal = {title:title, msg:msg, yesLabel:yesLabel||'Confirmar'};
+function askConfirm(title, msg, yesLabel, onYes, noLabel){
+  confirmModal = {title:title, msg:msg, yesLabel:yesLabel||'Confirmar', noLabel:noLabel||'Cancelar'};
   pendingConfirmCb = onYes;
   render();
 }
@@ -3517,12 +3641,19 @@ function topbarHtml(g, opts){
   // Partidos) que no aportaba nada: "Continuar" era lo mismo que cerrar el popup,
   // y "Empezar partido nuevo" ya se hace de forma explícita (con su propio aviso
   // de descartar) desde el "+" de la pantalla Partidos. Ahora es simplemente volver.
-  var leftBtn = '<button class="iconbtn" onclick="go(\''+(opts.backTo||'games')+'\')">'+icon('back',18)+'</button>';
+  // opts.backAction permite un onclick a medida en vez de un simple go(backTo) -- lo usa
+  // la reedición de un partido ya finalizado (ver renderStat) para volver a su box score
+  // y deshacer correctamente el "préstamo" de S.current, en vez de solo navegar.
+  var leftBtn = '<button class="iconbtn" onclick="'+(opts.backAction || ("go('"+(opts.backTo||'games')+"')"))+'">'+icon('back',18)+'</button>';
   // El icono de Box Score (para consultar los totales del partido en curso, no
   // solo al finalizarlo) solo se muestra donde tiene sentido: en la pantalla
   // "en directo" misma, no en cada hoja de anotar/rival que ya reutiliza esta
   // barra y donde añadiría ruido sin aportar nada nuevo.
   var boxBtn = opts.showBox ? '<button class="iconbtn" onclick="go(\'box\',{gameId:\''+g.id+'\'})">'+icon('stats',15)+'</button>' : '';
+  // opts.hideFinish: al reeditar una jugada de un partido ya finalizado, esta barra se
+  // reutiliza pero NO debe ofrecer "Finalizar" -- volvería a marcar el partido como
+  // terminado y a duplicarlo en el historial (ya está en S.games).
+  var finishBtn = opts.hideFinish ? '' : '<button class="finish" onclick="confirmFinishGame()">Finalizar</button>';
   return ''+
   '<div class="topbar">'+
     leftBtn+
@@ -3530,7 +3661,7 @@ function topbarHtml(g, opts){
       '<div class="teams">'+esc(g.teamName)+' vs '+esc(g.rivalName||'Rival')+'</div>'+
       '<div class="score">'+teamScore(g)+' – '+rivalScore(g)+'</div>'+
     '</div>'+
-    '<div style="display:flex;align-items:center;gap:6px">'+boxBtn+'<button class="finish" onclick="confirmFinishGame()">Finalizar</button></div>'+
+    '<div style="display:flex;align-items:center;gap:6px">'+boxBtn+finishBtn+'</div>'+
   '</div>';
 }
 function tabsHtml(g){
@@ -3566,7 +3697,7 @@ function confirmOverlay(){
     '<div class="mhead"><div class="mtitle">'+esc(confirmModal.title)+'</div>'+
     '<div class="msub">'+esc(confirmModal.msg)+'</div></div>'+
     '<button class="fullbtn" onclick="resolveConfirm(true)">'+esc(confirmModal.yesLabel)+'</button>'+
-    '<div class="cancel" onclick="resolveConfirm(false)">Cancelar</div>'+
+    '<div class="cancel" onclick="resolveConfirm(false)">'+esc(confirmModal.noLabel||'Cancelar')+'</div>'+
     '</div></div>';
 }
 function toastHtml(){
@@ -3736,9 +3867,11 @@ function renderSetup(){
        '<div class="players">';
   roster.forEach(function(p){
     h += '<div class="prow"><div class="dorsal">'+p.dorsal+'</div><div class="pname"><div class="nm">'+esc(p.name)+'</div></div>'+
+         '<button class="editbtn" onclick="event.stopPropagation();openEditSetupPlayerPopup(\''+p.id+'\')">'+icon('pencil',14)+'</button>'+
          '<button class="rmbtn" onclick="removePlayer(\''+p.id+'\')">'+icon('trash',15)+'</button></div>';
   });
   h += '</div>'+
+       '<div class="caption" style="margin-top:8px">¿Alguna jugadora va a llevar hoy un dorsal distinto al habitual? Tócala con el lápiz para cambiarlo solo en este partido.</div>'+
        '<div class="addrow">'+
          '<input class="dorsalinput" id="newPlayerDorsal" type="number" placeholder="Dorsal" onkeydown="if(event.key===\'Enter\') document.getElementById(\'newPlayerName\').focus()">'+
          '<input id="newPlayerName" type="text" style="flex:1;min-width:0" placeholder="Nombre del jugador" onkeydown="if(event.key===\'Enter\') addPlayer()">'+
@@ -3767,6 +3900,7 @@ function renderSetup(){
 
   h += '</div>';
   h += '<div class="ctabar"><button class="cta" '+(roster.length<1?'disabled':'')+' onclick="startGameFromSetup()">Ir al quinteto en pista</button></div>';
+  h += editSetupPlayerOverlay();
   return h;
 }
 
@@ -3825,7 +3959,11 @@ function openRivalPlayerSheet(pid){ go('rivalPlayerSheet', {rivalPlayerId: pid})
 function renderLive(){
   var g = S.current;
   var h = '';
-  h += topbarHtml(g, {showBox:true});
+  // Defensa adicional (no debería alcanzarse en uso normal): si por lo que sea se
+  // acabara en esta pantalla mientras S.current es en realidad un partido pasado
+  // "prestado" para reeditar una jugada, que al menos no ofrezca "Finalizar" ni
+  // un "atrás" que deje colgado ese préstamo.
+  h += topbarHtml(g, editingPastGameId ? {showBox:true, hideFinish:true, backAction:'exitPastGameEdit()'} : {showBox:true});
   h += tabsHtml(g);
   h += renderPlayByPlay(g);
   h += renderGameClockWidget(g);
@@ -3885,7 +4023,7 @@ function renderStat(){
   if(!p) return renderLive();
   var st = playerStats(g, pid);
   var h = '';
-  h += topbarHtml(g, {backTo:'live'});
+  h += topbarHtml(g, editingPastGameId ? {backAction:'exitPastGameEdit()', hideFinish:true} : {backTo:'live'});
   h += tabsHtml(g);
   h += feedHtml(g);
   h += '<div class="pheader"><div class="av">'+p.dorsal+'</div><div><div class="nm">'+esc(p.name)+'</div>'+
@@ -4121,7 +4259,11 @@ function renderBox(){
        '</div></div>';
 
   if(boxViewMode==='plays'){
-    h += '<div class="boxcontent">'+renderPlayByPlay(g, {readOnly:true, flowing:true})+'</div>';
+    // Editar el play-by-play desde aquí solo tiene sentido para un partido YA FINALIZADO
+    // (uno en directo ya se edita in-situ en la pantalla "en directo") y solo si se tiene
+    // permiso de escritura sobre la temporada -- ver pbpPickPlayer/editingPastGameId.
+    var canEditPlays = !!(g.finished && canWriteCurrentSeason());
+    h += '<div class="boxcontent">'+renderPlayByPlay(g, {readOnly: !canEditPlays, flowing:true})+'</div>';
     return h;
   }
 
