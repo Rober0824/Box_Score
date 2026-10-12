@@ -518,6 +518,8 @@
   .printcol-right .printsectitle{ margin-bottom:10px; }
   .printdarkcard{ border-radius:14px; padding:4px 4px 2px; background:var(--bg); }
   .printdarkcard .shotmapcard{ margin-top:0; }
+  /* ---- PDF/compartir "solo jugadas" (pestaña Jugadas), orden cronológico ---- */
+  .printplaylist{ display:flex; flex-direction:column; gap:7px; }
 
   @media print{
     html, body{ background:#fff !important; height:auto !important; overflow:visible !important; }
@@ -554,6 +556,15 @@
     #printArea .periodtable th, #printArea .periodtable td{ padding:4px 5px; }
     #printArea .printfoot{ page-break-inside:avoid; break-inside:avoid; }
     #printArea .printcols{ page-break-inside:avoid; break-inside:avoid; }
+    /* el listado de jugadas puede ser largo -- a diferencia de las otras secciones
+       (pensadas para caber en una sola página), esta SÍ debe poder partirse entre
+       páginas; solo se evita partir una jugada concreta por la mitad. */
+    #printArea .printsection.printsection-flow{ page-break-inside:auto; break-inside:auto; }
+    #printArea .playrow, #printArea .lineuprow{ page-break-inside:avoid; break-inside:avoid; }
+    /* --reb no se redefine para impresión (se deja igual que en la app) y es un
+       tono claro -- con --accent-ink (blanco en impresión) el texto quedaría casi
+       ilegible encima, así que aquí se fuerza a oscuro. */
+    #printArea .playtag.reb{ color:#221a14; }
     @page{ size:landscape; margin:10mm; }
   }
 
@@ -2058,6 +2069,26 @@ function playOriginTagsHtml(e, g){
   }
   return tags ? ('<div class="playrow-tags">'+tags+'</div>') : '';
 }
+// Misma información que playOriginTagsHtml pero en texto plano (sin HTML), para
+// el listado de jugadas que se comparte como texto -- ver playByPlayShareText.
+function playOriginTagsText(e, g){
+  var tags = [];
+  if(e.side==='rival'){
+    if(e.origin==='steal') tags.push('tras robo');
+    else if(e.origin==='offReb') tags.push('tras rebote of.');
+    else if(e.origin==='fastbreak') tags.push('contraataque');
+  } else {
+    if(e.origin==='steal'){
+      var sp = e.originPlayerId ? byId(g.roster, e.originPlayerId) : null;
+      tags.push('tras robo'+(sp?(' de Nº'+sp.dorsal):''));
+    } else if(e.origin==='offReb'){
+      var rp2 = e.originPlayerId ? byId(g.roster, e.originPlayerId) : null;
+      tags.push('tras rebote of.'+(rp2?(' de Nº'+rp2.dorsal):''));
+    }
+    if(e.fastBreak) tags.push('contraataque');
+  }
+  return tags.join(', ');
+}
 var pbpEditingId = null, pbpConfirmingId = null, pbpEditRivalId = null;
 // id de un partido ya FINALIZADO (en S.games) cuyo play-by-play se está reeditando desde
 // la pestaña "Jugadas" del box score, reutilizando las mismas pantallas de anotar en
@@ -2233,7 +2264,7 @@ var ROUTE_LABELS = {
   adminFbm:'Admin · Fuente FBM', adminUsuarios:'Admin · Usuarios', analytics:'Admin · Analítica', adminNotif:'Admin · Notificaciones',
   stats:'Estadísticas', setup:'Nuevo partido',
   lineup:'Quinteto inicial', rivalLineup:'Quinteto rival', live:'Partido en directo', stat:'Anotar estadística',
-  shotzone:'Zona de tiro', assist:'Asistencia', origin:'Origen de la canasta', rivalquick:'Marcador rival rápido',
+  shotzone:'Zona de tiro', assist:'Asistencia', origin:'Origen de la canasta', rivalOrigin:'Origen de la canasta rival', rivalquick:'Marcador rival rápido',
   rivalsheet:'Ficha rival', rivalPlayerSheet:'Anotar estadística rival', box:'Box score', minutes:'Minutos', games:'Partidos',
   approvals:'Solicitudes de acceso', ranking:'Clasificación', mvpHistory:'Histórico MVP',
   standingsEdit:'Editar clasificación', playerRadar:'Radar de jugadora', matchPlayer:'Jugadora del partido'
@@ -3230,8 +3261,19 @@ function undoAssistShot(){
 }
 function recordRivalQuick(pts){
   var g = S.current;
-  pushEvent(g, {side:'rival', type:'rivalpts', playerId:null, points:pts});
-  go('live');
+  var ev = {side:'rival', type:'rivalpts', playerId:null, points:pts};
+  pushEvent(g, ev);
+  goToRivalOriginOrLive(ev);
+}
+// Tras anotar una canasta del rival (quick o Completas), si es una jugada que puede
+// llevar "origen" (robo/rebote of./contraataque), se pasa primero por esa pantalla --
+// igual que las jugadas propias pasan por shotzone/assist/origin antes de volver a
+// "en directo" -- en vez de volver directamente y mostrar la pregunta ahí mezclada con
+// el resto de casillas (lo que Rober encontró confuso). Si no aplica (falta, rebote,
+// etc., sin puntos), se vuelve a "en directo" tal cual, sin pantalla de por medio.
+function goToRivalOriginOrLive(ev){
+  if(qualifiesForRivalOriginTag(ev)) go('rivalOrigin', {eventId: ev.id});
+  else go('live');
 }
 function recordRivalFull(type){
   var g = S.current;
@@ -3261,12 +3303,14 @@ function recordRivalFull(type){
   // jugadora (rivalPlayerStats) y para que aparezca en el play-by-play igual
   // que las jugadas propias.
   var rpid = S.routeParams.rivalPlayerId || null;
-  pushEvent(g, {side:'rival', type:type, playerId:rpid, points:pts});
-  // Vuelve siempre a "en directo" (igual que recordTeamStat con las jugadoras
-  // propias) -- el grid se queda en la vista rival (liveTileView no cambia),
-  // así que anotar varias jugadas seguidas de la misma jugadora es solo
-  // "tocar su casilla otra vez" + la estadística.
-  go('live');
+  var ev = {side:'rival', type:type, playerId:rpid, points:pts};
+  pushEvent(g, ev);
+  // Vuelve a "en directo" (igual que recordTeamStat con las jugadoras propias) --
+  // el grid se queda en la vista rival (liveTileView no cambia), así que anotar
+  // varias jugadas seguidas de la misma jugadora es solo "tocar su casilla otra
+  // vez" + la estadística -- salvo que sea una canasta, que primero pasa por
+  // "origen" (ver goToRivalOriginOrLive).
+  goToRivalOriginOrLive(ev);
 }
 function openRival(){
   if(S.current.trackRivalFull) go('rivalsheet');
@@ -3277,31 +3321,51 @@ function openRival(){
    A diferencia de las jugadas propias, aquí es un único campo exclusivo
    (no hay "asistencia" que combinar y, siguiendo cómo lo pidió Rober --
    "todo lo que no fuese eso, sería estático" -- contraataque es una
-   categoría más, no una casilla aparte). Sin campo = estático. No bloquea
-   nada: se puede anotar y pasar de largo sin tocarla. */
+   categoría más, no una casilla aparte). Sin campo = estático: se puede
+   tocar "Continuar" sin elegir nada y queda así.
+   Primero se mostraba como una tira no bloqueante dentro de la propia
+   pantalla "en directo" -- a Rober le resultaba confuso verla ahí mezclada
+   con las casillas de anotar después de haber "vuelto" ya a esa pantalla.
+   Ahora es una pantalla propia (ver renderRivalOrigin/goToRivalOriginOrLive),
+   igual que "origen" para las jugadas del propio equipo: anotas -> aparece
+   esta pregunta -> vuelves a "en directo". */
 function qualifiesForRivalOriginTag(e){
   return !!(e && e.side==='rival' && e.points>0 && (e.type==='rivalpts' || e.type==='2m' || e.type==='3m' || e.type==='ftm'));
 }
-function rivalOriginTagStripHtml(e){
+function rivalOriginChipsHtml(e){
   var cur = e.origin || 'static';
   function tag(val, label, extraClass){
     return '<button class="chip'+(extraClass?(' '+extraClass):'')+(cur===val?' on':'')+'" onclick="setRivalOrigin(\''+val+'\')">'+label+'</button>';
   }
-  return '<div class="rivaltagcard"><div class="rivaltaglabel">¿De dónde viene ese último <b>+'+e.points+' del rival</b>? (opcional)</div>'+
-    '<div class="rivaltagrow">'+
+  return '<div class="rivaltagrow">'+
     tag('static','Estático')+
     tag('steal','Robo')+
     tag('offReb','Reb. of.')+
     tag('fastbreak','⚡ C.ataque','fb')+
-    '</div></div>';
+    '</div>';
 }
 function setRivalOrigin(value){
   var g = S.current;
-  var e = g.events[g.events.length-1];
+  var eventId = S.routeParams.eventId;
+  var e = (eventId && byId(g.events, eventId)) || g.events[g.events.length-1];
   if(!qualifiesForRivalOriginTag(e)) return;
   if(value==='static'){ delete e.origin; } else { e.origin = value; }
   saveState();
   render();
+}
+function renderRivalOrigin(){
+  var g = S.current;
+  var eventId = S.routeParams.eventId;
+  var e = (eventId && byId(g.events, eventId)) || g.events[g.events.length-1];
+  if(!e) return renderLive();
+  var h = renderLive(); // fondo visible, igual que assist/origin de las jugadas propias
+  h += '<div class="veil"><div class="modal">'+
+    '<div class="mhead"><div class="mtitle">¿De dónde viene esa canasta?</div>'+
+    '<div class="msub">Rival +'+e.points+' · opcional, puedes dejarlo en Estático</div></div>'+
+    rivalOriginChipsHtml(e)+
+    '<button class="fullbtn" style="margin-top:16px" onclick="go(\'live\')">Continuar</button>'+
+    '</div></div>';
+  return h;
 }
 
 /* ---------- finish / games ---------- */
@@ -3763,6 +3827,7 @@ function render(){
       case 'shotzone': html = renderShotZone(); break;
       case 'assist': html = renderAssist(); break;
       case 'origin': html = renderOrigin(); break;
+      case 'rivalOrigin': html = renderRivalOrigin(); break;
       case 'rivalquick': html = renderRivalQuick(); break;
       case 'rivalsheet': html = renderRivalSheet(); break;
       case 'rivalPlayerSheet': html = renderRivalPlayerSheet(); break;
@@ -3999,17 +4064,6 @@ function renderLive(){
     if(onCourt.length===0){
       h += '<div class="empty">No hay jugadoras en pista. Ve a "Cambios" para poner el quinteto.</div>';
     }
-  }
-  // Tira no bloqueante para etiquetar de dónde viene el último punto del
-  // rival (robo / rebote of. / contraataque) -- aparece aquí, en "en
-  // directo", y no en las pantallas de marcar rival (rivalquick/rivalsheet),
-  // porque ambas vuelven de inmediato a 'live' tras un solo toque ("para el
-  // rival prima la velocidad"), así que no hay dónde más mostrarla sin
-  // interrumpir ese flujo. Estática por defecto: si no se toca nada, no
-  // cambia nada.
-  var lastEv = g.events[g.events.length-1];
-  if(qualifiesForRivalOriginTag(lastEv)){
-    h += rivalOriginTagStripHtml(lastEv);
   }
   h += '<div class="undobar"><button class="undo" '+(g.events.length?'':'disabled')+' onclick="undoLast()">'+icon('undo',15)+' Deshacer última acción</button></div>';
   return h;
@@ -4264,6 +4318,7 @@ function renderBox(){
     // permiso de escritura sobre la temporada -- ver pbpPickPlayer/editingPastGameId.
     var canEditPlays = !!(g.finished && canWriteCurrentSeason());
     h += '<div class="boxcontent">'+renderPlayByPlay(g, {readOnly: !canEditPlays, flowing:true})+'</div>';
+    h += '<div class="actions"><button class="abtn" onclick="exportPlaysPDF(\''+g.id+'\')">Exportar PDF</button><button class="abtn" onclick="sharePlaysByPlay(\''+g.id+'\')">Compartir</button></div>';
     return h;
   }
 
@@ -4568,6 +4623,74 @@ function exportBoxScorePDF(gid){
     setTimeout(restoreTitle, 5000);
   }, 30);
 }
+/* ---- PDF / texto solo de las jugadas (pestaña "Jugadas" del box score) ----
+   Deliberadamente SEPARADO del informe de 3 páginas de arriba (equipo/periodos/
+   jugadoras) en vez de añadirse como una 4ª página: así ese informe no cambia
+   para quien lo exporta desde "Equipo" o "Jugadoras", y las jugadas (que pueden
+   ser una lista larga) solo se generan cuando de verdad se piden, desde su
+   propia pestaña. A diferencia del listado en pantalla (más reciente primero,
+   para ver lo último al vuelo durante el partido), aquí va en orden
+   cronológico -- se lee de principio a fin, como un acta del partido. */
+function buildPlaysPrintRowsHtml(g){
+  var h = '';
+  g.events.forEach(function(e){
+    if(e.type==='lineup'){ h += lineupRowHtml(e, g); return; }
+    var d = playRowData(e, g);
+    h += '<div class="playrow'+(e.side==='rival'?' rival':'')+'">'+
+      '<div class="per">'+esc(g.periodLabel.charAt(0).toUpperCase())+e.period+'</div>'+
+      '<div class="who">'+esc(d.who)+'</div>'+
+      '<div class="what">'+esc(d.label)+'</div>'+
+      (d.deltaLabel ? '<div class="delta '+d.deltaCls+'">'+d.deltaLabel+'</div>' : '')+
+      playOriginTagsHtml(e, g)+
+    '</div>';
+  });
+  if(!g.events.length) h += '<div class="emptyplays">Sin jugadas registradas</div>';
+  return h;
+}
+function buildPlaysPrintHtml(g){
+  var d = matchDateObj(g);
+  var today = new Date();
+  var downloadDateStr = pad2(today.getDate())+'/'+pad2(today.getMonth()+1)+'/'+today.getFullYear();
+  var logoHtml = '<img src="icon-192.png">';
+  var hh = '<div class="printhead">';
+  hh += '<div class="printbrand">'+logoHtml+'<div class="printbrandtext">BBall Stats</div></div>';
+  hh += '<div class="printmatch"><span>'+esc(g.teamName)+'</span><span class="printscore">'+teamScore(g)+' – '+rivalScore(g)+'</span><span>'+esc(g.rivalName||'Rival')+'</span></div>';
+  hh += '<div class="printmeta">'+(g.finished?'Partido finalizado':'En curso')+' · '+g.periodsCount+' '+esc(g.periodLabel.toLowerCase())+(g.periodsCount!==1?'s':'')+' · '+d.toLocaleDateString('es-ES')+'</div>';
+  hh += '</div>';
+  var h = '<div class="printpage">';
+  h += '<div>';
+  h += hh;
+  h += '<div class="printsection printsection-flow"><div class="printsectitle">Jugadas del partido</div>'+
+       '<div class="printplaylist">'+buildPlaysPrintRowsHtml(g)+'</div></div>';
+  h += '</div>';
+  // Sin "página N/M" aquí -- a diferencia de las otras 3 páginas (cada una
+  // forzada a ocupar exactamente una página física), esta puede partirse en
+  // varias según lo larga que sea la lista, así que ese número no sería fiable.
+  h += '<div class="printfoot"><span>BBall Stats App | '+downloadDateStr+'</span><span></span></div>';
+  h += '</div>';
+  return h;
+}
+function exportPlaysPDF(gid){
+  var g = getGameById(gid);
+  if(!g) return;
+  var area = document.getElementById('printArea');
+  area.innerHTML = buildPlaysPrintHtml(g);
+  var originalTitle = document.title;
+  var fd = matchDateObj(g);
+  document.title = 'BBall Stats_Jugadas_'+pad2(fd.getDate())+'-'+pad2(fd.getMonth()+1)+'-'+fd.getFullYear();
+  var restored = false;
+  function restoreTitle(){
+    if(restored) return;
+    restored = true;
+    document.title = originalTitle;
+    window.removeEventListener('afterprint', restoreTitle);
+  }
+  window.addEventListener('afterprint', restoreTitle);
+  setTimeout(function(){
+    window.print();
+    setTimeout(restoreTitle, 5000);
+  }, 30);
+}
 function shareBoxScore(gid){
   var g = getGameById(gid);
   if(!g) return;
@@ -4590,6 +4713,56 @@ function shareBoxScore(gid){
       showToast('Resumen copiado. Pégalo donde quieras compartirlo.');
     }).catch(function(){
       showToast('No se ha podido copiar el resumen.');
+    });
+  } else {
+    showToast('Compartir no está disponible en este navegador.');
+  }
+}
+// Listado completo de jugadas en texto plano, en orden cronológico (ver nota en
+// buildPlaysPrintHtml) -- para "Compartir" desde la pestaña Jugadas.
+function playByPlayShareText(g){
+  var lines = [];
+  lines.push(g.teamName+' '+teamScore(g)+' – '+rivalScore(g)+' '+(g.rivalName||'Rival'));
+  lines.push((g.finished?'Partido finalizado':'En curso')+' · '+g.periodsCount+' '+g.periodLabel.toLowerCase()+(g.periodsCount!==1?'s':''));
+  lines.push('');
+  lines.push('JUGADAS DEL PARTIDO');
+  g.events.forEach(function(e){
+    var per = g.periodLabel.charAt(0).toUpperCase()+e.period;
+    if(e.type==='lineup'){
+      if(e.subKind==='sub'){
+        var inStr = (e.enteredIds||[]).map(function(id){ var p=byId(g.roster,id); return p?('Nº'+p.dorsal+' '+firstName(p.name)):null; }).filter(Boolean).join(', ');
+        var outStr = (e.leftIds||[]).map(function(id){ var p=byId(g.roster,id); return p?('Nº'+p.dorsal+' '+firstName(p.name)):null; }).filter(Boolean).join(', ');
+        var parts = [];
+        if(inStr) parts.push('entra '+inStr);
+        if(outStr) parts.push('sale '+outStr);
+        lines.push(per+' — Cambio: '+(parts.length?parts.join(' / '):'—'));
+      } else {
+        var names = (e.onCourtSnapshot||[]).map(function(id){ var p=byId(g.roster,id); return p?('Nº'+p.dorsal+' '+firstName(p.name)):null; }).filter(Boolean).join(', ');
+        lines.push(per+' — Empiezan: '+(names||'Sin jugadoras en pista'));
+      }
+      return;
+    }
+    var d = playRowData(e, g);
+    var line = per+' — '+d.who+' — '+d.label;
+    if(d.deltaLabel) line += ' ('+d.deltaLabel+')';
+    var tagText = playOriginTagsText(e, g);
+    if(tagText) line += ' ['+tagText+']';
+    lines.push(line);
+  });
+  if(!g.events.length) lines.push('Sin jugadas registradas todavía.');
+  return lines.join('\n');
+}
+function sharePlaysByPlay(gid){
+  var g = getGameById(gid);
+  if(!g) return;
+  var text = playByPlayShareText(g);
+  if(navigator.share){
+    navigator.share({title:'Jugadas del partido', text:text}).catch(function(){});
+  } else if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){
+      showToast('Jugadas copiadas. Pégalas donde quieras compartirlas.');
+    }).catch(function(){
+      showToast('No se ha podido copiar el listado de jugadas.');
     });
   } else {
     showToast('Compartir no está disponible en este navegador.');
