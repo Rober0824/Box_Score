@@ -488,12 +488,7 @@
   .gamerow .gname{ font-weight:800; font-size:13.5px; }
   .gamerow .gdate{ font-size:11px; color:var(--text-dim); font-weight:600; margin-top:2px; }
   .gamerow .gscore{ font-family:'Oswald',sans-serif; font-size:18px; font-weight:700; white-space:nowrap; flex-shrink:0; }
-  /* MVP del partido: línea bajo el marcador de cada partido ya jugado (lista de Partidos) */
-  .mvptag{ display:flex; align-items:center; gap:7px; padding:8px 16px 12px; margin:0 16px; border-top:1px solid var(--border); }
-  .mvptag svg{ color:var(--accent); flex-shrink:0; }
-  .mvptag .mtxt{ font-size:11.5px; font-weight:700; color:var(--text-dim); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .mvptag .mtxt b{ color:var(--accent); font-weight:800; }
-  /* MVP del partido: insignia bajo el marcador grande del box score */
+  /* MVP del partido: insignia en la pestaña Jugadores del box score */
   .mvpbanner{ display:flex; align-items:center; gap:11px; background:linear-gradient(135deg, oklch(72% 0.18 45 / 18%), oklch(72% 0.18 45 / 5%)); border:1.5px solid var(--accent); border-radius:14px; padding:11px 13px; }
   .mvpbanner .mdor{ width:38px; height:38px; font-size:14px; background:var(--accent); border-color:var(--accent); color:var(--accent-ink); flex-shrink:0; }
   .mvpbanner .mb-k{ font-size:9.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); display:flex; align-items:center; gap:5px; }
@@ -4356,21 +4351,23 @@ function renderBox(){
     return h;
   }
 
+  h += '<div class="boxcontent">'+renderPlayersTable(g, rows, teamTotal);
   // MVP del partido: solo en la vista de estadísticas de Jugadoras (aquí es
-  // donde tiene sentido -- en Equipo y Jugadas no aporta nada).
+  // donde tiene sentido -- en Equipo y Jugadas no aporta nada), debajo de la
+  // tabla y con su propio espacio para que no quede pegado a nada.
   if(g.finished){
     var boxMvp = gameMvp(g);
     if(boxMvp){
-      h += '<div style="padding:0 20px 14px"><div class="mvpbanner">'+
+      h += '<div class="mvpbanner" style="margin-top:4px">'+
         '<div class="dorsal mdor">'+boxMvp.p.dorsal+'</div>'+
         '<div style="min-width:0;flex:1">'+
         '<div class="mb-k">'+icon('star',10)+'MVP del partido</div>'+
         '<div class="mb-name">'+esc(boxMvp.p.name)+'</div>'+
         '<div class="mb-stats">'+boxMvp.st.pts+' PTS · '+(boxMvp.st.rebO+boxMvp.st.rebD)+' REB · '+boxMvp.st.ast+' AST · '+boxMvp.eff+' EFF</div>'+
-        '</div></div></div>';
+        '</div></div>';
     }
   }
-  h += '<div class="boxcontent">'+renderPlayersTable(g, rows, teamTotal)+'</div>';
+  h += '</div>';
   h += '<div class="actions"><button class="abtn" onclick="exportBoxScorePDF(\''+g.id+'\')">Exportar PDF</button><button class="abtn" onclick="shareBoxScore(\''+g.id+'\')">Compartir</button></div>';
   return h;
 }
@@ -5055,20 +5052,7 @@ function matchRowHtml(g, isLive){
   var onclick = isLive ? "resumeCurrent()" : "openArchivedGame('"+g.id+"')";
   // Editar/borrar (incluido un partido en curso) es cosa solo del admin.
   var canManage = isAdmin();
-  // MVP del partido: solo en partidos ya finalizados. En Liga se habla de
-  // "jornada" (un único partido por jornada, así que coincide siempre con el
-  // último partido jugado); en Torneo/Amistoso no hay jornada, así que se
-  // dice simplemente "del partido".
-  var mvpRow = '';
-  if(!isLive && g.finished){
-    var mvp = gameMvp(g);
-    if(mvp){
-      var mvpLabel = ((g.kind||'liga')==='liga' && g.jornada) ? ('MVP de la jornada '+g.jornada) : 'MVP del partido';
-      mvpRow = '<div class="mvptag">'+icon('star',13)+'<div class="mtxt">'+esc(mvpLabel)+': <b>Nº'+mvp.p.dorsal+' '+esc(mvp.p.name)+'</b> · '+mvp.eff+' EFF</div></div>';
-    }
-  }
-  return '<div class="gamerow" style="margin-top:8px;padding:0;display:flex;flex-direction:column;align-items:stretch">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">'+
+  return '<div class="gamerow" style="margin-top:8px;padding:0">'+
     '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;cursor:pointer" onclick="'+onclick+'">'+
     '<div style="flex:1;min-width:0">'+'<div class="gname">'+esc(g.teamName)+' vs '+esc(g.rivalName||'Rival')+'</div>'+
     '<div class="gdate">'+(isLive?'En curso &middot; ':'')+d.toLocaleDateString('es-ES')+' &middot; '+kindLabel+(g.jornada?(' J'+g.jornada):'')+'</div></div>'+
@@ -5076,8 +5060,6 @@ function matchRowHtml(g, isLive){
     '</div>'+
     (canManage?'<button class="editbtn" style="margin-right:2px;flex-shrink:0" onclick="event.stopPropagation();openEditMatch(\''+g.id+'\')">'+icon('pencil',14)+'</button>':'')+
     (canManage?'<button class="rmbtn" style="margin-right:12px;flex-shrink:0" onclick="event.stopPropagation();confirmDeleteMatch(\''+g.id+'\')">'+icon('trash',15)+'</button>':'')+
-    '</div>'+
-    mvpRow+
     '</div>';
 }
 var editMatchDraft = null;
@@ -6204,17 +6186,30 @@ function mvpFromGames(games){
   list.sort(function(a,b){ return b.eff_pg-a.eff_pg; });
   return list[0];
 }
+// "Semana" se refiere a la última jornada disputada (la semana de su último
+// partido dentro del filtro de Competición activo), no a la semana natural
+// en curso -- si no, la mitad del tiempo (entre partido y partido) se vería
+// vacía sin motivo.
+function lastPlayedWeekKey(){
+  var pool = mvpGamesPool();
+  if(!pool.length) return null;
+  var latest = pool.slice().sort(function(a,b){ return matchDateObj(b)-matchDateObj(a); })[0];
+  return weekKeyFor(matchDateObj(latest));
+}
 function currentMvp(mode){
   mode = mode || mvpPeriodMode;
   var games, label;
   if(mode==='season'){
     games = gamesForMvpPeriod('season');
     label = (currentSeason && currentSeason.label) || 'Esta temporada';
+  } else if(mode==='week'){
+    var wk = lastPlayedWeekKey();
+    games = wk ? gamesForMvpPeriod('week', wk) : [];
+    label = wk ? weekLabelFromKey(wk) : '';
   } else {
-    var now = new Date();
-    var key = mode==='week' ? weekKeyFor(now) : monthKey(now);
+    var key = monthKey(new Date());
     games = gamesForMvpPeriod(mode, key);
-    label = mode==='week' ? weekLabelFromKey(key) : monthLabelFromKey(key);
+    label = monthLabelFromKey(key);
   }
   var top = mvpFromGames(games);
   if(!top) return null;
