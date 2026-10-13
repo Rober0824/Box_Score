@@ -4331,16 +4331,6 @@ function renderBox(){
        '</div></div>';
 
   if(g.finished){
-    var boxMvp = gameMvp(g);
-    if(boxMvp){
-      h += '<div style="padding:14px 20px 0"><div class="mvpbanner">'+
-        '<div class="dorsal mdor">'+boxMvp.p.dorsal+'</div>'+
-        '<div style="min-width:0;flex:1">'+
-        '<div class="mb-k">'+icon('star',10)+'MVP del partido</div>'+
-        '<div class="mb-name">'+esc(boxMvp.p.name)+'</div>'+
-        '<div class="mb-stats">'+boxMvp.st.pts+' PTS · '+(boxMvp.st.rebO+boxMvp.st.rebD)+' REB · '+boxMvp.st.ast+' AST · '+boxMvp.eff+' EFF</div>'+
-        '</div></div></div>';
-    }
     h += periodScoreChipsHtml(g);
   }
 
@@ -4366,6 +4356,20 @@ function renderBox(){
     return h;
   }
 
+  // MVP del partido: solo en la vista de estadísticas de Jugadoras (aquí es
+  // donde tiene sentido -- en Equipo y Jugadas no aporta nada).
+  if(g.finished){
+    var boxMvp = gameMvp(g);
+    if(boxMvp){
+      h += '<div style="padding:0 20px 14px"><div class="mvpbanner">'+
+        '<div class="dorsal mdor">'+boxMvp.p.dorsal+'</div>'+
+        '<div style="min-width:0;flex:1">'+
+        '<div class="mb-k">'+icon('star',10)+'MVP del partido</div>'+
+        '<div class="mb-name">'+esc(boxMvp.p.name)+'</div>'+
+        '<div class="mb-stats">'+boxMvp.st.pts+' PTS · '+(boxMvp.st.rebO+boxMvp.st.rebD)+' REB · '+boxMvp.st.ast+' AST · '+boxMvp.eff+' EFF</div>'+
+        '</div></div></div>';
+    }
+  }
   h += '<div class="boxcontent">'+renderPlayersTable(g, rows, teamTotal)+'</div>';
   h += '<div class="actions"><button class="abtn" onclick="exportBoxScorePDF(\''+g.id+'\')">Exportar PDF</button><button class="abtn" onclick="shareBoxScore(\''+g.id+'\')">Compartir</button></div>';
   return h;
@@ -6178,9 +6182,17 @@ function fmtRankVal(val, isPct){
 // sin más que cambiar de temporada desde Equipo.
 var mvpPeriodMode = 'month'; // 'month' | 'week' | 'season' -- pestañas de la tarjeta de Inicio
 function setMvpPeriodMode(m){ mvpPeriodMode = m; render(); }
+// La tarjeta de MVP vive justo debajo del filtro de Competición de Inicio, así
+// que respeta ese mismo filtro (Liga por defecto) -- si está en "Liga", el
+// MVP de la semana/mes/temporada solo cuenta partidos de Liga, igual que ya
+// hace el resto del ranking de esa pantalla.
+function mvpGamesPool(){
+  return S.games.filter(function(g){ return rankFilterComp==='todos' || (g.kind||'liga')===rankFilterComp; });
+}
 function gamesForMvpPeriod(mode, periodKey){
-  if(mode==='season') return S.games;
-  return S.games.filter(function(g){
+  var pool = mvpGamesPool();
+  if(mode==='season') return pool;
+  return pool.filter(function(g){
     var key = mode==='week' ? weekKeyFor(matchDateObj(g)) : monthKey(matchDateObj(g));
     return key===periodKey;
   });
@@ -6196,7 +6208,7 @@ function currentMvp(mode){
   mode = mode || mvpPeriodMode;
   var games, label;
   if(mode==='season'){
-    games = S.games;
+    games = gamesForMvpPeriod('season');
     label = (currentSeason && currentSeason.label) || 'Esta temporada';
   } else {
     var now = new Date();
