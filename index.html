@@ -154,6 +154,7 @@
   .playrow .delta{ font-family:'Oswald',sans-serif; font-size:12.5px; font-weight:700; flex-shrink:0; }
   .playrow .delta.good{ color:var(--good); }
   .playrow .delta.bad{ color:var(--bad); }
+  .playrow .playscore{ font-family:'Oswald',sans-serif; font-size:11px; font-weight:700; color:var(--text-dim); background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:2px 7px; flex-shrink:0; white-space:nowrap; }
   /* ---- etiquetas de origen de la jugada (robo / rebote of. / contraataque) ---- */
   .playrow-tags{ display:flex; gap:5px; flex-wrap:wrap; width:100%; order:5; padding-left:30px; margin-top:-2px; }
   .playtag{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:800; letter-spacing:0.02em; padding:2px 7px; border-radius:999px; flex-shrink:0; white-space:nowrap; }
@@ -1758,6 +1759,23 @@ function rivalScore(g){
   g.events.forEach(function(e){ if(e.side==='rival') s+=e.points; });
   return s;
 }
+// Marcador acumulado en el momento de cada canasta (propia o rival) -- para
+// mostrarlo junto a la jugada en el play-by-play, como hace la web de la FBM
+// (p.ej. "54-50"). Se calcula una sola vez recorriendo los eventos en orden
+// cronológico (g.events, tal cual se registraron) y se indexa por event.id,
+// así se puede consultar sea cual sea el orden en que luego se recorra/
+// muestre la lista (en pantalla va del más reciente al más antiguo; en el
+// PDF/texto compartido, cronológico). Siempre "propio-rival", igual que el
+// marcador grande, sin importar quién anotase esa canasta.
+function runningScoreMap(g){
+  var map = {}, t=0, r=0;
+  g.events.forEach(function(e){
+    if(e.side==='team') t+=e.points;
+    else if(e.side==='rival') r+=e.points;
+    if(e.points>0) map[e.id] = t+'-'+r;
+  });
+  return map;
+}
 /* ---- origen de los puntos (robo / rebote ofensivo / contraataque) ----
    Propias: origin ('steal'|'offReb'|ausente) y fastBreak (bool) son
    independientes -- una canasta puede ser, a la vez, tras robo Y de
@@ -2229,6 +2247,7 @@ function renderPlayByPlay(g, opts){
   var headStyle = opts.flowing ? ' style="padding:0 0 8px"' : '';
   var listStyle = opts.flowing ? ' style="padding:0;overflow:visible;flex:none"' : '';
   var events = g.events.slice().reverse();
+  var rscores = runningScoreMap(g);
   var h = '<div class="playhead"'+headStyle+'><div class="label" style="margin-bottom:0">Jugadas del partido</div>'+
     '<div class="label" style="margin-bottom:0;color:var(--text-dim)">'+events.length+' jugada'+(events.length===1?'':'s')+'</div></div>';
   h += '<div class="playlist"'+listStyle+'>';
@@ -2246,6 +2265,7 @@ function renderPlayByPlay(g, opts){
       '<div class="who">'+esc(d.who)+'</div>'+
       '<div class="what">'+esc(d.label)+'</div>'+
       (d.deltaLabel ? '<div class="delta '+d.deltaCls+'">'+d.deltaLabel+'</div>' : '')+
+      (rscores[e.id] ? '<div class="playscore">('+rscores[e.id]+')</div>' : '')+
       playOriginTagsHtml(e, g);
     if(!readOnly){
       h += '<button class="playbtn" onclick="pbpToggleEdit(\''+e.id+'\')">'+icon('pencil',14)+'</button>'+
@@ -4729,6 +4749,7 @@ function exportBoxScorePDF(gid){
    cronológico -- se lee de principio a fin, como un acta del partido. */
 function buildPlaysPrintRowsHtml(g){
   var h = '';
+  var rscores = runningScoreMap(g);
   g.events.forEach(function(e){
     if(e.type==='lineup'){ h += lineupRowHtml(e, g); return; }
     var d = playRowData(e, g);
@@ -4737,6 +4758,7 @@ function buildPlaysPrintRowsHtml(g){
       '<div class="who">'+esc(d.who)+'</div>'+
       '<div class="what">'+esc(d.label)+'</div>'+
       (d.deltaLabel ? '<div class="delta '+d.deltaCls+'">'+d.deltaLabel+'</div>' : '')+
+      (rscores[e.id] ? '<div class="playscore">('+rscores[e.id]+')</div>' : '')+
       playOriginTagsHtml(e, g)+
     '</div>';
   });
@@ -4822,6 +4844,7 @@ function playByPlayShareText(g){
   lines.push((g.finished?'Partido finalizado':'En curso')+' · '+g.periodsCount+' '+g.periodLabel.toLowerCase()+(g.periodsCount!==1?'s':''));
   lines.push('');
   lines.push('JUGADAS DEL PARTIDO');
+  var rscores = runningScoreMap(g);
   g.events.forEach(function(e){
     var per = g.periodLabel.charAt(0).toUpperCase()+e.period;
     if(e.type==='lineup'){
@@ -4841,6 +4864,7 @@ function playByPlayShareText(g){
     var d = playRowData(e, g);
     var line = per+' — '+d.who+' — '+d.label;
     if(d.deltaLabel) line += ' ('+d.deltaLabel+')';
+    if(rscores[e.id]) line += ' ('+rscores[e.id]+')';
     var tagText = playOriginTagsText(e, g);
     if(tagText) line += ' ['+tagText+']';
     lines.push(line);
