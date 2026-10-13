@@ -368,7 +368,6 @@
   .swipedot{ width:14px; height:3px; border-radius:2px; background:var(--border); cursor:pointer; }
   .swipedot.on{ background:var(--accent); }
 
-  .finalpill{ display:inline-block; font-size:10px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent); background:oklch(72% 0.18 45 / 14%); border:1px solid var(--accent); border-radius:999px; padding:4px 10px; margin-bottom:10px; }
   .finalscore{ display:flex; align-items:center; justify-content:space-between; }
   .fteam{ display:flex; flex-direction:column; gap:2px; max-width:180px; }
   .fteam.right{ align-items:flex-end; text-align:right; }
@@ -380,8 +379,6 @@
   .sortlabel{ font-size:10.5px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); }
 
   .periodsection{ padding:14px 20px 0; flex-shrink:0; }
-  .periodlabelrow{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:10px; }
-  .periodhint{ font-size:9.5px; font-weight:700; color:var(--text-dim); text-transform:none; letter-spacing:0; white-space:nowrap; }
   .periodchips{ display:grid; gap:6px; }
   .pchip{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:7px 2px; display:flex; flex-direction:column; align-items:center; gap:3px; }
   .pchip .pnum{ font-size:9.5px; font-weight:800; color:var(--text-dim); letter-spacing:0.03em; }
@@ -420,7 +417,24 @@
   .evotip .ttscore .b{ color:var(--rival); }
   .evotip .ttmeta{ font-size:9.5px; color:var(--text-dim); font-weight:700; margin-top:1px; }
 
-  .boxcontent{ flex:1; overflow-y:auto; padding:12px 20px 20px; display:flex; flex-direction:column; gap:10px; -webkit-overflow-scrolling:touch; }
+  /* .boxcontent es ahora el contenedor con scroll del box score entero
+     (cabecera + bloque pegajoso + contenido de la pestaña activa); el
+     contenido propio de cada pestaña va dentro de .boxinner, que conserva el
+     padding/flex-column que antes tenía .boxcontent. */
+  /* overflow-anchor:none evita que el navegador "corrija" el scroll solo
+     cuando .boxcompactbar cambia de altura durante la animación -- sin esto
+     el scroll se descuadra mientras la barra compacta crece/encoge. */
+  .boxcontent{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; position:relative; overflow-anchor:none; }
+  .boxinner{ padding:12px 20px 20px; display:flex; flex-direction:column; gap:10px; }
+  /* bloque pegajoso: barra compacta (crece al hacer scroll, ver
+     setupBoxScroll()) + cajas de periodo + Equipo/Jugadores/Jugadas --
+     siempre visibles arriba, incluso con la cabecera ya recogida. */
+  .boxstickystack{ position:sticky; top:0; z-index:10; background:var(--bg); }
+  .boxstickystack.shadow{ box-shadow:0 8px 14px -10px rgba(0,0,0,0.5); }
+  .boxcompactbar{ display:flex; align-items:center; gap:10px; padding:0 20px; overflow:hidden; height:0; opacity:0; }
+  .boxcompactbar .cctxt{ font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .boxcompactbar .cctxt b{ font-family:'Oswald',sans-serif; font-weight:700; }
+  .iconbtn.small{ width:30px; height:30px; flex-shrink:0; }
   .prow2{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
   .ptop{ display:flex; align-items:center; gap:10px; }
   .pnm2{ font-weight:800; font-size:14px; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -3149,6 +3163,39 @@ function setupSwipeHeights(){
     vp.style.height = cur.scrollHeight+'px';
   });
 }
+// Se llama tras cada render(): en la pantalla de box score, la cabecera
+// grande (back+titulo+marcador) y el bloque pegajoso (barra compacta+cajas
+// de periodo+Equipo/Jugadores/Jugadas) comparten un único contenedor con
+// scroll (.boxcontent). Esto mide esa cabecera y hace crecer/encoger la
+// barra compacta (.boxcompactbar) proporcionalmente a lo que se ha hecho
+// scroll, de forma que termine de "crecer" justo cuando la cabecera grande
+// ha desaparecido del todo (ni se solapan ni queda hueco muerto). No hace
+// nada si la pantalla activa no es el box score (no encuentra los elementos).
+function setupBoxScroll(){
+  var scroller = document.querySelector('.boxcontent');
+  if(!scroller) return;
+  var fullheader = scroller.querySelector('.header');
+  var stack = scroller.querySelector('.boxstickystack');
+  var compactbar = scroller.querySelector('.boxcompactbar');
+  if(!fullheader || !stack || !compactbar) return;
+
+  compactbar.style.height = 'auto';
+  compactbar.style.opacity = '1';
+  var naturalH = compactbar.offsetHeight;
+  compactbar.style.height = '0px';
+  compactbar.style.opacity = '0';
+  var range = fullheader.offsetHeight || 1;
+
+  function onScroll(){
+    var st = scroller.scrollTop;
+    var progress = Math.max(0, Math.min(1, st/range));
+    compactbar.style.height = (progress*naturalH)+'px';
+    compactbar.style.opacity = progress;
+    stack.classList.toggle('shadow', st>4);
+  }
+  scroller.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+}
 function chooseAssist(assistPid){
   var g = S.current;
   var editId = S.routeParams.editEventId;
@@ -3498,7 +3545,6 @@ function periodScoreChipsHtml(g){
   var ps = periodScores(g);
   var abbr = (g.periodLabel||'Periodo').charAt(0).toUpperCase();
   var h = '<div class="periodsection">';
-  h += '<div class="periodlabelrow"><span class="label">Resultado por '+esc((g.periodLabel||'periodo').toLowerCase())+'</span><span class="periodhint">toca para filtrar · varios a la vez</span></div>';
   h += '<div class="periodchips" style="grid-template-columns:repeat('+Math.min(g.periodsCount+1,7)+',1fr)">';
   h += '<div class="pchip all'+(periods.length?'':' on')+'" onclick="clearBoxPeriodFilter(\''+g.id+'\')"><div class="pnum">Todos</div><div class="pscore">'+teamScore(g)+'-'+rivalScore(g)+'</div></div>';
   for(var p=1;p<=g.periodsCount;p++){
@@ -3886,6 +3932,7 @@ function render(){
   setupBracketZoom();
   setupHeatMaps();
   setupSwipeHeights();
+  setupBoxScroll();
   maybeManageLiveClockTick();
 }
 
@@ -4312,53 +4359,61 @@ function renderBox(){
   rows.sort(function(a,b){return a.p.dorsal-b.p.dorsal;});
 
   var teamTotal = teamScore(g);
+  var rivalTotal = rivalScore(g);
   var backDest = S.routeParams.fromGames ? "go('games')" : (S.current && !S.current.finished ? "go('live')" : "go('games')");
-  var h = '';
-  h += '<div class="header"><div class="header-row">'+
+
+  // Cabecera completa (back+titulo+marcador grande): se desplaza con el resto
+  // del contenido en vez de quedarse fija, y un bloque pegajoso (barra
+  // compacta + cajas de periodo + Equipo/Jugadores/Jugadas) ocupa su lugar a
+  // medida que se hace scroll -- ver setupBoxScroll() y .boxcompactbar /
+  // .boxstickystack. Las cajas de periodo y la vista se quedan siempre
+  // visibles, incluso con la cabecera ya recogida, para poder seguir
+  // filtrando sin tener que subir.
+  var chrome = '<div class="header"><div class="header-row">'+
         '<button class="iconbtn" onclick="'+backDest+'">'+icon('back',18)+'</button>'+
         '<div class="htitles"><div class="title">Box score</div></div>'+
-       '</div>';
-  h += '<div style="padding-top:14px">'+
-       '<div class="finalpill">'+(g.finished?'Final':'En curso')+' · '+g.periodsCount+' '+esc(g.periodLabel.toLowerCase())+(g.periodsCount!==1?'s':'')+'</div>'+
-       '<div class="finalscore"><div class="fteam"><div class="fname">'+esc(g.teamName.toUpperCase())+'</div><div class="fscore">'+teamTotal+'</div></div>'+
+       '</div>'+
+       '<div class="finalscore" style="padding-top:14px"><div class="fteam"><div class="fname">'+esc(g.teamName.toUpperCase())+'</div><div class="fscore">'+teamTotal+'</div></div>'+
        '<div class="fdash">–</div>'+
-       '<div class="fteam right"><div class="fname">'+esc((g.rivalName||'RIVAL').toUpperCase())+'</div><div class="fscore">'+rivalScore(g)+'</div></div></div>'+
-       '</div></div>';
-
+       '<div class="fteam right"><div class="fname">'+esc((g.rivalName||'RIVAL').toUpperCase())+'</div><div class="fscore">'+rivalTotal+'</div></div></div>'+
+       '</div>';
+  chrome += '<div class="boxstickystack">';
+  chrome += '<div class="boxcompactbar"><button class="iconbtn small" onclick="'+backDest+'">'+icon('back',14)+'</button><div class="cctxt">'+esc(g.teamName)+' <b>'+teamTotal+'</b>–<b>'+rivalTotal+'</b> '+esc(g.rivalName||'Rival')+'</div></div>';
   if(g.finished){
-    h += periodScoreChipsHtml(g);
+    chrome += periodScoreChipsHtml(g);
   }
-
-  h += '<div class="sortrow"><div class="sortlabel">Vista</div><div class="seg2" style="width:auto">'+
+  chrome += '<div class="sortrow"><div class="sortlabel">Vista</div><div class="seg2" style="width:auto">'+
        '<button class="opt'+(boxViewMode==='team'?' on':'')+'" onclick="setBoxView(\'team\')">Equipo</button>'+
        '<button class="opt'+(boxViewMode==='players'?' on':'')+'" onclick="setBoxView(\'players\')">Jugadores</button>'+
        '<button class="opt'+(boxViewMode==='plays'?' on':'')+'" onclick="setBoxView(\'plays\')">Jugadas</button>'+
        '</div></div>';
+  chrome += '</div>'; // .boxstickystack
 
+  var h;
   if(boxViewMode==='plays'){
     // Editar el play-by-play desde aquí solo tiene sentido para un partido YA FINALIZADO
     // (uno en directo ya se edita in-situ en la pantalla "en directo") y solo si se tiene
     // permiso de escritura sobre la temporada -- ver pbpPickPlayer/editingPastGameId.
     var canEditPlays = !!(g.finished && canWriteCurrentSeason());
-    h += '<div class="boxcontent">'+renderPlayByPlay(g, {readOnly: !canEditPlays, flowing:true})+'</div>';
+    h = '<div class="boxcontent">'+chrome+'<div class="boxinner">'+renderPlayByPlay(g, {readOnly: !canEditPlays, flowing:true})+'</div></div>';
     h += '<div class="actions"><button class="abtn" onclick="exportPlaysPDF(\''+g.id+'\')">Exportar PDF</button><button class="abtn" onclick="sharePlaysByPlay(\''+g.id+'\')">Compartir</button></div>';
     return h;
   }
 
   if(boxViewMode==='team'){
-    h += '<div class="boxcontent">'+renderTeamPanel(g, {periods: boxPeriods})+'</div>';
+    h = '<div class="boxcontent">'+chrome+'<div class="boxinner">'+renderTeamPanel(g, {periods: boxPeriods})+'</div></div>';
     h += '<div class="actions"><button class="abtn" onclick="exportBoxScorePDF(\''+g.id+'\')">Exportar PDF</button><button class="abtn" onclick="shareBoxScore(\''+g.id+'\')">Compartir</button></div>';
     return h;
   }
 
-  h += '<div class="boxcontent">'+renderPlayersTable(g, rows, teamTotal);
+  var inner = renderPlayersTable(g, rows, teamTotal);
   // MVP del partido: solo en la vista de estadísticas de Jugadoras (aquí es
   // donde tiene sentido -- en Equipo y Jugadas no aporta nada), debajo de la
   // tabla y con su propio espacio para que no quede pegado a nada.
   if(g.finished){
     var boxMvp = gameMvp(g);
     if(boxMvp){
-      h += '<div class="mvpbanner" style="margin-top:4px">'+
+      inner += '<div class="mvpbanner" style="margin-top:4px">'+
         '<div class="dorsal mdor">'+boxMvp.p.dorsal+'</div>'+
         '<div style="min-width:0;flex:1">'+
         '<div class="mb-k">'+icon('star',10)+'MVP del partido</div>'+
@@ -4367,7 +4422,7 @@ function renderBox(){
         '</div></div>';
     }
   }
-  h += '</div>';
+  h = '<div class="boxcontent">'+chrome+'<div class="boxinner">'+inner+'</div></div>';
   h += '<div class="actions"><button class="abtn" onclick="exportBoxScorePDF(\''+g.id+'\')">Exportar PDF</button><button class="abtn" onclick="shareBoxScore(\''+g.id+'\')">Compartir</button></div>';
   return h;
 }
