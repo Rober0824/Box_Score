@@ -118,6 +118,8 @@
   .pname{ flex:1; min-width:0; }
   .pname .nm{ font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .pname .tag{ font-size:10.5px; color:var(--text-dim); font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-top:1px; }
+  .pname .tag .foulsnote{ color:var(--text-dim); text-transform:none; }
+  .pname .tag .foulsout{ color:var(--bad); text-transform:none; }
   .dorsal.editable{ padding:0; }
   .dorsal.editable input{ width:100%; height:100%; background:none; border:none; text-align:center; color:inherit; font:inherit; font-family:'Oswald',sans-serif; font-weight:600; font-size:14px; padding:0; -moz-appearance:textfield; }
   .dorsal.editable input::-webkit-outer-spin-button, .dorsal.editable input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
@@ -514,6 +516,19 @@
   .empty{ text-align:center; color:var(--text-dim); font-size:13px; padding:40px 20px; }
 
   .toast{ position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:13px; font-weight:700; padding:10px 18px; border-radius:999px; z-index:50; box-shadow:0 6px 20px rgba(0,0,0,.35); }
+
+  /* ---- banner grande del aviso de faltas (ver showFoulBanner) ---- */
+  .foulbanner{
+    position:fixed; top:0; left:0; right:0; max-width:460px; margin:0 auto;
+    background:linear-gradient(135deg, var(--bad), oklch(38% 0.16 25));
+    color:oklch(98% 0.01 85); padding:14px 18px; display:flex; align-items:center; gap:10px;
+    box-shadow:0 10px 24px -8px rgba(0,0,0,.5); z-index:60;
+    animation: foulbannerin .4s cubic-bezier(.2,.8,.3,1.1);
+  }
+  .foulbanner .fbicon{ width:30px; height:30px; border-radius:999px; background:oklch(98% 0.01 85 / 20%); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .foulbanner .fbtitle{ font-family:'Oswald',sans-serif; font-weight:700; font-size:14px; text-transform:uppercase; letter-spacing:0.01em; line-height:1.2; }
+  .foulbanner .fbsub{ font-size:11px; font-weight:700; opacity:0.92; margin-top:2px; }
+  @keyframes foulbannerin{ 0%{ opacity:0; transform:translateY(-100%); } 70%{ transform:translateY(6%); } 100%{ opacity:1; transform:translateY(0); } }
 
   #printArea{ display:none; }
   .printhead{ margin-bottom:18px; }
@@ -2598,6 +2613,27 @@ function startGameFromSetup(){
 
 /* ---------- lineup ---------- */
 var MAX_ON_COURT = 5;
+// Faltas personales con las que, en baloncesto, una jugadora ya no puede
+// seguir en pista en una situación normal (se usa solo para avisar al
+// anotar -- ver recordTeamStat -- y para no exigir más jugadoras "en
+// pista" de las que de verdad le quedan al equipo sin faltas; NUNCA para
+// impedir seguir anotándole jugadas a propósito, por si el equipo no
+// tiene cambio posible y tiene que seguir jugando con ella de todos modos).
+var FOUL_OUT_LIMIT = 5;
+// Cuántas jugadoras hacen falta en pista para poder confirmar el quinteto:
+// lo normal son exactamente 5, pero si la plantilla convocada para este
+// partido tiene menos jugadoras que eso, o si ya hay 5 o más jugadoras con
+// el límite de faltas cumplido (sin cambio posible), se pide esa cantidad
+// menor en su lugar -- para no dejar jugar con menos por despiste (el fallo
+// original), pero tampoco bloquear por completo un partido que de verdad
+// tiene que seguir con menos de 5.
+function lineupRequiredCount(g){
+  var roster = sortedRoster(g);
+  if(!roster.length) return 1;
+  var eligible = roster.filter(function(p){ return playerStats(g, p.id, null).foulC < FOUL_OUT_LIMIT; }).length;
+  if(eligible<=0) eligible = roster.length; // caso extremo: todas con el límite cumplido
+  return Math.max(1, Math.min(MAX_ON_COURT, eligible));
+}
 // Qué grid se ve en la pantalla "en directo": el nuestro ('team', por defecto)
 // o el del rival ('rival', solo alcanzable con "Completas" + plantilla rival
 // cargada, tocando la casilla "Rival"). No es parte de la partida (g) --
@@ -2639,10 +2675,9 @@ function openSubs(){
 function confirmLineup(){
   var g = S.current;
   // Defensa adicional además de deshabilitar el botón en pantalla (ver
-  // renderLineup): si por lo que sea se llega a llamar a esto sin las 5
-  // jugadoras requeridas (o todas las disponibles, si la plantilla
-  // convocada tiene menos de 5), no se confirma el quinteto.
-  var requiredOnCourt = Math.min(MAX_ON_COURT, sortedRoster(g).length);
+  // renderLineup): si por lo que sea se llega a llamar a esto sin las
+  // jugadoras requeridas, no se confirma el quinteto.
+  var requiredOnCourt = lineupRequiredCount(g);
   if(g.onCourt.length !== requiredOnCourt){
     showToast('Selecciona exactamente '+requiredOnCourt+' jugadora'+(requiredOnCourt===1?'':'s')+' antes de confirmar el quinteto.');
     render();
@@ -2832,6 +2867,21 @@ function recordTeamStat(type){
     saveState();
   } else {
     pushEvent(g, {side:'team', type:type, playerId:pid, points:pts});
+  }
+  // Aviso grande (banner rojo que baja desde arriba y se retira solo, ver
+  // showFoulBanner) con el total de faltas personales que lleva la jugadora
+  // tras anotar una -- para detectar en el momento un toque equivocado
+  // (p.ej. tocar dos veces seguidas a la misma por error), en vez de
+  // descubrirlo al acabar el partido. Es solo un aviso: no impide seguir
+  // anotándole jugadas aunque ya tenga 5 o más (puede no haber cambio).
+  if(type==='foulC'){
+    var fp = byId(g.roster, pid);
+    if(fp){
+      var fc = playerStats(g, pid, null).foulC;
+      var fname = 'Nº'+fp.dorsal+' '+firstName(fp.name);
+      var fTitle = fc>=FOUL_OUT_LIMIT ? '¡'+fc+'ª falta personal!' : fc+'ª falta personal';
+      showFoulBanner(fTitle, fname);
+    }
   }
   liveOrExit();
 }
@@ -3577,6 +3627,23 @@ function showToast(msg){
   if(toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(function(){ toastMsg=null; render(); }, 1800);
 }
+// Banner grande en tonos rojo para el aviso de faltas (más llamativo que el
+// toast normal, pero sin oscurecer el resto de la pantalla -- opción "Banner
+// superior" que Rober eligió entre 3 propuestas). Se usa solo para esto, el
+// resto de avisos de la app siguen con showToast.
+var foulBanner = null;
+var foulBannerTimer = null;
+function showFoulBanner(title, sub){
+  foulBanner = {title:title, sub:sub};
+  render();
+  if(foulBannerTimer) clearTimeout(foulBannerTimer);
+  foulBannerTimer = setTimeout(function(){ foulBanner=null; render(); }, 2000);
+}
+function foulBannerHtml(){
+  if(!foulBanner) return '';
+  return '<div class="foulbanner"><div class="fbicon">'+icon('alert',15)+'</div>'+
+    '<div><div class="fbtitle">'+esc(foulBanner.title)+'</div><div class="fbsub">'+esc(foulBanner.sub)+'</div></div></div>';
+}
 
 /* ---------- box score view ---------- */
 var boxViewMode = 'team';
@@ -3997,6 +4064,7 @@ function render(){
   html += bracketSetupOverlay();
   html += bracketMatchOverlay();
   html += toastHtml();
+  html += foulBannerHtml();
   app.innerHTML = html;
   var newScroller = app.querySelector('.content, .playlist, .livecontent, .boxcontent');
   if(newScroller && scrollPositions[S.route]){ newScroller.scrollTop = scrollPositions[S.route]; }
@@ -4122,9 +4190,10 @@ function renderLineup(){
   // para poder confirmar el quinteto (antes solo se bloqueaba con 0, lo que
   // dejaba seguir por error con menos de 5, p.ej. un sexto entero con 4). Si
   // la plantilla convocada para este partido tiene menos de 5 jugadoras en
-  // total (caso límite, equipo muy corto de gente), no tiene sentido pedir
-  // más de las que hay -- se exigen entonces todas las disponibles.
-  var requiredOnCourt = Math.min(MAX_ON_COURT, roster.length);
+  // total, o si ya hay 5 o más con el límite de faltas cumplido y sin cambio
+  // posible, se exige esa cantidad menor en su lugar -- ver lineupRequiredCount.
+  var requiredOnCourt = lineupRequiredCount(g);
+  var fouledOutCount = roster.filter(function(p){ return playerStats(g, p.id, null).foulC >= FOUL_OUT_LIMIT; }).length;
   var h = '';
   h += '<div class="header"><div class="header-row">'+
         '<button class="iconbtn" onclick="lineupBack()">'+icon('back',18)+'</button>'+
@@ -4136,13 +4205,18 @@ function renderLineup(){
   if(onCount!==requiredOnCourt){
     h += '<div class="countwarn" style="margin:0 20px 10px">'+icon('alert',14)+' Selecciona exactamente '+requiredOnCourt+' jugadora'+(requiredOnCourt===1?'':'s')+' para poder confirmar el quinteto.</div>';
   }
+  if(requiredOnCourt<MAX_ON_COURT && fouledOutCount>0){
+    h += '<div class="caption" style="margin:0 20px 10px">'+fouledOutCount+' jugadora'+(fouledOutCount===1?'':'s')+' ya '+(fouledOutCount===1?'tiene':'tienen')+' '+FOUL_OUT_LIMIT+' faltas -- por eso no se piden 5 en pista. Puedes marcarla'+(fouledOutCount===1?'':'s')+' igualmente si no hay cambio posible.</div>';
+  }
   h += '<div class="content" style="padding-top:0">';
   h += '<div class="players">';
   roster.forEach(function(p){
     var on = g.onCourt.indexOf(p.id)!==-1;
+    var fouls = playerStats(g, p.id, null).foulC;
+    var foulTag = fouls>0 ? ' · <span class="'+(fouls>=FOUL_OUT_LIMIT?'foulsout':'foulsnote')+'">'+fouls+' falta'+(fouls===1?'':'s')+'</span>' : '';
     h += '<div class="prow'+(on?' oncourt':'')+'" onclick="toggleOnCourt(\''+p.id+'\')">'+
          '<div class="dorsal">'+p.dorsal+'</div>'+
-         '<div class="pname"><div class="nm">'+esc(p.name)+'</div><div class="tag">'+(on?'En pista':'Banquillo')+'</div></div>'+
+         '<div class="pname"><div class="nm">'+esc(p.name)+'</div><div class="tag">'+(on?'En pista':'Banquillo')+foulTag+'</div></div>'+
          '<div class="pcheck'+(on?' on':'')+'">'+(on?icon('check',14):'')+'</div>'+
          '</div>';
   });
