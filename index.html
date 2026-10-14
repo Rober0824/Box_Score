@@ -107,6 +107,8 @@
 
   .countline{ display:flex; align-items:baseline; justify-content:space-between; }
   .count{ font-size:12px; font-weight:700; color:var(--text-dim); }
+  .count.warn{ color:var(--bad); }
+  .countwarn{ display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--bad); background:color-mix(in oklch, var(--bad) 14%, var(--surface)); border:1px solid var(--bad); border-radius:10px; padding:8px 10px; }
 
   .players{ display:flex; flex-direction:column; gap:8px; margin-top:10px; }
   .prow{ display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 14px; }
@@ -1041,6 +1043,14 @@ function selectFaseView(faseId, view){ faseViewMode[faseId] = view; render(); }
 var teamRoster = [];
 var cloudSaveTimer = null;
 var assetUploadBusy = false;
+// Última copia (en texto) de las jugadas de cada partido tal y como estaban en
+// la nube la última vez que ESTE dispositivo las cargó de verdad -- game.id ->
+// JSON.stringify(events). Sirve para detectar, justo antes de guardar, si
+// alguien ha cambiado ese partido desde OTRO dispositivo mientras este no lo
+// tenía abierto (ver pushMatch): sin esto, un guardado desde aquí sobrescribe
+// el partido entero en silencio, aunque lleve días desactualizado, borrando
+// cualquier corrección hecha mientras tanto sin avisar a nadie.
+var cloudEventsBaseline = {};
 
 /* ---------- equipos y temporadas ---------- */
 // "teams" y "seasons" son las filas reales de Supabase visibles para esta persona
@@ -1374,6 +1384,12 @@ async function loadSeasonScopedData(){
         S.current = g2;
       }
     }
+    // Deja constancia de cómo estaban las jugadas de cada partido justo ahora
+    // que se acaban de cargar de la nube -- es el punto de partida contra el
+    // que pushMatch comparará antes de guardar, para detectar si este mismo
+    // partido cambia en otro dispositivo mientras este no se vuelve a abrir.
+    S.games.forEach(function(gg){ cloudEventsBaseline[gg.id] = JSON.stringify(gg.events||[]); });
+    if(S.current) cloudEventsBaseline[S.current.id] = JSON.stringify(S.current.events||[]);
   }catch(e){}
   saveSelectionLocally();
   render();
@@ -1385,8 +1401,29 @@ function scheduleCloudSave(game){
   if(cloudSaveTimer) clearTimeout(cloudSaveTimer);
   cloudSaveTimer = setTimeout(function(){ pushMatch(game); }, 900);
 }
+// Antes de guardar, comprueba si las jugadas de este partido en la nube ya no
+// coinciden con lo último que este dispositivo cargó de verdad (cloudEventsBaseline) --
+// señal de que otro dispositivo ha tocado este mismo partido mientras tanto. Guardar
+// sigue pisando esa versión (fusionar los cambios de verdad sería mucho más complejo
+// y arriesgado), pero al menos avisa en vez de hacerlo en silencio, para que quien
+// esté delante sepa que tiene que revisar ese partido. Si la comprobación en sí
+// falla (sin conexión, etc.), se guarda igual -- mejor eso que bloquear el guardado.
+async function warnIfMatchChangedElsewhere(g){
+  var baseline = cloudEventsBaseline[g.id];
+  if(baseline===undefined) return; // partido nuevo para este dispositivo: nada con lo que comparar todavía
+  try{
+    var res = await sb.from('matches').select('data').eq('id', g.id).maybeSingle();
+    var cloudData = res && res.data && res.data.data;
+    if(!cloudData) return;
+    var cloudEventsNow = JSON.stringify(cloudData.events||[]);
+    if(cloudEventsNow !== baseline){
+      showToast('Este partido se ha actualizado desde otro dispositivo mientras no lo tenías abierto aquí. Revisa que tus últimos cambios sigan correctos.');
+    }
+  }catch(e){ /* si la comprobación falla, seguimos sin avisar -- no bloquea el guardado */ }
+}
 async function pushMatch(g){
   if(!sb || !g) return;
+  await warnIfMatchChangedElsewhere(g);
   var row = {
     id: g.id,
     season_id: g.season_id || currentSeasonId,
@@ -1401,7 +1438,11 @@ async function pushMatch(g){
     created_by: authProfile ? authProfile.id : null
   };
   if(!row.season_id) return { error: 'sin temporada seleccionada' };
-  try{ return await sb.from('matches').upsert(row); }catch(e){ return { error: e }; }
+  try{
+    var result = await sb.from('matches').upsert(row);
+    cloudEventsBaseline[g.id] = JSON.stringify(g.events||[]);
+    return result;
+  }catch(e){ return { error: e }; }
 }
 // "clubSettings" (la copia local que usan las pantallas de Inicio/Equipo/AdminFbm)
 // junta campos que en Supabase viven en dos tablas distintas: el nombre/categoría/
@@ -2597,6 +2638,16 @@ function openSubs(){
 }
 function confirmLineup(){
   var g = S.current;
+  // Defensa adicional además de deshabilitar el botón en pantalla (ver
+  // renderLineup): si por lo que sea se llega a llamar a esto sin las 5
+  // jugadoras requeridas (o todas las disponibles, si la plantilla
+  // convocada tiene menos de 5), no se confirma el quinteto.
+  var requiredOnCourt = Math.min(MAX_ON_COURT, sortedRoster(g).length);
+  if(g.onCourt.length !== requiredOnCourt){
+    showToast('Selecciona exactamente '+requiredOnCourt+' jugadora'+(requiredOnCourt===1?'':'s')+' antes de confirmar el quinteto.');
+    render();
+    return;
+  }
   var mode = S.routeParams.mode;
   var newPeriod = lineupTargetPeriod();
   // el cronómetro se reinicia (queda en pausa a 00:00) al cambiar de sexto --
@@ -3783,7 +3834,8 @@ function icon(name, size){
     play:'<path d="M7 4.5v15l13-7.5z" fill="currentColor"/>',
     pause:'<path d="M7 4.5h3.5v15H7zM13.5 4.5H17v15h-3.5z" fill="currentColor"/>',
     resetClock:'<path d="M4 4v6h6M3.5 13a8.5 8.5 0 108-9.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
-    stats:'<path d="M4 20V10M12 20V4M20 20v-7" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>'
+    stats:'<path d="M4 20V10M12 20V4M20 20v-7" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>',
+    alert:'<path d="M12 4L3 20h18z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 10v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="17" r="0.9" fill="currentColor"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none">'+(icons[name]||'')+'</svg>';
 }
@@ -4066,6 +4118,13 @@ function renderLineup(){
   var onCount = g.onCourt.length;
   var mode = S.routeParams.mode;
   var displayPeriod = lineupTargetPeriod();
+  // Un partido se juega con 5 jugadoras en pista -- exigimos ese número exacto
+  // para poder confirmar el quinteto (antes solo se bloqueaba con 0, lo que
+  // dejaba seguir por error con menos de 5, p.ej. un sexto entero con 4). Si
+  // la plantilla convocada para este partido tiene menos de 5 jugadoras en
+  // total (caso límite, equipo muy corto de gente), no tiene sentido pedir
+  // más de las que hay -- se exigen entonces todas las disponibles.
+  var requiredOnCourt = Math.min(MAX_ON_COURT, roster.length);
   var h = '';
   h += '<div class="header"><div class="header-row">'+
         '<button class="iconbtn" onclick="lineupBack()">'+icon('back',18)+'</button>'+
@@ -4073,7 +4132,10 @@ function renderLineup(){
         '<div class="subtitle">'+esc(g.periodLabel)+' '+displayPeriod+(mode==='period'?' · confirma el quinteto para seguir':'')+'</div></div>'+
        '</div></div>';
   h += '<div class="helpbox" style="margin:18px 20px 0">Toca una jugadora del <b>banquillo</b> para que entre y una <b>en pista</b> para que salga (máx. '+MAX_ON_COURT+'). Solo las marcadas aquí aparecerán en el registro en vivo.</div>';
-  h += '<div class="countline" style="padding:20px 20px 10px"><div class="label" style="margin-bottom:0">Plantilla</div><div class="count">'+onCount+' / '+MAX_ON_COURT+' en pista</div></div>';
+  h += '<div class="countline" style="padding:20px 20px 10px"><div class="label" style="margin-bottom:0">Plantilla</div><div class="count'+(onCount!==requiredOnCourt?' warn':'')+'">'+onCount+' / '+MAX_ON_COURT+' en pista</div></div>';
+  if(onCount!==requiredOnCourt){
+    h += '<div class="countwarn" style="margin:0 20px 10px">'+icon('alert',14)+' Selecciona exactamente '+requiredOnCourt+' jugadora'+(requiredOnCourt===1?'':'s')+' para poder confirmar el quinteto.</div>';
+  }
   h += '<div class="content" style="padding-top:0">';
   h += '<div class="players">';
   roster.forEach(function(p){
@@ -4085,7 +4147,7 @@ function renderLineup(){
          '</div>';
   });
   h += '</div></div>';
-  h += '<div class="ctabar"><button class="cta" '+(onCount<1?'disabled':'')+' onclick="confirmLineup()">Confirmar quinteto</button></div>';
+  h += '<div class="ctabar"><button class="cta" '+(onCount!==requiredOnCourt?'disabled':'')+' onclick="confirmLineup()">Confirmar quinteto</button></div>';
   return h;
 }
 
