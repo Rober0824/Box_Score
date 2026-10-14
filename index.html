@@ -1058,14 +1058,6 @@ function selectFaseView(faseId, view){ faseViewMode[faseId] = view; render(); }
 var teamRoster = [];
 var cloudSaveTimer = null;
 var assetUploadBusy = false;
-// Última copia (en texto) de las jugadas de cada partido tal y como estaban en
-// la nube la última vez que ESTE dispositivo las cargó de verdad -- game.id ->
-// JSON.stringify(events). Sirve para detectar, justo antes de guardar, si
-// alguien ha cambiado ese partido desde OTRO dispositivo mientras este no lo
-// tenía abierto (ver pushMatch): sin esto, un guardado desde aquí sobrescribe
-// el partido entero en silencio, aunque lleve días desactualizado, borrando
-// cualquier corrección hecha mientras tanto sin avisar a nadie.
-var cloudEventsBaseline = {};
 
 /* ---------- equipos y temporadas ---------- */
 // "teams" y "seasons" son las filas reales de Supabase visibles para esta persona
@@ -1399,12 +1391,6 @@ async function loadSeasonScopedData(){
         S.current = g2;
       }
     }
-    // Deja constancia de cómo estaban las jugadas de cada partido justo ahora
-    // que se acaban de cargar de la nube -- es el punto de partida contra el
-    // que pushMatch comparará antes de guardar, para detectar si este mismo
-    // partido cambia en otro dispositivo mientras este no se vuelve a abrir.
-    S.games.forEach(function(gg){ cloudEventsBaseline[gg.id] = JSON.stringify(gg.events||[]); });
-    if(S.current) cloudEventsBaseline[S.current.id] = JSON.stringify(S.current.events||[]);
   }catch(e){}
   saveSelectionLocally();
   render();
@@ -1416,29 +1402,8 @@ function scheduleCloudSave(game){
   if(cloudSaveTimer) clearTimeout(cloudSaveTimer);
   cloudSaveTimer = setTimeout(function(){ pushMatch(game); }, 900);
 }
-// Antes de guardar, comprueba si las jugadas de este partido en la nube ya no
-// coinciden con lo último que este dispositivo cargó de verdad (cloudEventsBaseline) --
-// señal de que otro dispositivo ha tocado este mismo partido mientras tanto. Guardar
-// sigue pisando esa versión (fusionar los cambios de verdad sería mucho más complejo
-// y arriesgado), pero al menos avisa en vez de hacerlo en silencio, para que quien
-// esté delante sepa que tiene que revisar ese partido. Si la comprobación en sí
-// falla (sin conexión, etc.), se guarda igual -- mejor eso que bloquear el guardado.
-async function warnIfMatchChangedElsewhere(g){
-  var baseline = cloudEventsBaseline[g.id];
-  if(baseline===undefined) return; // partido nuevo para este dispositivo: nada con lo que comparar todavía
-  try{
-    var res = await sb.from('matches').select('data').eq('id', g.id).maybeSingle();
-    var cloudData = res && res.data && res.data.data;
-    if(!cloudData) return;
-    var cloudEventsNow = JSON.stringify(cloudData.events||[]);
-    if(cloudEventsNow !== baseline){
-      showToast('Este partido se ha actualizado desde otro dispositivo mientras no lo tenías abierto aquí. Revisa que tus últimos cambios sigan correctos.');
-    }
-  }catch(e){ /* si la comprobación falla, seguimos sin avisar -- no bloquea el guardado */ }
-}
 async function pushMatch(g){
   if(!sb || !g) return;
-  await warnIfMatchChangedElsewhere(g);
   var row = {
     id: g.id,
     season_id: g.season_id || currentSeasonId,
@@ -1453,11 +1418,7 @@ async function pushMatch(g){
     created_by: authProfile ? authProfile.id : null
   };
   if(!row.season_id) return { error: 'sin temporada seleccionada' };
-  try{
-    var result = await sb.from('matches').upsert(row);
-    cloudEventsBaseline[g.id] = JSON.stringify(g.events||[]);
-    return result;
-  }catch(e){ return { error: e }; }
+  try{ return await sb.from('matches').upsert(row); }catch(e){ return { error: e }; }
 }
 // "clubSettings" (la copia local que usan las pantallas de Inicio/Equipo/AdminFbm)
 // junta campos que en Supabase viven en dos tablas distintas: el nombre/categoría/
