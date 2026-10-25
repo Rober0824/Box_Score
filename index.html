@@ -1744,6 +1744,8 @@ function newGame(){
     events: [],
     periodAppearances: {}, // playerId -> Set(periods) as array
     minutesOverride: {},   // playerId -> {period: minutes}
+    rivalPeriodAppearances: {}, // espejo de periodAppearances, para el quinteto rival
+    rivalMinutesOverride: {},   // espejo de minutesOverride, para el quinteto rival
     rivalAgg: {twoM:0,twoA:0,threeM:0,threeA:0,ftM:0,ftA:0,rebO:0,rebD:0,foulC:0,foulR:0,ast:0,blk:0,to:0,stl:0}
   };
 }
@@ -1758,6 +1760,8 @@ function sortedRoster(g){
    ensurePeriodClocks() hace con g.periodClocks. */
 function ensureRivalRoster(g){ if(!g.rivalRoster) g.rivalRoster = []; return g.rivalRoster; }
 function ensureRivalOnCourt(g){ if(!g.rivalOnCourt) g.rivalOnCourt = []; return g.rivalOnCourt; }
+function ensureRivalPeriodAppearances(g){ if(!g.rivalPeriodAppearances) g.rivalPeriodAppearances = {}; return g.rivalPeriodAppearances; }
+function ensureRivalMinutesOverride(g){ if(!g.rivalMinutesOverride) g.rivalMinutesOverride = {}; return g.rivalMinutesOverride; }
 function sortedRivalRoster(g){
   return ensureRivalRoster(g).slice().sort(function(a,b){ return a.dorsal-b.dorsal; });
 }
@@ -1974,6 +1978,33 @@ function recordAppearance(g){
     if(!g.periodAppearances[pid]) g.periodAppearances[pid]=[];
     if(g.periodAppearances[pid].indexOf(p)===-1) g.periodAppearances[pid].push(p);
   });
+}
+/* ---- minutos del quinteto rival (espejo de minutesFor/recordAppearance) ----
+   Solo puede calcularse a partir de que se empiece a marcar el quinteto
+   rival en pista -- partidos antiguos sin ese dato se quedan sin minutos
+   (igual que les pasa al +/- rival), pero de aquí en adelante se registran
+   solos en cuanto se marca/confirma el quinteto rival. */
+function recordRivalAppearance(g){
+  var p = g.currentPeriod;
+  var appear = ensureRivalPeriodAppearances(g);
+  ensureRivalOnCourt(g).forEach(function(pid){
+    if(!appear[pid]) appear[pid]=[];
+    if(appear[pid].indexOf(p)===-1) appear[pid].push(p);
+  });
+}
+function minutesForRival(g, playerId){
+  var ov = ensureRivalMinutesOverride(g)[playerId];
+  var appear = ensureRivalPeriodAppearances(g);
+  var total=0, perPeriod={};
+  for(var p=1;p<=g.periodsCount;p++){
+    if(ov && ov[p]!=null){ perPeriod[p]=ov[p]; }
+    else if(appear[playerId] && appear[playerId].indexOf(p)!==-1){
+      perPeriod[p] = clockUsedForPeriod(g,p) ? clockMinutesForPeriod(g,p) : g.periodMinutes;
+    }
+    else { perPeriod[p]=0; }
+    total += perPeriod[p];
+  }
+  return {total:total, perPeriod:perPeriod};
 }
 
 /* ---------- cronómetro de partido (opcional) ----------
@@ -2663,6 +2694,7 @@ function confirmLineup(){
   if(newPeriod !== g.currentPeriod) stopAllRunningClocks(g);
   g.currentPeriod = newPeriod;
   recordAppearance(g);
+  recordRivalAppearance(g); // arrastra el quinteto rival vigente al nuevo periodo
   // Deja constancia en las jugadas de los cambios de quinteto: quién EMPIEZA
   // cada periodo (quinteto inicial del partido, o el quinteto con el que
   // arranca cada sexto nuevo) y también, aparte, cada CAMBIO a mitad de
@@ -2712,6 +2744,7 @@ function toggleRivalOnCourt(pid){
     }
     onCourt.push(pid);
   }
+  recordRivalAppearance(g);
   saveState(); render();
 }
 function openRivalSubs(){
@@ -2720,6 +2753,7 @@ function openRivalSubs(){
   go('rivalLineup', {mode:'sub'});
 }
 function confirmRivalLineup(){
+  recordRivalAppearance(S.current);
   saveState();
   go('live');
 }
@@ -3832,16 +3866,19 @@ function firstWord(s){ return (s||'').split(' ')[0]; }
 
 /* ---------- minutes editing ---------- */
 function openMinutes(pid){ go('minutes', {playerId: pid, gameId: (S.routeParams.gameId||(S.current&&S.current.id)), fromGames: S.routeParams.fromGames}); }
+function openRivalMinutes(pid){ go('minutes', {playerId: pid, gameId: (S.routeParams.gameId||(S.current&&S.current.id)), fromGames: S.routeParams.fromGames, rival:true}); }
 function stepMinuteOverride(pid, period, delta){
   var g = getGameById(S.routeParams.gameId);
-  if(!g.minutesOverride[pid]) g.minutesOverride[pid] = {};
-  var cur = g.minutesOverride[pid][period];
+  var isRival = !!S.routeParams.rival;
+  var ov = isRival ? ensureRivalMinutesOverride(g) : g.minutesOverride;
+  if(!ov[pid]) ov[pid] = {};
+  var cur = ov[pid][period];
   if(cur==null){
-    var mf = minutesFor(g, pid);
+    var mf = isRival ? minutesForRival(g, pid) : minutesFor(g, pid);
     cur = mf.perPeriod[period]||0;
   }
   cur = Math.max(0, Math.min(g.periodMinutes, cur+delta));
-  g.minutesOverride[pid][period] = cur;
+  ov[pid][period] = cur;
   saveState(g); render();
 }
 function saveMinutes(){
@@ -4657,15 +4694,18 @@ function renderPlayersTable(g, rows, teamTotal, periods){
    a partir de los eventos side:'rival' con playerId. */
 function renderRivalPlayersTable(g, periods){
   var roster = sortedRivalRoster(g);
-  var cols = ['FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','PTS'];
+  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','PTS'];
   var h = '<div class="tablewrap" style="margin-top:14px"><table class="stattable"><thead><tr><th class="stickycol">Jugadora rival</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
   function fg(m,a){ return m+'-'+a; }
   roster.forEach(function(p){
     var st = rivalPlayerStats(g, p.id, periods);
+    var rmf = minutesForRival(g, p.id);
+    var rminVal = periods ? periods.reduce(function(s,per){ return s+(rmf.perPeriod[per]||0); }, 0) : rmf.total;
     h += '<tr>';
     h += '<td class="stickycol"><div class="tcell-player"><span class="dorsal" style="width:22px;height:22px;font-size:11px;background:var(--surface-2);border:1px solid var(--rival);color:var(--rival)">'+p.dorsal+'</span><span>'+esc(rivalPlayerDisplayName(p))+'</span></div></td>';
+    h += '<td class="numcell">'+rminVal+'\' <button class="minbtn" onclick="openRivalMinutes(\''+p.id+'\')">'+icon('pencil',10)+'</button></td>';
     h += '<td class="numcell">'+fg(st.fg2m+st.fg3m, st.fg2a+st.fg3a)+'</td>';
     h += '<td class="numcell">'+fg(st.fg2m,st.fg2a)+'</td>';
     h += '<td class="numcell">'+fg(st.fg3m,st.fg3a)+'</td>';
@@ -5144,8 +5184,11 @@ function renderMinutes(){
   var gid = S.routeParams.gameId;
   var g = getGameById(gid);
   var pid = S.routeParams.playerId;
-  var p = byId(g.roster, pid);
-  var mf = minutesFor(g, pid);
+  var isRival = !!S.routeParams.rival;
+  var p = isRival ? byId(ensureRivalRoster(g), pid) : byId(g.roster, pid);
+  var mf = isRival ? minutesForRival(g, pid) : minutesFor(g, pid);
+  var appear = isRival ? ensureRivalPeriodAppearances(g) : g.periodAppearances;
+  var ov = isRival ? ensureRivalMinutesOverride(g) : g.minutesOverride;
   var h = '';
   var fromGames = S.routeParams.fromGames ? 'true' : 'false';
   h += '<div class="header"><div class="header-row">'+
@@ -5153,13 +5196,15 @@ function renderMinutes(){
         '<div class="htitles"><div class="title">Minutos por '+esc(g.periodLabel.toLowerCase())+'</div>'+
         '<div class="subtitle">Opcional · se puede rellenar después del partido</div></div>'+
        '</div></div>';
-  h += '<div class="pheader"><div class="av">'+p.dorsal+'</div><div><div class="nm">'+esc(p.name)+'</div><div class="sub">'+mf.total+'\' totales registrados</div></div></div>';
-  h += '<div class="helpbox" style="margin:14px 20px 0">Si registraste los cambios de quinteto en directo, estos minutos ya vienen <b>calculados automáticamente</b> (periodo completo si estuvo en pista). Puedes ajustarlos a mano en cualquier momento.</div>';
+  h += '<div class="pheader"><div class="av"'+(isRival?' style="background:var(--surface-2);border:1px solid var(--rival);color:var(--rival)"':'')+'>'+p.dorsal+'</div><div><div class="nm">'+esc(isRival?rivalPlayerDisplayName(p):p.name)+'</div><div class="sub">'+mf.total+'\' totales registrados</div></div></div>';
+  h += '<div class="helpbox" style="margin:14px 20px 0">'+(isRival
+      ? 'Si marcaste el quinteto rival en pista durante el partido, estos minutos ya vienen <b>calculados automáticamente</b> (periodo completo si estuvo en pista). En partidos antiguos sin ese dato aparecerán a 0 -- puedes ajustarlos a mano.'
+      : 'Si registraste los cambios de quinteto en directo, estos minutos ya vienen <b>calculados automáticamente</b> (periodo completo si estuvo en pista). Puedes ajustarlos a mano en cualquier momento.')+'</div>';
   h += '<div class="label" style="padding:20px 20px 10px">Minutos jugados</div>';
   h += '<div class="content" style="padding-top:0">';
   for(var per=1; per<=g.periodsCount; per++){
-    var auto = g.periodAppearances[pid] && g.periodAppearances[pid].indexOf(per)!==-1;
-    var overridden = g.minutesOverride[pid] && g.minutesOverride[pid][per]!=null;
+    var auto = appear[pid] && appear[pid].indexOf(per)!==-1;
+    var overridden = ov[pid] && ov[pid][per]!=null;
     h += '<div class="stepperrow"><div class="k">'+esc(g.periodLabel)+' '+per+'<span class="auto">'+(overridden?'Editado a mano':(auto?'Calculado automático':'Sin datos · editar a mano'))+'</span></div>'+
       '<div class="stepper"><button class="stepbtn" onclick="stepMinuteOverride(\''+pid+'\','+per+',-1)">'+icon('minus',13)+'</button>'+
       '<div class="stepval">'+mf.perPeriod[per]+'\'</div>'+
