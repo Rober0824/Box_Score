@@ -1898,9 +1898,10 @@ function playerStats(g, playerId, periods){
    pantalla en directo, con quinteto rival elegido); el modo "Completas" sin
    plantilla rival y el modo rápido "Solo marcador" siguen sin playerId y por
    tanto no aparecen aquí (solo en el total plano g.rivalAgg). */
-function rivalPlayerStats(g, rivalPlayerId){
+function rivalPlayerStats(g, rivalPlayerId, periods){
   var st = {pts:0,fg2m:0,fg2a:0,fg3m:0,fg3a:0,ftm:0,fta:0,rebO:0,rebD:0,ast:0,stl:0,blk:0,to:0,foulC:0,foulR:0};
   g.events.forEach(function(e){
+    if(periods && periods.indexOf(e.period)===-1) return;
     if(e.side!=='rival' || e.playerId!==rivalPlayerId) return;
     switch(e.type){
       case '2m': st.fg2m++; st.fg2a++; st.pts+=2; break;
@@ -1926,6 +1927,16 @@ function eff(st){
   var attempted = st.fg2a+st.fg3a+st.fta;
   var missed = attempted-made;
   return (st.pts+st.rebO+st.rebD+st.ast+st.stl+st.blk) - (missed+st.to);
+}
+// Misma fórmula que eff(), pero a partir de la forma "de equipo" que devuelve
+// teamAggregates/rivalAggAsTeamShape (fgM/fgA/p3M/p3A en vez de fg2m/fg2a por
+// separado) -- la usa la fila de totales del equipo rival en la tabla de
+// Jugadoras, que hasta ahora no calculaba ningún EFF.
+function effFromTeamShape(t){
+  var fg2m = t.fgM - t.p3M, fg2a = t.fgA - t.p3A;
+  var pts = fg2m*2 + t.p3M*3 + t.ftM;
+  return eff({fg2m:fg2m, fg2a:fg2a, fg3m:t.p3M, fg3a:t.p3A, ftm:t.ftM, fta:t.ftA, pts:pts,
+    rebO:t.rebO, rebD:t.rebD, ast:t.ast, stl:t.stl, blk:t.blk, to:t.to});
 }
 // MVP del partido: entre las jugadoras que llegaron a jugar algún minuto (las
 // que se quedaron en el banco todo el partido no entran, o empatarían a 0 EFF
@@ -3802,10 +3813,19 @@ function teamAggregates(g, side, eventsOverride){
   });
   return a;
 }
-function rivalAggAsTeamShape(g){
-  var r = g.rivalAgg;
-  return {fgM:r.twoM+r.threeM, fgA:r.twoA+r.threeA, p3M:r.threeM, p3A:r.threeA, ftM:r.ftM, ftA:r.ftA,
-    rebO:r.rebO, rebD:r.rebD, ast:r.ast, blk:r.blk, stl:r.stl, to:r.to, foulC:r.foulC};
+function rivalAggAsTeamShape(g, periods){
+  if(!periods || !periods.length){
+    var r = g.rivalAgg;
+    return {fgM:r.twoM+r.threeM, fgA:r.twoA+r.threeA, p3M:r.threeM, p3A:r.threeA, ftM:r.ftM, ftA:r.ftA,
+      rebO:r.rebO, rebD:r.rebD, ast:r.ast, blk:r.blk, stl:r.stl, to:r.to, foulC:r.foulC};
+  }
+  // Con un filtro de periodo activo, g.rivalAgg no sirve -- es un total plano
+  // de TODO el partido, sin desglose por periodo. En modo "Completas" cada
+  // jugada rival también se guarda como evento normal (con su periodo, ver
+  // recordRivalFull), así que para respetar el filtro se recalcula a partir
+  // de esos eventos en vez de usar ese total.
+  var filtered = g.events.filter(function(e){ return e.side==='rival' && periods.indexOf(e.period)!==-1; });
+  return teamAggregates(g, 'rival', filtered);
 }
 function pct(m,a){ return a>0 ? (m/a*100).toFixed(1) : '0.0'; }
 function firstWord(s){ return (s||'').split(' ')[0]; }
@@ -4523,7 +4543,7 @@ function renderBox(){
     return h;
   }
 
-  var inner = renderPlayersTable(g, rows, teamTotal);
+  var inner = renderPlayersTable(g, rows, teamTotal, boxPeriods);
   // MVP del partido: solo en la vista de estadísticas de Jugadoras (aquí es
   // donde tiene sentido -- en Equipo y Jugadas no aporta nada), debajo de la
   // tabla y con su propio espacio para que no quede pegado a nada.
@@ -4545,7 +4565,7 @@ function renderBox(){
 }
 
 /* ---- players table (Jugadores view of the box score) ---- */
-function renderPlayersTable(g, rows, teamTotal){
+function renderPlayersTable(g, rows, teamTotal, periods){
   rows = rows.slice().sort(function(a,b){ return a.p.dorsal-b.p.dorsal; });
   var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
   var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora</th>';
@@ -4597,22 +4617,26 @@ function renderPlayersTable(g, rows, teamTotal){
     '<td>'+fg(tot.ftm,tot.fta)+'</td>'+
     '<td>'+tot.rebO+'</td><td>'+tot.rebD+'</td><td>'+(tot.rebO+tot.rebD)+'</td>'+
     '<td>'+tot.ast+'</td><td>'+tot.stl+'</td><td>'+tot.blk+'</td><td>'+tot.to+'</td><td>'+tot.foulC+'</td>'+
-    '<td>'+tot.eff+'</td><td>—</td><td>'+teamTotal+'</td>'+
+    '<td>'+tot.eff+'</td><td>—</td><td>'+tot.pts+'</td>'+
     '</tr>';
 
-  // rival row (only meaningful stats when tracked fully; otherwise just points)
+  // rival row (only meaningful stats when tracked fully; otherwise just points) --
+  // ahora respeta el mismo filtro de periodo que las filas de arriba (ver
+  // rivalAggAsTeamShape) y calcula también su EFF, que antes se dejaba en "—".
   if(g.trackRivalFull){
-    var a = g.rivalAgg;
+    var a = rivalAggAsTeamShape(g, periods);
+    var rivalFg2m = a.fgM - a.p3M, rivalFg2a = a.fgA - a.p3A;
+    var rivalPts = periods ? (rivalFg2m*2 + a.p3M*3 + a.ftM) : rivalScore(g);
     h += '<tr class="rivalrow">'+
       '<td class="stickycol">'+esc(g.rivalName||'Rival')+'</td>'+
       '<td>—</td>'+
-      '<td>'+fg(a.twoM+a.threeM, a.twoA+a.threeA)+'</td>'+
-      '<td>'+fg(a.twoM,a.twoA)+'</td>'+
-      '<td>'+fg(a.threeM,a.threeA)+'</td>'+
+      '<td>'+fg(a.fgM, a.fgA)+'</td>'+
+      '<td>'+fg(rivalFg2m,rivalFg2a)+'</td>'+
+      '<td>'+fg(a.p3M,a.p3A)+'</td>'+
       '<td>'+fg(a.ftM,a.ftA)+'</td>'+
       '<td>'+a.rebO+'</td><td>'+a.rebD+'</td><td>'+(a.rebO+a.rebD)+'</td>'+
       '<td>'+a.ast+'</td><td>'+a.stl+'</td><td>'+a.blk+'</td><td>'+a.to+'</td><td>'+a.foulC+'</td>'+
-      '<td>—</td><td>—</td><td>'+rivalScore(g)+'</td>'+
+      '<td>'+effFromTeamShape(a)+'</td><td>—</td><td>'+rivalPts+'</td>'+
       '</tr>';
   } else {
     h += '<tr class="rivalrow"><td class="stickycol">'+esc(g.rivalName||'Rival')+'</td>'+
@@ -4622,7 +4646,7 @@ function renderPlayersTable(g, rows, teamTotal){
 
   h += '</tbody></table></div>';
   if(g.trackRivalFull && sortedRivalRoster(g).length){
-    h += renderRivalPlayersTable(g);
+    h += renderRivalPlayersTable(g, periods);
   }
   return h;
 }
@@ -4631,15 +4655,15 @@ function renderPlayersTable(g, rows, teamTotal){
    "rivalrow" de arriba (g.rivalAgg) sigue siendo la fuente de verdad del
    total del equipo -- esta tabla es un desglose complementario, por jugadora,
    a partir de los eventos side:'rival' con playerId. */
-function renderRivalPlayersTable(g){
+function renderRivalPlayersTable(g, periods){
   var roster = sortedRivalRoster(g);
-  var cols = ['FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','PTS'];
+  var cols = ['FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','PTS'];
   var h = '<div class="tablewrap" style="margin-top:14px"><table class="stattable"><thead><tr><th class="stickycol">Jugadora rival</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
   function fg(m,a){ return m+'-'+a; }
   roster.forEach(function(p){
-    var st = rivalPlayerStats(g, p.id);
+    var st = rivalPlayerStats(g, p.id, periods);
     h += '<tr>';
     h += '<td class="stickycol"><div class="tcell-player"><span class="dorsal" style="width:22px;height:22px;font-size:11px;background:var(--surface-2);border:1px solid var(--rival);color:var(--rival)">'+p.dorsal+'</span><span>'+esc(rivalPlayerDisplayName(p))+'</span></div></td>';
     h += '<td class="numcell">'+fg(st.fg2m+st.fg3m, st.fg2a+st.fg3a)+'</td>';
@@ -4654,6 +4678,7 @@ function renderRivalPlayersTable(g){
     h += '<td class="numcell">'+st.blk+'</td>';
     h += '<td class="numcell">'+st.to+'</td>';
     h += '<td class="numcell">'+st.foulC+'</td>';
+    h += '<td class="numcell">'+eff(st)+'</td>';
     h += '<td class="ptscell">'+st.pts+'</td>';
     h += '</tr>';
   });
@@ -4993,7 +5018,7 @@ function renderTeamPanel(g, opts){
   var filteredEvents = periods ? g.events.filter(function(e){ return periods.indexOf(e.period)!==-1; }) : null;
   var team = teamAggregates(g, 'team', filteredEvents);
   var rivalKnown = !!g.trackRivalFull;
-  var rival = rivalKnown ? rivalAggAsTeamShape(g) : null;
+  var rival = rivalKnown ? rivalAggAsTeamShape(g, periods) : null;
 
   function row(l, label, r){
     return '<div class="teamstatrow"><div class="tsval">'+l+'</div><div class="tslabel">'+label+'</div><div class="tsval right">'+r+'</div></div>';
