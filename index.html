@@ -853,6 +853,9 @@
   .lname{ flex:1; min-width:0; font-weight:700; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ldetail{ font-size:11px; color:var(--text-dim); font-weight:600; margin-right:4px; }
   .lval{ font-family:'Oswald',sans-serif; font-weight:700; font-size:16px; color:var(--accent); min-width:44px; text-align:right; }
+  .lrow.dim{ opacity:0.5; }
+  .lrow.dim .lval{ color:var(--text-dim); }
+  .rankdivider{ font-size:10.5px; font-weight:700; color:var(--text-dim); text-align:center; line-height:1.5; padding:12px 10px 2px; margin-top:2px; border-top:1px dashed var(--border); }
 
   /* ---------- auth screens ---------- */
   .authwrap{ padding:0 26px; flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
@@ -6872,9 +6875,30 @@ function renderPlayerOriginCards(games, dorsal, name){
   }
   return h;
 }
+// Mínimos para "calificar" en el ranking de estadísticas (Inicio + pantalla
+// de ranking completa) -- igual que hacen las ligas de verdad: con muestras
+// muy pequeñas (p.ej. 2/2 en tiros libres) cualquier cosa sale un 100% o un
+// 0%, sin que eso signifique nada fiable. Una jugadora necesita SIEMPRE un
+// mínimo de partidos jugados, y si la categoría es un porcentaje de tiro,
+// además un mínimo de intentos en esa categoría concreta.
+var RANK_QUALIFY = { minGames: 5, minAttemptsForPct: 10 };
+function rankPctAttemptsField(key){ return {fg2pct:'fg2a', fg3pct:'fg3a', ftpct:'fta'}[key]; }
+// "Tiene algo que mostrar" en esta categoría -- para no listar a quien nunca
+// ha jugado (todo el equipo aparece en aggregatePlayers aunque no haya
+// jugado ningún partido) ni a quien, en un % concreto, nunca ha intentado
+// ese tipo de tiro (un 0/0 no dice nada).
+function rankHasActivity(a, key){
+  var pctField = rankPctAttemptsField(key);
+  return pctField ? a[pctField] > 0 : a.gp > 0;
+}
+function rankQualifies(a, key){
+  if(a.gp < RANK_QUALIFY.minGames) return false;
+  var pctField = rankPctAttemptsField(key);
+  if(pctField && a[pctField] < RANK_QUALIFY.minAttemptsForPct) return false;
+  return true;
+}
 function rankLeader(list, key){
-  var withPct = ['fg2pct','fg3pct','ftpct'].indexOf(key)!==-1;
-  var pool = withPct ? list.filter(function(a){ return (key==='fg2pct'?a.fg2a:key==='fg3pct'?a.fg3a:a.fta) > 0; }) : list;
+  var pool = list.filter(function(a){ return rankQualifies(a, key); });
   if(!pool.length) return null;
   return pool.slice().sort(function(a,b){ return b[key]-a[key]; })[0];
 }
@@ -8114,24 +8138,38 @@ function renderRankingPopup(){
   var rs = RANK_STATS.filter(function(r){return r.key===key;})[0] || RANK_STATS[0];
   var isPct = key.indexOf('pct')!==-1;
   var list = aggregatePlayers(filteredRankingGames());
-  var pool = isPct ? list.filter(function(a){ return (key==='fg2pct'?a.fg2a:key==='fg3pct'?a.fg3a:a.fta) > 0; }) : list;
-  pool = pool.slice().sort(function(a,b){ return b[key]-a[key]; });
+  var active = list.filter(function(a){ return rankHasActivity(a, key); });
+  var qualified = active.filter(function(a){ return rankQualifies(a, key); }).sort(function(a,b){ return b[key]-a[key]; });
+  var notQualified = active.filter(function(a){ return !rankQualifies(a, key); }).sort(function(a,b){ return b[key]-a[key]; });
   var scopeLabel = rankFiltersActive() ? rankFilterSummaryLabel() : (isPct ? 'temporada completa' : 'media por partido');
   var h = '<div class="veilfull"><div class="sheet">';
   h += '<div class="sheethead"><div><div class="shtitle">'+rs.label+'</div><div class="shsub">Todas las jugadoras &middot; '+esc(scopeLabel)+'</div></div>'+
     '<button class="iconbtn" onclick="go(\'home\')">'+icon('x',15)+'</button></div>';
   h += '<div class="sheetlist">';
-  if(!pool.length){ h += '<div class="empty">Todavía no hay datos suficientes.</div>'; }
-  pool.forEach(function(a, i){
-    var detail = '';
-    if(key==='fg2pct') detail = a.fg2m+'-'+a.fg2a;
-    else if(key==='fg3pct') detail = a.fg3m+'-'+a.fg3a;
-    else if(key==='ftpct') detail = a.ftm+'-'+a.fta;
-    else detail = a.gp+(a.gp===1?' partido':' partidos');
-    h += '<div class="lrow'+(i===0?' top':'')+'"><span class="lrank">'+(i+1)+'</span><span class="dorsal" style="width:30px;height:30px;font-size:12.5px">'+a.dorsal+'</span>'+
+  if(!qualified.length && !notQualified.length){ h += '<div class="empty">Todavía no hay datos suficientes.</div>'; }
+  function detailFor(a){
+    if(key==='fg2pct') return a.fg2m+'-'+a.fg2a;
+    if(key==='fg3pct') return a.fg3m+'-'+a.fg3a;
+    if(key==='ftpct') return a.ftm+'-'+a.fta;
+    return a.gp+(a.gp===1?' partido':' partidos');
+  }
+  function rowHtml(a, i, dim){
+    var detail = detailFor(a);
+    return '<div class="lrow'+(i===0 && !dim?' top':'')+(dim?' dim':'')+'"><span class="lrank">'+(dim?'–':(i+1))+'</span><span class="dorsal" style="width:30px;height:30px;font-size:12.5px">'+a.dorsal+'</span>'+
       '<span class="lname">'+esc(a.name)+'</span>'+(detail?'<span class="ldetail">'+detail+'</span>':'')+
       '<span class="lval">'+fmtRankVal(a[key],isPct)+(isPct?'%':'')+'</span></div>';
-  });
+  }
+  qualified.forEach(function(a,i){ h += rowHtml(a, i, false); });
+  // Jugadoras con algo de actividad en esta categoría pero que todavía no
+  // llegan al mínimo -- van siempre al final, separadas con una línea y un
+  // texto que explica qué les falta (sin número de puesto, para que quede
+  // claro que no compiten todavía por el liderato).
+  if(notQualified.length){
+    var need = ['al menos '+RANK_QUALIFY.minGames+' partido'+(RANK_QUALIFY.minGames===1?'':'s')+' jugado'+(RANK_QUALIFY.minGames===1?'':'s')];
+    if(isPct) need.push('al menos '+RANK_QUALIFY.minAttemptsForPct+' tiros intentados');
+    h += '<div class="rankdivider">Para entrar en este ranking hace falta '+need.join(' y ')+'.</div>';
+    notQualified.forEach(function(a,i){ h += rowHtml(a, i, true); });
+  }
   h += '</div></div></div>';
   return h;
 }
