@@ -184,6 +184,34 @@
   .lineuprow .llnames{ font-size:11.5px; font-weight:700; color:var(--text); margin-top:1px; line-height:1.5; }
   .lineuprow .llin{ color:var(--good); }
   .lineuprow .llout{ color:var(--bad); }
+  .lineuprow.rivaledit{ border-color:var(--rival); }
+  .lineuprow.rivaledit .lltitle{ color:var(--rival); }
+
+  /* ---- insertar jugada / quinteto rival en un punto del partido ya finalizado ---- */
+  .gap{ display:flex; flex-direction:column; align-items:center; padding:2px 0; }
+  .gapline{ width:100%; display:flex; align-items:center; gap:8px; }
+  .gapline::before, .gapline::after{ content:''; flex:1; height:1px; background:var(--border); }
+  .gapbtn{ width:24px; height:24px; border-radius:999px; background:var(--surface-2); border:1px dashed var(--border); color:var(--text-dim); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .gapbtn:active{ transform:scale(0.92); }
+  .gap.open .gapbtn{ background:var(--accent); border-style:solid; border-color:var(--accent); color:var(--accent-ink); transform:rotate(45deg); }
+  .insertpanel{ width:100%; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px; margin:6px 0; display:flex; flex-direction:column; gap:10px; }
+  .ipctx{ font-size:11px; color:var(--text-dim); line-height:1.5; padding:0 2px; }
+  .ipctx b{ color:var(--text); }
+  .ipchoice{ display:flex; gap:8px; }
+  .ipchoice button{ flex:1; border-radius:11px; padding:12px 8px; font-size:12.5px; font-weight:800; text-align:center; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .ipchoice button.team{ border-color:var(--accent); color:var(--accent); }
+  .ipchoice button.rival{ border-color:var(--rival); color:var(--rival); }
+  .ipchoice button.back{ flex:0 0 auto; width:40px; border-color:var(--border); color:var(--text-dim); }
+  .iplabel{ font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); margin-top:2px; }
+  .ipchips{ display:flex; flex-wrap:wrap; gap:6px; }
+  .ipchip{ padding:8px 12px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); font-size:12px; font-weight:700; color:var(--text); }
+  .ipchip.sel{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .ipchip.sel.riv{ background:var(--rival); border-color:var(--rival); color:#fff; }
+  .ipchip.riv{ color:var(--rival); border-color:var(--rival); }
+  .ipcta{ width:100%; height:44px; border-radius:11px; background:var(--accent); color:var(--accent-ink); font-family:'Oswald',sans-serif; font-weight:700; font-size:14px; letter-spacing:0.02em; text-transform:uppercase; display:flex; align-items:center; justify-content:center; }
+  .ipcta[disabled]{ opacity:0.35; }
+  .ipcta.riv{ background:var(--rival); color:#fff; }
+  .ipcancel{ text-align:center; font-size:11.5px; font-weight:700; color:var(--text-dim); padding:4px 0; }
 
   .courtheader{ display:flex; align-items:center; justify-content:space-between; padding:0 18px 10px; flex-shrink:0; }
   .swaplink{ display:flex; align-items:center; gap:5px; font-size:12px; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:0.02em; }
@@ -1903,7 +1931,7 @@ function playerStats(g, playerId, periods){
    plantilla rival y el modo rápido "Solo marcador" siguen sin playerId y por
    tanto no aparecen aquí (solo en el total plano g.rivalAgg). */
 function rivalPlayerStats(g, rivalPlayerId, periods){
-  var st = {pts:0,fg2m:0,fg2a:0,fg3m:0,fg3a:0,ftm:0,fta:0,rebO:0,rebD:0,ast:0,stl:0,blk:0,to:0,foulC:0,foulR:0};
+  var st = {pts:0,fg2m:0,fg2a:0,fg3m:0,fg3a:0,ftm:0,fta:0,rebO:0,rebD:0,ast:0,stl:0,blk:0,to:0,foulC:0,foulR:0,plusMinus:0};
   g.events.forEach(function(e){
     if(periods && periods.indexOf(e.period)===-1) return;
     if(e.side!=='rival' || e.playerId!==rivalPlayerId) return;
@@ -1922,6 +1950,19 @@ function rivalPlayerStats(g, rivalPlayerId, periods){
       case 'to': st.to++; break;
       case 'foulC': st.foulC++; break;
       case 'foulR': st.foulR++; break;
+    }
+  });
+  // +/- -- espejo de playerStats(): para cada jugada que anota (de cualquier
+  // bando) mientras esta rival estaba en pista (rivalOnCourtSnapshot), suma
+  // si anota el rival, resta si anota nuestro equipo. Solo puede salir
+  // distinto de 0 en partidos donde se haya marcado el quinteto rival en
+  // pista (rivalOnCourtSnapshot) -- en partidos antiguos sin ese dato, o
+  // mientras no se haya marcado nada, se queda a 0 para todas.
+  g.events.forEach(function(e){
+    if(periods && periods.indexOf(e.period)===-1) return;
+    if((e.type==='2m'||e.type==='3m'||e.type==='ftm'||e.type==='rivalpts') && e.rivalOnCourtSnapshot && e.rivalOnCourtSnapshot.indexOf(rivalPlayerId)!==-1){
+      if(e.side==='rival') st.plusMinus += e.points;
+      else st.plusMinus -= e.points;
     }
   });
   return st;
@@ -2108,6 +2149,10 @@ function pushEvent(g, ev){
   ev.ts = Date.now();
   ev.period = g.currentPeriod;
   ev.onCourtSnapshot = g.onCourt.slice();
+  // Espejo de onCourtSnapshot, para poder calcular el +/- de las rivales --
+  // ensureRivalOnCourt() devuelve [] si nunca se ha tocado el quinteto
+  // rival, así que no rompe partidos donde no se usa esa parte.
+  ev.rivalOnCourtSnapshot = ensureRivalOnCourt(g).slice();
   g.events.push(ev);
   saveState();
 }
@@ -2261,6 +2306,23 @@ function pbpApplyRivalPoints(id, pts, gameId){
 // Jugadas), deshaciendo el "préstamo" de S.current hecho en pbpPickPlayer.
 function exitPastGameEdit(){
   var gid = editingPastGameId;
+  var g = S.current;
+  // Si se llegó aquí en medio de "insertar una jugada propia" (ver
+  // pbpStartInsertPlay), la jugada nueva -- si al final se llegó a anotar
+  // algo -- quedó pegada al final de g.events (igual que en directo).
+  // Se recoloca aquí a su sitio exacto y se devuelven g.onCourt/
+  // g.currentPeriod a como estaban antes de prestarlos, se haya anotado
+  // algo o se haya cancelado a mitad (en cuyo caso no hay nada que mover).
+  if(insertTargetIndex!==null && g){
+    if(g.events.length > insertBaselineLen){
+      var justPushed = g.events.pop();
+      g.events.splice(insertTargetIndex, 0, justPushed);
+    }
+    g.onCourt = insertOriginalOnCourt || g.onCourt;
+    if(insertOriginalPeriod!=null) g.currentPeriod = insertOriginalPeriod;
+    insertTargetIndex = null; insertBaselineLen = null; insertOriginalOnCourt = null; insertOriginalPeriod = null;
+    saveState(g);
+  }
   editingPastGameId = null;
   S.current = null;
   go('box', {gameId: gid, fromGames:true});
@@ -2275,6 +2337,27 @@ function liveOrExit(){
 // 'start'/'period' (empieza el partido o un sexto nuevo: se lista el quinteto
 // completo) y 'sub' (cambio a mitad de periodo: quién entra y quién sale).
 function lineupRowHtml(e, g){
+  // Quinteto/cambio RIVAL insertado a mano con "Insertar en el partido" (ver
+  // más abajo) -- mismo marcado que el propio, pero resolviendo nombres
+  // contra la plantilla rival y marcado como "(corregido)" porque, a
+  // diferencia del propio, nunca se graba solo en directo: siempre es una
+  // corrección añadida después, sobre un partido ya finalizado.
+  if(e.isRivalLineup){
+    function rnames(ids){
+      return (ids||[]).map(function(id2){ return byId(ensureRivalRoster(g), id2); }).filter(Boolean)
+        .sort(function(a,b){ return a.dorsal-b.dorsal; })
+        .map(function(p){ return 'Nº'+p.dorsal+' '+firstName(rivalPlayerDisplayName(p)); }).join(', ');
+    }
+    var rinStr = rnames(e.enteredIds), routStr = rnames(e.leftIds);
+    var rtitle = (e.subKind==='sub' ? ('Cambio rival') : ('Quinteto rival'))+' &middot; '+esc(g.periodLabel)+' '+e.period+' <span style="opacity:.7">(corregido)</span>';
+    return '<div class="lineuprow rivaledit'+(e.subKind==='sub'?' sub':'')+'">'+icon(e.subKind==='sub'?'swap':'users',13)+
+      '<div><div class="lltitle">'+rtitle+'</div>'+
+      '<div class="llnames">'+
+      (rinStr ? '<span class="llin">↑ '+esc(rinStr)+'</span>' : '')+
+      (rinStr && routStr ? '<br>' : '')+
+      (routStr ? '<span class="llout">↓ '+esc(routStr)+'</span>' : '')+
+      '</div></div></div>';
+  }
   function names(ids){
     return (ids||[]).map(function(id2){ return byId(g.roster,id2); }).filter(Boolean)
       .sort(function(a,b){ return a.dorsal-b.dorsal; })
@@ -2295,6 +2378,341 @@ function lineupRowHtml(e, g){
     '<div><div class="lltitle">Empiezan &middot; '+esc(g.periodLabel)+' '+e.period+'</div>'+
     '<div class="llnames">'+esc(namesStr)+'</div></div></div>';
 }
+
+/* ======================================================================
+   INSERTAR EN EL PARTIDO -- añadir, en un partido ya FINALIZADO, una jugada
+   que se pasó por alto o corregir/fijar el quinteto rival en pista, en el
+   punto exacto de la lista de jugadas donde el usuario toca "+" (entre dos
+   jugadas cualesquiera, o al principio/al final). Visible con la misma
+   condición que editar/borrar jugadas (canEditPlays -- admin o colaborador
+   con permiso de escritura); un usuario de solo lectura no ve nada de esto.
+
+   Mismo criterio de índices que renderPlayByPlay: la lista se muestra en
+   orden INVERSO (más reciente primero), pero g.events es siempre
+   cronológico ascendente. Un "hueco" se identifica por el índice (ascIndex)
+   en el que habría que hacer g.events.splice(ascIndex, 0, nuevoEvento).
+   ====================================================================== */
+var pbpInsertGap = null;        // ascIndex del hueco abierto, o null
+var pbpInsertMode = null;       // 'choose' | 'jugada' | 'quinteto'
+var pbpInsertSide = null;       // 'team' | 'rival' (solo modo 'jugada')
+var pbpInsertTeamPid = null;    // jugadora propia elegida
+var pbpInsertRivalType = null;  // tipo de acción rival (modo "Completas")
+var pbpInsertRivalPid = null;   // jugadora rival elegida (opcional, "Completas")
+var pbpInsertRivalPts = null;   // puntos elegidos (modo rápido, sin "Completas")
+var pbpInsertQuintetoOn = [];   // ids de jugadoras rivales marcadas en pista
+// Mientras se ha navegado a la pantalla real de anotar (equipo propio), estos
+// guardan lo necesario para recolocar la jugada en su sitio y devolver
+// g.onCourt/g.currentPeriod a como estaban -- ver pbpStartInsertPlay/exitPastGameEdit.
+var insertTargetIndex = null;
+var insertBaselineLen = null;
+var insertOriginalOnCourt = null;
+var insertOriginalPeriod = null;
+
+var RIVAL_INSERT_ACTIONS = [
+  {type:'2m',label:'Tiro de 2 anotado'}, {type:'2x',label:'Tiro de 2 fallado'},
+  {type:'3m',label:'Tiro de 3 anotado'}, {type:'3x',label:'Tiro de 3 fallado'},
+  {type:'ftm',label:'Tiro libre anotado'}, {type:'ftx',label:'Tiro libre fallado'},
+  {type:'rebO',label:'Rebote ofensivo'}, {type:'rebD',label:'Rebote defensivo'},
+  {type:'ast',label:'Asistencia'}, {type:'stl',label:'Robo'}, {type:'blk',label:'Tapón'},
+  {type:'to',label:'Pérdida'}, {type:'foulC',label:'Falta cometida'}, {type:'foulR',label:'Falta recibida'}
+];
+
+function periodForInsertIndex(g, idx){
+  if(idx>0 && g.events[idx-1]) return g.events[idx-1].period;
+  if(idx<g.events.length && g.events[idx]) return g.events[idx].period;
+  return 1;
+}
+function onCourtBeforeInsertIndex(g, idx){
+  for(var i=idx-1;i>=0;i--){
+    if(g.events[i].onCourtSnapshot) return g.events[i].onCourtSnapshot.slice();
+  }
+  return [];
+}
+function rivalOnCourtBeforeInsertIndex(g, idx){
+  for(var i=idx-1;i>=0;i--){
+    if(g.events[i].rivalOnCourtSnapshot) return g.events[i].rivalOnCourtSnapshot.slice();
+  }
+  return null; // no se sabe -- no hay ningún quinteto rival registrado antes de aquí
+}
+// Mutador puro: no guarda ni redibuja, eso lo hace quien llame.
+function insertEventAt(g, idx, ev){
+  ev.id = uid();
+  ev.ts = Date.now();
+  ev.period = periodForInsertIndex(g, idx);
+  ev.onCourtSnapshot = onCourtBeforeInsertIndex(g, idx);
+  ev.rivalOnCourtSnapshot = rivalOnCourtBeforeInsertIndex(g, idx);
+  g.events.splice(idx, 0, ev);
+}
+// Espejo de recordRivalFull(): g.rivalAgg es un contador aparte (no se
+// calcula a partir de g.events), así que al insertar una jugada rival real
+// ("Completas") hay que incrementarlo a mano igual que si se hubiera
+// anotado en directo.
+function applyRivalAggIncrement(g, type){
+  var agg = g.rivalAgg;
+  switch(type){
+    case '2m': agg.twoM++; agg.twoA++; break;
+    case '2x': agg.twoA++; break;
+    case '3m': agg.threeM++; agg.threeA++; break;
+    case '3x': agg.threeA++; break;
+    case 'ftm': agg.ftM++; agg.ftA++; break;
+    case 'ftx': agg.ftA++; break;
+    case 'rebO': agg.rebO++; break;
+    case 'rebD': agg.rebD++; break;
+    case 'foulC': agg.foulC++; break;
+    case 'foulR': agg.foulR++; break;
+    case 'ast': agg.ast++; break;
+    case 'blk': agg.blk++; break;
+    case 'to': agg.to++; break;
+    case 'stl': agg.stl++; break;
+  }
+}
+// Tras insertar/corregir un quinteto rival, propaga su quinteto resultante
+// a todas las jugadas siguientes YA EXISTENTES hasta el próximo marcador de
+// quinteto rival (o hasta el final) -- así, aunque esas jugadas sean
+// anteriores a esta función, también quedan con su rivalOnCourtSnapshot
+// correcto y entran en el cálculo del +/- de las rivales.
+function backfillRivalOnCourtForward(g, fromIdx){
+  var ev = g.events[fromIdx];
+  var set = ev.rivalOnCourtSnapshot;
+  for(var i=fromIdx+1;i<g.events.length;i++){
+    var e = g.events[i];
+    if(e.type==='lineup' && e.isRivalLineup) break;
+    e.rivalOnCourtSnapshot = set.slice();
+  }
+}
+// Recalcula ENTERO g.rivalPeriodAppearances (minutos rivales) a partir de
+// los marcadores de quinteto rival insertados a mano -- solo se llama tras
+// insertar uno de estos marcadores, así que solo "pisa" el cálculo en vitro
+// de un partido donde ya se ha empezado a usar esta corrección manual.
+function recomputeRivalAppearancesFromLineupEvents(g){
+  var lineupEvents = g.events.filter(function(e){ return e.type==='lineup' && e.isRivalLineup; });
+  var appear = {};
+  lineupEvents.forEach(function(ev, idx){
+    var startPeriod = ev.period;
+    var endPeriod = (idx+1<lineupEvents.length) ? lineupEvents[idx+1].period : g.periodsCount;
+    if(endPeriod<startPeriod) endPeriod = startPeriod;
+    (ev.onCourtIds||[]).forEach(function(pid){
+      if(!appear[pid]) appear[pid]=[];
+      for(var p=startPeriod;p<=endPeriod;p++){
+        if(appear[pid].indexOf(p)===-1) appear[pid].push(p);
+      }
+    });
+  });
+  g.rivalPeriodAppearances = appear;
+}
+
+function pbpNeighborLabel(g, e){
+  if(e.type==='lineup'){
+    if(e.isRivalLineup) return (e.subKind==='sub'?'Cambio rival':'Quinteto rival')+' · '+g.periodLabel+' '+e.period;
+    return (e.subKind==='sub'?'Cambio':'Quinteto')+' · '+g.periodLabel+' '+e.period;
+  }
+  var d = playRowData(e, g);
+  return d.who+' — '+d.label;
+}
+function pbpInsertGapHtml(g, ascIndex){
+  var isOpen = (pbpInsertGap===ascIndex);
+  var h = '<div class="gap'+(isOpen?' open':'')+'">';
+  h += '<div class="gapline"><button class="gapbtn" onclick="pbpToggleInsertGap('+ascIndex+',\''+g.id+'\')">'+icon('plus',14)+'</button></div>';
+  if(isOpen) h += pbpInsertPanelHtml(g, ascIndex);
+  h += '</div>';
+  return h;
+}
+function pbpInsertPanelHtml(g, ascIndex){
+  var belowEv = (ascIndex>0) ? g.events[ascIndex-1] : null;
+  var aboveEv = (ascIndex<g.events.length) ? g.events[ascIndex] : null;
+  var ctx = 'Se insertará '+(belowEv?('justo después de <b>'+esc(pbpNeighborLabel(g,belowEv))+'</b>'):'al principio del partido')+
+            (aboveEv?(' y antes de <b>'+esc(pbpNeighborLabel(g,aboveEv))+'</b>'):' (sería la jugada más reciente)')+'.';
+  var h = '<div class="insertpanel"><div class="ipctx">'+ctx+'</div>';
+  if(pbpInsertMode==='jugada'){
+    h += pbpInsertJugadaFormHtml(g, ascIndex);
+  } else if(pbpInsertMode==='quinteto'){
+    h += pbpInsertQuintetoFormHtml(g, ascIndex);
+  } else {
+    h += '<div class="ipchoice">'+
+         '<button class="team" onclick="pbpInsertChooseMode(\'jugada\')">'+icon('plus',14)+' Jugada</button>'+
+         '<button class="rival" onclick="pbpInsertChooseMode(\'quinteto\')">'+icon('swap',14)+' Quinteto / cambio rival</button>'+
+         '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+function pbpInsertJugadaFormHtml(g, ascIndex){
+  var h = '<div class="iplabel">Equipo</div><div class="ipchips">'+
+    '<div class="ipchip'+(pbpInsertSide==='team'?' sel':'')+'" onclick="pbpInsertSetSide(\'team\')">Nuestro equipo</div>'+
+    '<div class="ipchip riv'+(pbpInsertSide==='rival'?' sel':'')+'" onclick="pbpInsertSetSide(\'rival\')">Rival</div>'+
+    '</div>';
+  if(pbpInsertSide==='team'){
+    h += '<div class="iplabel">Jugadora</div><div class="ipchips">';
+    sortedRoster(g).forEach(function(p){
+      h += '<div class="ipchip'+(pbpInsertTeamPid===p.id?' sel':'')+'" onclick="pbpInsertSetTeamPlayer(\''+p.id+'\')">Nº'+p.dorsal+' '+esc(firstName(p.name))+'</div>';
+    });
+    h += '</div>';
+    h += '<div class="ipctx">Al elegir la jugadora se abre la pantalla normal de anotar (tiro, rebote, falta…), con el quinteto y el '+esc(g.periodLabel.toLowerCase())+' de ese momento ya puestos. Al terminar, se vuelve aquí solo.</div>';
+    h += '<div class="ipchoice"><button class="back" onclick="pbpInsertBack()">'+icon('back',14)+'</button>'+
+         '<button class="ipcta" '+(pbpInsertTeamPid?'':'disabled')+' onclick="pbpInsertGoToStatScreen('+ascIndex+',\''+g.id+'\')" style="flex:1">Continuar</button></div>';
+  } else if(pbpInsertSide==='rival'){
+    h += pbpInsertRivalFormHtml(g);
+    h += '<div class="ipchoice"><button class="back" onclick="pbpInsertBack()">'+icon('back',14)+'</button>'+
+         '<button class="ipcta riv" '+(pbpInsertCanSaveRival(g)?'':'disabled')+' onclick="pbpInsertSaveRivalPlay('+ascIndex+',\''+g.id+'\')" style="flex:1">Guardar jugada aquí</button></div>';
+  }
+  h += '<div class="ipcancel" onclick="pbpCancelInsert()">Cancelar</div>';
+  return h;
+}
+function pbpInsertRivalFormHtml(g){
+  var h = '';
+  if(!g.trackRivalFull){
+    var opts = [['Sin puntos (falta, pérdida, rebote…)',0],['+1 (tiro libre)',1],['+2',2],['+3',3]];
+    h += '<div class="iplabel">Puntos</div><div class="ipchips">';
+    opts.forEach(function(o){
+      h += '<div class="ipchip riv'+(pbpInsertRivalPts===o[1]?' sel':'')+'" onclick="pbpInsertSetRivalPts('+o[1]+')">'+o[0]+'</div>';
+    });
+    h += '</div>';
+    return h;
+  }
+  h += '<div class="iplabel">¿Qué rival? (opcional)</div><div class="ipchips">';
+  sortedRivalRoster(g).forEach(function(p){
+    h += '<div class="ipchip riv'+(pbpInsertRivalPid===p.id?' sel':'')+'" onclick="pbpInsertSetRivalPlayer(\''+p.id+'\')">Nº'+p.dorsal+' '+esc(firstName(rivalPlayerDisplayName(p)))+'</div>';
+  });
+  if(!sortedRivalRoster(g).length) h += '<div class="caption" style="margin-top:0">Sin plantilla rival añadida -- se registrará solo en el total del equipo.</div>';
+  h += '</div>';
+  h += '<div class="iplabel">Acción</div><div class="ipchips">';
+  RIVAL_INSERT_ACTIONS.forEach(function(a){
+    h += '<div class="ipchip riv'+(pbpInsertRivalType===a.type?' sel':'')+'" onclick="pbpInsertSetRivalType(\''+a.type+'\')">'+a.label+'</div>';
+  });
+  h += '</div>';
+  return h;
+}
+function pbpInsertCanSaveRival(g){
+  if(!g.trackRivalFull) return pbpInsertRivalPts!==null;
+  return !!pbpInsertRivalType;
+}
+function pbpInsertQuintetoFormHtml(g, ascIndex){
+  var period = periodForInsertIndex(g, ascIndex);
+  var roster = sortedRivalRoster(g);
+  var h = '<div class="iplabel">Quinteto rival en pista a partir de aquí · '+esc(g.periodLabel)+' '+period+'</div>';
+  h += '<div class="countline"><div></div><div class="count">'+pbpInsertQuintetoOn.length+' / '+MAX_RIVAL_ON_COURT+' en pista</div></div>';
+  h += '<div class="players">';
+  roster.forEach(function(p){
+    var on = pbpInsertQuintetoOn.indexOf(p.id)!==-1;
+    h += '<div class="prow riv'+(on?' oncourt':'')+'" onclick="pbpInsertToggleQuinteto(\''+p.id+'\')">'+
+         '<div class="dorsal">'+p.dorsal+'</div><div class="pname"><div class="nm">'+esc(rivalPlayerDisplayName(p))+'</div></div>'+
+         '<div class="pcheck riv'+(on?' on':'')+'">'+(on?icon('check',14):'')+'</div></div>';
+  });
+  h += '</div>';
+  if(!roster.length){
+    h += '<div class="caption">Todavía no has añadido ninguna jugadora rival a la plantilla.</div>';
+  }
+  h += '<div class="ipchoice"><button class="back" onclick="pbpInsertBack()">'+icon('back',14)+'</button>'+
+       '<button class="ipcta riv" '+(pbpInsertQuintetoOn.length<1?'disabled':'')+' onclick="pbpInsertSaveQuinteto('+ascIndex+',\''+g.id+'\')" style="flex:1">Guardar quinteto aquí</button></div>';
+  h += '<div class="ipcancel" onclick="pbpCancelInsert()">Cancelar</div>';
+  return h;
+}
+
+/* ---- interacción ---- */
+function pbpToggleInsertGap(ascIndex, gameId){
+  if(pbpInsertGap===ascIndex){ pbpCancelInsert(); return; }
+  pbpInsertGap = ascIndex; pbpInsertMode = null;
+  pbpInsertSide=null; pbpInsertTeamPid=null; pbpInsertRivalType=null; pbpInsertRivalPid=null; pbpInsertRivalPts=null; pbpInsertQuintetoOn=[];
+  render();
+}
+function pbpCancelInsert(){
+  pbpInsertGap = null; pbpInsertMode = null; pbpInsertSide = null;
+  pbpInsertTeamPid = null; pbpInsertRivalType = null; pbpInsertRivalPid = null; pbpInsertRivalPts = null;
+  pbpInsertQuintetoOn = [];
+  render();
+}
+function pbpInsertChooseMode(m){ pbpInsertMode=m; render(); }
+function pbpInsertBack(){ pbpInsertMode=null; pbpInsertSide=null; pbpInsertTeamPid=null; pbpInsertRivalType=null; pbpInsertRivalPid=null; pbpInsertRivalPts=null; render(); }
+function pbpInsertSetSide(s){ pbpInsertSide=s; pbpInsertTeamPid=null; pbpInsertRivalType=null; pbpInsertRivalPid=null; pbpInsertRivalPts=null; render(); }
+function pbpInsertSetTeamPlayer(pid){ pbpInsertTeamPid=pid; render(); }
+function pbpInsertSetRivalType(t){ pbpInsertRivalType=t; render(); }
+function pbpInsertSetRivalPlayer(pid){ pbpInsertRivalPid = (pbpInsertRivalPid===pid?null:pid); render(); }
+function pbpInsertSetRivalPts(p){ pbpInsertRivalPts=p; render(); }
+function pbpInsertToggleQuinteto(pid){
+  var idx = pbpInsertQuintetoOn.indexOf(pid);
+  if(idx!==-1){ pbpInsertQuintetoOn.splice(idx,1); }
+  else{
+    if(pbpInsertQuintetoOn.length>=MAX_RIVAL_ON_COURT) return;
+    pbpInsertQuintetoOn.push(pid);
+  }
+  render();
+}
+// Jugada del EQUIPO PROPIO: se reutiliza tal cual la pantalla real de
+// anotar (tiro/zona/asistencia/origen), "prestando" S.current igual que al
+// reeditar una jugada existente (ver pbpPickPlayer) -- con la diferencia de
+// que, mientras dura, se sustituyen temporalmente g.onCourt/g.currentPeriod
+// por los que correspondían EN ESE PUNTO del partido (para que el quinteto,
+// las compañeras de asistencia, el sexto, etc. salgan bien), y al salir
+// (exitPastGameEdit) se devuelve todo a como estaba y la jugada recién
+// creada se recoloca del final de g.events a su sitio exacto.
+function pbpStartInsertPlay(ascIndex, pid, gameId){
+  if(gameId && (!S.current || S.current.id!==gameId)){
+    if(S.current){ showToast('Termina primero el partido en directo para poder editar un partido pasado.'); return; }
+    var target = byId(S.games, gameId);
+    if(!target) return;
+    editingPastGameId = gameId;
+    S.current = target;
+  }
+  var g = S.current;
+  if(!g) return;
+  insertTargetIndex = ascIndex;
+  insertBaselineLen = g.events.length;
+  insertOriginalOnCourt = g.onCourt.slice();
+  insertOriginalPeriod = g.currentPeriod;
+  g.onCourt = onCourtBeforeInsertIndex(g, ascIndex);
+  g.currentPeriod = periodForInsertIndex(g, ascIndex);
+  pbpInsertGap = null; pbpInsertMode = null; pbpInsertSide = null; pbpInsertTeamPid = null;
+  go('stat', {playerId: pid});
+}
+function pbpInsertGoToStatScreen(ascIndex, gameId){
+  if(!pbpInsertTeamPid) return;
+  pbpStartInsertPlay(ascIndex, pbpInsertTeamPid, gameId);
+}
+// Jugada del RIVAL: no hace falta ninguna pantalla aparte -- se guarda
+// directamente desde las chips de este mismo panel.
+function pbpInsertSaveRivalPlay(ascIndex, gameId){
+  var g = resolveEditGame(gameId);
+  if(!g || !pbpInsertCanSaveRival(g)) return;
+  var ev;
+  if(!g.trackRivalFull){
+    ev = {side:'rival', type:'rivalpts', playerId:null, points: pbpInsertRivalPts};
+  } else {
+    var pts = pbpInsertRivalType==='2m'?2:(pbpInsertRivalType==='3m'?3:(pbpInsertRivalType==='ftm'?1:0));
+    ev = {side:'rival', type: pbpInsertRivalType, playerId: pbpInsertRivalPid||null, points: pts};
+    applyRivalAggIncrement(g, pbpInsertRivalType);
+  }
+  insertEventAt(g, ascIndex, ev);
+  saveState(g);
+  pbpCancelInsert();
+}
+// Quinteto / cambio rival: el único de los tres que no existía de ninguna
+// forma hasta ahora -- se compara con el último quinteto rival marcado
+// ANTES de este punto (si no hay ninguno, se trata como el quinteto
+// inicial de la corrección) para saber quién entra y quién sale, y se
+// propaga el resultado hacia delante (ver backfillRivalOnCourtForward) para
+// que el +/- de las rivales salga bien en todas las jugadas de por medio.
+function pbpInsertSaveQuinteto(ascIndex, gameId){
+  var g = resolveEditGame(gameId);
+  if(!g || !pbpInsertQuintetoOn.length) return;
+  var prevIds = null;
+  for(var i=ascIndex-1;i>=0;i--){
+    if(g.events[i].type==='lineup' && g.events[i].isRivalLineup){ prevIds = g.events[i].onCourtIds.slice(); break; }
+  }
+  var onCourtIds = pbpInsertQuintetoOn.slice();
+  var enteredIds = onCourtIds.filter(function(id){ return !prevIds || prevIds.indexOf(id)===-1; });
+  var leftIds = (prevIds||[]).filter(function(id){ return onCourtIds.indexOf(id)===-1; });
+  var ev = {
+    side:'meta', type:'lineup', points:0, isRivalLineup:true,
+    subKind: (prevIds===null) ? 'start' : 'sub',
+    onCourtIds: onCourtIds, enteredIds: enteredIds, leftIds: leftIds
+  };
+  insertEventAt(g, ascIndex, ev);
+  ev.rivalOnCourtSnapshot = onCourtIds.slice(); // este marcador define el quinteto a partir de aquí
+  backfillRivalOnCourtForward(g, ascIndex);
+  recomputeRivalAppearancesFromLineupEvents(g);
+  saveState(g);
+  pbpCancelInsert();
+}
 function renderPlayByPlay(g, opts){
   opts = opts || {};
   var readOnly = !!opts.readOnly;
@@ -2307,16 +2725,27 @@ function renderPlayByPlay(g, opts){
   var listStyle = opts.flowing ? ' style="padding:0;overflow:visible;flex:none"' : '';
   var events = g.events.slice().reverse();
   var rscores = runningScoreMap(g);
+  // Insertar jugadas/quintetos rivales en un punto concreto solo tiene sentido
+  // en un partido YA FINALIZADO y con permiso de escritura (misma condición
+  // que editar/borrar jugadas, ver canEditPlays) -- en la pantalla "en
+  // directo" (g no finalizado) nunca se muestra, se sigue anotando al final.
+  var showInsert = !readOnly && !!g.finished;
   var h = '<div class="playhead"'+headStyle+'><div class="label" style="margin-bottom:0">Jugadas del partido</div>'+
     '<div class="label" style="margin-bottom:0;color:var(--text-dim)">'+events.length+' jugada'+(events.length===1?'':'s')+'</div></div>';
   h += '<div class="playlist"'+listStyle+'>';
   if(!events.length){
     h += '<div class="emptyplays">Sin jugadas registradas todavía</div>';
   }
-  events.forEach(function(e){
+  var N = events.length;
+  for(var vi=0; vi<=N; vi++){
+    if(showInsert){
+      h += pbpInsertGapHtml(g, N-vi);
+    }
+    if(vi>=N) break;
+    var e = events[vi];
     if(e.type==='lineup'){
       h += lineupRowHtml(e, g);
-      return;
+      continue;
     }
     var d = playRowData(e, g);
     h += '<div class="playrow'+(e.side==='rival'?' rival':'')+'">'+
@@ -2355,7 +2784,7 @@ function renderPlayByPlay(g, opts){
         '<button class="yes" onclick="pbpConfirmDelete(\''+e.id+'\',\''+g.id+'\')">Borrar</button></div>';
     }
     h += '</div>';
-  });
+  }
   h += '</div>';
   return h;
 }
@@ -4694,7 +5123,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
    a partir de los eventos side:'rival' con playerId. */
 function renderRivalPlayersTable(g, periods){
   var roster = sortedRivalRoster(g);
-  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','PTS'];
+  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
   var h = '<div class="tablewrap" style="margin-top:14px"><table class="stattable"><thead><tr><th class="stickycol">Jugadora rival</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
@@ -4703,6 +5132,7 @@ function renderRivalPlayersTable(g, periods){
     var st = rivalPlayerStats(g, p.id, periods);
     var rmf = minutesForRival(g, p.id);
     var rminVal = periods ? periods.reduce(function(s,per){ return s+(rmf.perPeriod[per]||0); }, 0) : rmf.total;
+    var pm = st.plusMinus;
     h += '<tr>';
     h += '<td class="stickycol"><div class="tcell-player"><span class="dorsal" style="width:22px;height:22px;font-size:11px;background:var(--surface-2);border:1px solid var(--rival);color:var(--rival)">'+p.dorsal+'</span><span>'+esc(rivalPlayerDisplayName(p))+'</span></div></td>';
     h += '<td class="numcell">'+rminVal+'\' <button class="minbtn" onclick="openRivalMinutes(\''+p.id+'\')">'+icon('pencil',10)+'</button></td>';
@@ -4719,6 +5149,7 @@ function renderRivalPlayersTable(g, periods){
     h += '<td class="numcell">'+st.to+'</td>';
     h += '<td class="numcell">'+st.foulC+'</td>';
     h += '<td class="numcell">'+eff(st)+'</td>';
+    h += '<td class="numcell pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td>';
     h += '<td class="ptscell">'+st.pts+'</td>';
     h += '</tr>';
   });
