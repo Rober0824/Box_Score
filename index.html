@@ -6891,14 +6891,22 @@ function rankHasActivity(a, key){
   var pctField = rankPctAttemptsField(key);
   return pctField ? a[pctField] > 0 : a.gp > 0;
 }
-function rankQualifies(a, key){
+// Periodo de gracia: con la temporada recién empezada (menos partidos jugados
+// en total que el propio mínimo exigido a cada jugadora) es IMPOSIBLE que
+// nadie califique todavía -- el ranking se quedaría vacío semanas seguidas.
+// Así que estas normas no se aplican hasta que el equipo lleve, como mínimo,
+// los mismos partidos que exige RANK_QUALIFY.minGames; antes de eso, el
+// ranking funciona tal cual lo hacía antes (sin mínimos).
+function rankRulesActive(gamesInScope){ return (gamesInScope||0) >= RANK_QUALIFY.minGames; }
+function rankQualifies(a, key, rulesActive){
+  if(!rulesActive) return true;
   if(a.gp < RANK_QUALIFY.minGames) return false;
   var pctField = rankPctAttemptsField(key);
   if(pctField && a[pctField] < RANK_QUALIFY.minAttemptsForPct) return false;
   return true;
 }
-function rankLeader(list, key){
-  var pool = list.filter(function(a){ return rankQualifies(a, key); });
+function rankLeader(list, key, rulesActive){
+  var pool = list.filter(function(a){ return rankQualifies(a, key, rulesActive); });
   if(!pool.length) return null;
   return pool.slice().sort(function(a,b){ return b[key]-a[key]; })[0];
 }
@@ -8087,6 +8095,7 @@ function renderHome(){
 
   var rankGames = filteredRankingGames();
   var list = aggregatePlayers(rankGames);
+  var rankRulesOn = rankRulesActive(rankGames.length);
   h += '<div class="section"><div class="label" style="display:flex;align-items:center;justify-content:space-between">'+
     '<span>Ranking de estadísticas</span>'+
     '<button class="iconbtn'+(rankFiltersActive()?' active':'')+'" style="width:26px;height:26px" onclick="openRankFilters()">'+icon('filter',13)+(rankFiltersActive()?'<div class="filterdot"></div>':'')+'</button>'+
@@ -8119,7 +8128,7 @@ function renderHome(){
   h += '</div>';
   h += '<div class="rankgrid">';
   RANK_STATS.forEach(function(rs){
-    var leader = rankLeader(list, rs.key);
+    var leader = rankLeader(list, rs.key, rankRulesOn);
     var isPct = rs.key.indexOf('pct')!==-1;
     h += '<button class="ranktile" onclick="openRanking(\''+rs.key+'\')"><div class="rt-top"><span class="rt-label">'+rs.label+'</span>'+
       '<svg class="rt-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div>'+
@@ -8137,10 +8146,12 @@ function renderRankingPopup(){
   var key = S.routeParams.statKey;
   var rs = RANK_STATS.filter(function(r){return r.key===key;})[0] || RANK_STATS[0];
   var isPct = key.indexOf('pct')!==-1;
-  var list = aggregatePlayers(filteredRankingGames());
+  var popupGames = filteredRankingGames();
+  var list = aggregatePlayers(popupGames);
+  var rulesActive = rankRulesActive(popupGames.length);
   var active = list.filter(function(a){ return rankHasActivity(a, key); });
-  var qualified = active.filter(function(a){ return rankQualifies(a, key); }).sort(function(a,b){ return b[key]-a[key]; });
-  var notQualified = active.filter(function(a){ return !rankQualifies(a, key); }).sort(function(a,b){ return b[key]-a[key]; });
+  var qualified = active.filter(function(a){ return rankQualifies(a, key, rulesActive); }).sort(function(a,b){ return b[key]-a[key]; });
+  var notQualified = active.filter(function(a){ return !rankQualifies(a, key, rulesActive); }).sort(function(a,b){ return b[key]-a[key]; });
   var scopeLabel = rankFiltersActive() ? rankFilterSummaryLabel() : (isPct ? 'temporada completa' : 'media por partido');
   var h = '<div class="veilfull"><div class="sheet">';
   h += '<div class="sheethead"><div><div class="shtitle">'+rs.label+'</div><div class="shsub">Todas las jugadoras &middot; '+esc(scopeLabel)+'</div></div>'+
