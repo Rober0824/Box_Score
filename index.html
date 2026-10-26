@@ -498,6 +498,13 @@
   .teamstatrow.pct .tslabel{ font-size:10.5px; font-weight:600; text-transform:none; letter-spacing:0; }
   .teamstat-divider{ height:1px; background:var(--border); margin:6px 0 8px; }
 
+  /* selector Nuestro equipo / Rival en la pestaña "Jugadores" del box score */
+  .sideseg{ display:flex; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:4px; gap:4px; margin-bottom:14px; }
+  .sideseg button{ flex:1; display:flex; align-items:center; justify-content:center; gap:7px; padding:11px 6px; border-radius:9px; font-size:13px; font-weight:800; color:var(--text-dim); }
+  .sideseg button .dot{ width:8px; height:8px; border-radius:999px; background:currentColor; opacity:0.55; flex-shrink:0; }
+  .sideseg button.on{ background:var(--accent); color:var(--accent-ink); }
+  .sideseg button.on.rival{ background:var(--rival); color:#fff; }
+  .sideseg button .sc{ font-family:'Oswald',sans-serif; font-weight:700; font-size:13px; opacity:0.85; }
   .tablewrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--border); border-radius:14px; background:var(--surface); }
   .stattable{ border-collapse:separate; border-spacing:0; font-family:'Manrope',sans-serif; white-space:nowrap; }
   .stattable thead th{ position:sticky; top:0; background:var(--surface-2); color:var(--text-dim); font-size:9.5px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; padding:9px 10px; text-align:center; border-bottom:1px solid var(--border); z-index:1; }
@@ -4084,6 +4091,17 @@ function foulBannerHtml(){
 var boxViewMode = 'team';
 function setBoxView(mode){ boxViewMode = mode; render(); }
 
+/* ---------- selector Nuestro equipo / Rival (pestaña "Jugadores" del box score) ----------
+   Solo tiene sentido cuando hay una tabla rival de verdad para alternar (trackRivalFull
+   + plantilla rival cargada) -- en el resto de casos la tabla de jugadoras ya incluye
+   una fila de resumen del rival y no hace falta nada más. */
+var boxPlayersSide = {}; // gameId -> 'team'|'rival'
+function ensureBoxPlayersSide(gid){
+  if(!boxPlayersSide[gid]) boxPlayersSide[gid] = 'team';
+  return boxPlayersSide[gid];
+}
+function setBoxPlayersSide(gid, side){ boxPlayersSide[gid] = side; render(); }
+
 /* ---------- filtro de resultado por periodo (pantalla box score) ---------- */
 var boxPeriodFilter = {}; // gameId -> array de nº de periodo seleccionados (vacío = "Todos", sin filtro)
 function ensureBoxPeriodFilter(gid){
@@ -5012,8 +5030,12 @@ function renderBox(){
   var inner = renderPlayersTable(g, rows, teamTotal, boxPeriods);
   // MVP del partido: solo en la vista de estadísticas de Jugadoras (aquí es
   // donde tiene sentido -- en Equipo y Jugadas no aporta nada), debajo de la
-  // tabla y con su propio espacio para que no quede pegado a nada.
-  if(g.finished){
+  // tabla y con su propio espacio para que no quede pegado a nada. Es un MVP
+  // de NUESTRO equipo, así que si hay selector Nuestro equipo/Rival y está en
+  // "Rival", no tiene sentido mostrarlo ahí.
+  var hasRivalRosterForMvp = !!(g.trackRivalFull && sortedRivalRoster(g).length);
+  var showingOwnSide = !hasRivalRosterForMvp || ensureBoxPlayersSide(g.id)==='team';
+  if(g.finished && showingOwnSide){
     var boxMvp = gameMvp(g);
     if(boxMvp){
       inner += '<div class="mvpbanner" style="margin-top:4px">'+
@@ -5033,6 +5055,23 @@ function renderBox(){
 /* ---- players table (Jugadores view of the box score) ---- */
 function renderPlayersTable(g, rows, teamTotal, periods){
   rows = rows.slice().sort(function(a,b){ return a.p.dorsal-b.p.dorsal; });
+
+  // Cuando hay plantilla rival con seguimiento completo, antes se mostraban SIEMPRE
+  // las dos tablas completas apiladas (la nuestra y la del rival). Ahora se alterna
+  // con un selector: solo se ve una de las dos a la vez.
+  var hasRivalRoster = !!(g.trackRivalFull && sortedRivalRoster(g).length);
+  var side = hasRivalRoster ? ensureBoxPlayersSide(g.id) : 'team';
+  var out = '';
+  if(hasRivalRoster){
+    out += '<div class="sideseg">'+
+      '<button class="'+(side==='team'?'on':'')+'" onclick="setBoxPlayersSide(\''+g.id+'\',\'team\')"><span class="dot"></span>'+esc(g.teamName)+' <span class="sc">'+teamTotal+'</span></button>'+
+      '<button class="'+(side==='rival'?'on rival':'')+'" onclick="setBoxPlayersSide(\''+g.id+'\',\'rival\')"><span class="dot"></span>'+esc(g.rivalName||'Rival')+' <span class="sc">'+rivalScore(g)+'</span></button>'+
+      '</div>';
+  }
+  if(hasRivalRoster && side==='rival'){
+    return out + renderRivalPlayersTable(g, periods);
+  }
+
   var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
   var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
@@ -5089,42 +5128,44 @@ function renderPlayersTable(g, rows, teamTotal, periods){
   // rival row (only meaningful stats when tracked fully; otherwise just points) --
   // ahora respeta el mismo filtro de periodo que las filas de arriba (ver
   // rivalAggAsTeamShape) y calcula también su EFF, que antes se dejaba en "—".
-  if(g.trackRivalFull){
-    var a = rivalAggAsTeamShape(g, periods);
-    var rivalFg2m = a.fgM - a.p3M, rivalFg2a = a.fgA - a.p3A;
-    var rivalPts = periods ? (rivalFg2m*2 + a.p3M*3 + a.ftM) : rivalScore(g);
-    h += '<tr class="rivalrow">'+
-      '<td class="stickycol">'+esc(g.rivalName||'Rival')+'</td>'+
-      '<td>—</td>'+
-      '<td>'+fg(a.fgM, a.fgA)+'</td>'+
-      '<td>'+fg(rivalFg2m,rivalFg2a)+'</td>'+
-      '<td>'+fg(a.p3M,a.p3A)+'</td>'+
-      '<td>'+fg(a.ftM,a.ftA)+'</td>'+
-      '<td>'+a.rebO+'</td><td>'+a.rebD+'</td><td>'+(a.rebO+a.rebD)+'</td>'+
-      '<td>'+a.ast+'</td><td>'+a.stl+'</td><td>'+a.blk+'</td><td>'+a.to+'</td><td>'+a.foulC+'</td>'+
-      '<td>'+effFromTeamShape(a)+'</td><td>—</td><td>'+rivalPts+'</td>'+
-      '</tr>';
-  } else {
-    h += '<tr class="rivalrow"><td class="stickycol">'+esc(g.rivalName||'Rival')+'</td>'+
-      '<td colspan="15" style="text-align:left;color:var(--text-dim);font-weight:600">Solo marcador registrado</td>'+
-      '<td>'+rivalScore(g)+'</td></tr>';
+  // Solo se añade aquí cuando NO hay un selector Nuestro equipo/Rival -- si lo
+  // hay, el rival tiene su propia tabla completa en el otro lado del selector
+  // y repetirla aquí sería redundante.
+  if(!hasRivalRoster){
+    if(g.trackRivalFull){
+      var a = rivalAggAsTeamShape(g, periods);
+      var rivalFg2m = a.fgM - a.p3M, rivalFg2a = a.fgA - a.p3A;
+      var rivalPts = periods ? (rivalFg2m*2 + a.p3M*3 + a.ftM) : rivalScore(g);
+      h += '<tr class="rivalrow">'+
+        '<td class="stickycol">'+esc(g.rivalName||'Rival')+'</td>'+
+        '<td>—</td>'+
+        '<td>'+fg(a.fgM, a.fgA)+'</td>'+
+        '<td>'+fg(rivalFg2m,rivalFg2a)+'</td>'+
+        '<td>'+fg(a.p3M,a.p3A)+'</td>'+
+        '<td>'+fg(a.ftM,a.ftA)+'</td>'+
+        '<td>'+a.rebO+'</td><td>'+a.rebD+'</td><td>'+(a.rebO+a.rebD)+'</td>'+
+        '<td>'+a.ast+'</td><td>'+a.stl+'</td><td>'+a.blk+'</td><td>'+a.to+'</td><td>'+a.foulC+'</td>'+
+        '<td>'+effFromTeamShape(a)+'</td><td>—</td><td>'+rivalPts+'</td>'+
+        '</tr>';
+    } else {
+      h += '<tr class="rivalrow"><td class="stickycol">'+esc(g.rivalName||'Rival')+'</td>'+
+        '<td colspan="15" style="text-align:left;color:var(--text-dim);font-weight:600">Solo marcador registrado</td>'+
+        '<td>'+rivalScore(g)+'</td></tr>';
+    }
   }
 
   h += '</tbody></table></div>';
-  if(g.trackRivalFull && sortedRivalRoster(g).length){
-    h += renderRivalPlayersTable(g, periods);
-  }
-  return h;
+  return out + h;
 }
 /* ---- desglose por jugadora rival (debajo de la tabla de jugadoras) ----
-   Solo aparece cuando hay plantilla rival cargada. El total de la fila
-   "rivalrow" de arriba (g.rivalAgg) sigue siendo la fuente de verdad del
-   total del equipo -- esta tabla es un desglose complementario, por jugadora,
-   a partir de los eventos side:'rival' con playerId. */
+   Solo aparece cuando hay plantilla rival cargada -- es un desglose por
+   jugadora, a partir de los eventos side:'rival' con playerId; el total
+   de g.rivalAgg (vía rivalAggAsTeamShape) sigue siendo la fuente de verdad
+   del total del equipo rival y se añade como fila "Total" al final. */
 function renderRivalPlayersTable(g, periods){
   var roster = sortedRivalRoster(g);
   var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
-  var h = '<div class="tablewrap" style="margin-top:14px"><table class="stattable"><thead><tr><th class="stickycol">Jugadora rival</th>';
+  var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora rival</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
   function fg(m,a){ return m+'-'+a; }
@@ -5153,6 +5194,20 @@ function renderRivalPlayersTable(g, periods){
     h += '<td class="ptscell">'+st.pts+'</td>';
     h += '</tr>';
   });
+  var a = rivalAggAsTeamShape(g, periods);
+  var rivalFg2m = a.fgM - a.p3M, rivalFg2a = a.fgA - a.p3A;
+  var rivalPts = periods ? (rivalFg2m*2 + a.p3M*3 + a.ftM) : rivalScore(g);
+  h += '<tr class="totalrow">'+
+    '<td class="stickycol">Total</td>'+
+    '<td>—</td>'+
+    '<td>'+fg(a.fgM, a.fgA)+'</td>'+
+    '<td>'+fg(rivalFg2m,rivalFg2a)+'</td>'+
+    '<td>'+fg(a.p3M,a.p3A)+'</td>'+
+    '<td>'+fg(a.ftM,a.ftA)+'</td>'+
+    '<td>'+a.rebO+'</td><td>'+a.rebD+'</td><td>'+(a.rebO+a.rebD)+'</td>'+
+    '<td>'+a.ast+'</td><td>'+a.stl+'</td><td>'+a.blk+'</td><td>'+a.to+'</td><td>'+a.foulC+'</td>'+
+    '<td>'+effFromTeamShape(a)+'</td><td>—</td><td>'+rivalPts+'</td>'+
+    '</tr>';
   h += '</tbody></table></div>';
   return h;
 }
@@ -9026,9 +9081,17 @@ function renderCompareTeamsPopup(){
   });
   var avgDiff = rivalGames.length ? diffSum/rivalGames.length : 0;
   var ourName = games.length ? games[0].teamName : 'Nuestro equipo';
+  // Mismo filtro de Competición/Periodo que la pantalla "Estadísticas" --
+  // se abre y se aplica aquí mismo, sin tener que cerrar el comparador para
+  // cambiarlo (statsFilterSheetOverlay() ya se pinta encima de cualquier
+  // pantalla, ver el render() general).
+  var filterBtn = '<button class="iconbtn'+(statsFiltersActive()?' active':'')+'" onclick="openStatsFilters()">'+icon('filter',13)+(statsFiltersActive()?'<div class="filterdot"></div>':'')+'</button>';
   var h = '<div class="veilfull"><div class="sheet">';
-  h += '<div class="sheethead"><div><div class="shtitle">Comparar equipos</div><div class="shsub">'+esc(currentSeason?currentSeason.label:'')+'</div></div>'+closeBtn+'</div>';
+  h += '<div class="sheethead"><div><div class="shtitle">Comparar equipos</div><div class="shsub">'+esc(currentSeason?currentSeason.label:'')+'</div></div><div style="display:flex;gap:8px;align-items:center">'+filterBtn+closeBtn+'</div></div>';
   h += '<div class="content">';
+  if(statsFiltersActive()){
+    h += '<div style="padding:14px 20px 0"><div class="activepill">'+icon('filter',12)+esc(statsFilterSummaryLabel())+'</div></div>';
+  }
   if(rivals.length>1){
     h += '<div class="compsrow" style="padding-top:14px">'+rivals.map(function(r){
       return '<button class="chip'+(r===rival?' on':'')+'" onclick="setCompareTeamRival(\''+esc(r).replace(/'/g,"\\'")+'\')">'+esc(r)+'</button>';
@@ -9145,10 +9208,17 @@ function renderComparePlayersPopup(){
   var games = filteredStatsGames();
   var backTo = S.routeParams.from || 'stats';
   var closeBtn = '<button class="iconbtn" onclick="go(\''+backTo+'\')">'+icon('x',15)+'</button>';
+  // Mismo filtro de Competición/Periodo que la pantalla "Estadísticas" --
+  // se abre y se aplica aquí mismo, sin tener que cerrar el comparador
+  // para cambiarlo (statsFilterSheetOverlay() ya se pinta encima de
+  // cualquier pantalla, ver el render() general).
+  var filterBtn = '<button class="iconbtn'+(statsFiltersActive()?' active':'')+'" onclick="openStatsFilters()">'+icon('filter',13)+(statsFiltersActive()?'<div class="filterdot"></div>':'')+'</button>';
+  var filterPill = statsFiltersActive() ? ('<div style="padding:14px 20px 0"><div class="activepill">'+icon('filter',12)+esc(statsFilterSummaryLabel())+'</div></div>') : '';
   var list = playerCompareList(games);
   if(list.length<2){
     return '<div class="veilfull"><div class="sheet">'+
-      '<div class="sheethead"><div><div class="shtitle">Comparar jugadoras</div></div>'+closeBtn+'</div>'+
+      '<div class="sheethead"><div><div class="shtitle">Comparar jugadoras</div></div><div style="display:flex;gap:8px;align-items:center">'+filterBtn+closeBtn+'</div></div>'+
+      filterPill+
       '<div class="content"><div class="empty">Hacen falta al menos dos jugadoras con partidos jugados (con el filtro de arriba).</div></div>'+
       '</div></div>';
   }
@@ -9160,7 +9230,8 @@ function renderComparePlayersPopup(){
   var a = list.filter(function(x){ return (x.dorsal+'|'+x.name)===comparePlayer1; })[0];
   var b = comparePlayer2 ? list.filter(function(x){ return (x.dorsal+'|'+x.name)===comparePlayer2; })[0] : null;
   var h = '<div class="veilfull"><div class="sheet">';
-  h += '<div class="sheethead"><div><div class="shtitle">Comparar jugadoras</div><div class="shsub">'+esc(currentSeason?currentSeason.label:'')+'</div></div>'+closeBtn+'</div>';
+  h += '<div class="sheethead"><div><div class="shtitle">Comparar jugadoras</div><div class="shsub">'+esc(currentSeason?currentSeason.label:'')+'</div></div><div style="display:flex;gap:8px;align-items:center">'+filterBtn+closeBtn+'</div></div>';
+  h += filterPill;
   h += '<div class="content">';
   h += '<div class="jlabel" style="padding:14px 20px 6px">Jugadora 1</div>';
   h += '<div class="compsrow">'+list.map(function(p){
