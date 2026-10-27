@@ -526,6 +526,23 @@
   .rivalrow td{ background:var(--surface); color:var(--text-dim); font-style:italic; }
   .rivalrow .stickycol{ font-style:normal; color:var(--text); font-weight:800; }
 
+  /* ---- tabla "Estadísticas por partido" de la jugadora (ficha de jugadora):
+     mismo componente .tablewrap/.stattable de arriba, pero la celda pegajosa
+     es la del rival (con jornada/torneo/amistoso y resultado) en vez de la
+     jugadora ---- */
+  .rivalcell{ display:flex; flex-direction:column; gap:1px; }
+  .rivalcell .rv-top{ display:flex; align-items:center; gap:5px; }
+  .rivalcell .rv-jor{ font-family:'Oswald',sans-serif; font-weight:700; font-size:11px; color:var(--accent); flex-shrink:0; }
+  .rivalcell .rv-badge{ width:16px; height:16px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-family:'Oswald',sans-serif; font-weight:700; font-size:9.5px; flex-shrink:0; border:1.3px solid currentColor; }
+  .rivalcell .rv-badge.torneo{ color:var(--create); }
+  .rivalcell .rv-badge.amistoso{ color:var(--reb); cursor:pointer; }
+  .rivalcell .rv-name{ font-weight:700; font-size:12.5px; white-space:nowrap; max-width:108px; overflow:hidden; text-overflow:ellipsis; }
+  .rivalcell .rv-comp{ font-size:9.5px; color:var(--create); font-weight:700; white-space:nowrap; max-width:120px; overflow:hidden; text-overflow:ellipsis; }
+  .rivalcell .rv-date{ font-size:10px; color:var(--text-dim); font-weight:600; }
+  .rivalcell .rv-res{ font-size:9.5px; font-weight:800; letter-spacing:0.02em; }
+  .rivalcell .rv-res.win{ color:var(--good); }
+  .rivalcell .rv-res.loss{ color:var(--bad); }
+
   .rivalnote{ display:flex; align-items:flex-start; gap:10px; background:var(--surface); border:1px dashed var(--border); border-radius:12px; padding:12px 14px; margin-top:4px; }
   .rivalnote .ic{ color:var(--text-dim); flex-shrink:0; margin-top:1px; }
   .rivalnote .tx{ font-size:12px; color:var(--text-dim); font-weight:600; line-height:1.5; }
@@ -2964,6 +2981,7 @@ function stepJornada(delta){
   g.jornada = Math.max(1, (g.jornada||1)+delta);
   saveState(); render();
 }
+function setTorneoName(v){ S.current.torneoName = v; saveState(); }
 function toggleCalled(pid){
   var g=S.current;
   var idx = g.onCourt.indexOf(pid);
@@ -4576,6 +4594,7 @@ function renderSetup(){
          '<div class="stepval">'+(g.jornada||1)+'</div>'+
          '<button class="stepbtn" onclick="stepJornada(1)">'+icon('plus',14)+'</button>'+
        '</div></div>') : '')+
+       (g.kind==='torneo' ? ('<div class="rowcard"><div class="k">Torneo</div><input type="text" placeholder="Nombre del torneo" value="'+esc(g.torneoName||'')+'" oninput="setTorneoName(this.value)"></div>') : '')+
        '</div>';
 
   h += '<div class="section"><div class="label">Formato de partido</div>'+
@@ -5802,7 +5821,7 @@ function openEditMatch(id){
   if(!isAdmin()) return;
   var g = getGameById(id);
   if(!g) return;
-  editMatchDraft = { id:id, rivalName:g.rivalName||'', kind:g.kind||'liga', jornada:g.jornada||1, matchDate:matchDateStr(g), _origJornada: g.jornada };
+  editMatchDraft = { id:id, rivalName:g.rivalName||'', kind:g.kind||'liga', jornada:g.jornada||1, torneoName:g.torneoName||'', matchDate:matchDateStr(g), _origJornada: g.jornada };
   render();
 }
 function closeEditMatch(){ editMatchDraft = null; render(); }
@@ -5811,6 +5830,7 @@ function edField(field, value){
   if(field==='kind'){ editMatchDraft.kind = value; if(value==='amistoso') editMatchDraft.jornada = null; else if(!editMatchDraft.jornada) editMatchDraft.jornada = 1; render(); }
   else if(field==='jornadaStep'){ editMatchDraft.jornada = Math.max(1, (editMatchDraft.jornada||1)+value); render(); }
   else if(field==='rivalName'){ editMatchDraft.rivalName = value; } // typed via oninput -- no render() here, or the input loses focus/closes the mobile keyboard on every keystroke
+  else if(field==='torneoName'){ editMatchDraft.torneoName = value; } // idem: sin render() por tecla
   else if(field==='matchDate'){ if(value) editMatchDraft.matchDate = value; render(); }
 }
 async function saveEditMatch(){
@@ -5821,6 +5841,7 @@ async function saveEditMatch(){
   g.rivalName = editMatchDraft.rivalName;
   g.kind = editMatchDraft.kind;
   g.jornada = editMatchDraft.kind==='amistoso' ? null : (editMatchDraft.jornada||1);
+  g.torneoName = editMatchDraft.kind==='torneo' ? (editMatchDraft.torneoName||'') : '';
   g.matchDate = editMatchDraft.matchDate;
   // Si se cambia el partido a Torneo/Amistoso, o se cambia su jornada, ya no
   // corresponde necesariamente a la fila de calendario con la que se creó --
@@ -5852,6 +5873,7 @@ function editMatchOverlay(){
         '<div class="stepval">'+(d.jornada||1)+'</div>'+
         '<button class="stepbtn" onclick="edField(\'jornadaStep\',1)">'+icon('plus',14)+'</button>'+
       '</div></div>') : '')+
+      (d.kind==='torneo' ? ('<div class="rowcard"><div class="k">Torneo</div><input type="text" placeholder="Nombre del torneo" value="'+esc(d.torneoName||'')+'" oninput="edField(\'torneoName\',this.value)"></div>') : '')+
     '</div>'+
     '<button class="fullbtn" onclick="saveEditMatch()">Guardar cambios</button>'+
     '<div class="cancel" onclick="closeEditMatch()">Cancelar</div>'+
@@ -8942,27 +8964,92 @@ function renderRadarSVG(axes, meVals, avgVals, warnKeys){
     '<svg viewBox="0 0 300 300" width="100%" height="100%" style="display:block">'+
     warnWedges+gridPolys+axisLines+avgPoly+mePoly+meDots+labels+'</svg></div>';
 }
-function renderPlayerStatLine(me){
-  function row(l,label){ return '<div class="teamstatrow"><div class="tsval">'+l+'</div><div class="tslabel">'+label+'</div><div class="tsval right">—</div></div>'; }
-  function pctRow(l,label){ return '<div class="teamstatrow pct"><div class="tsval">'+l+'</div><div class="tslabel">'+label+'</div><div class="tsval right">—</div></div>'; }
-  var h = '<div class="teamstat-card">';
-  h += '<div class="tsheadrow"><div class="tsteam">'+me.gp+' partidos</div><div class="tscaption">Totales de la jugadora</div><div class="tsteam right"></div></div>';
-  h += row(me.pts,'Puntos');
-  h += row((me.fg2m+me.fg3m)+'/'+(me.fg2a+me.fg3a), 'Tiros de campo');
-  h += pctRow(me.fgpct, '% de tiros de campo');
-  h += row(me.fg2m+'/'+me.fg2a, 'Tiros de 2');
-  h += pctRow(me.fg2pct, '% de 2');
-  h += row(me.fg3m+'/'+me.fg3a, 'Triples');
-  h += pctRow(me.fg3pct, '% de triples');
-  h += row(me.ftm+'/'+me.fta, 'Tiros libres');
-  h += pctRow(me.ftpct, '% de tiros libres');
-  h += '<div class="teamstat-divider"></div>';
-  h += row(me.reb, 'Rebotes totales');
-  h += row(me.rebO, 'Rebotes ofensivos');
-  h += row(me.rebD, 'Rebotes defensivos');
-  h += '<div class="teamstat-divider"></div>';
-  h += row(me.ast,'Asistencias'); h += row(me.stl,'Balones robados'); h += row(me.blk,'Bloqueos'); h += row(me.to,'Balones perdidos'); h += row(me.foulC,'Faltas personales'); h += row(me.eff,'Eficiencia (EFF)');
-  h += '</div>';
+// Convierte "yyyy-mm-dd" (matchDateStr) a una clave ordenable -- ya viene en
+// ese orden, pero se aísla en una función por claridad junto a la de abajo.
+function gameDateKey(g){ return matchDateStr(g); }
+/* ---- "Estadísticas por partido" de la ficha de jugadora ----
+   Sustituye a los antiguos "Totales de la jugadora": una fila por partido
+   (dentro del filtro de competición ya aplicado en `games`), con una fila de
+   Total al final. Reutiliza el mismo componente .tablewrap/.stattable que
+   "Jugadores" del box score, pero la celda pegajosa es la del RIVAL (con su
+   insignia de jornada/torneo/amistoso y el resultado) en vez de la jugadora. */
+function renderPlayerGameLogTable(games, dorsal, name, me, compFilter){
+  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
+  function fg(m,a){ return m+'-'+a; }
+  // La jornada manda sobre la fecha (puede haber partidos aplazados/adelantados
+  // que se jueguen fuera de orden) cuando el filtro es Liga o Torneo -- ambos
+  // tienen jornada. Los amistosos no la tienen (como en "Nuevo partido", donde
+  // ese paso se oculta para Amistoso), y en "Todos" las jornadas de Liga y
+  // Torneo no son comparables entre sí -- en esos dos casos se ordena por fecha.
+  var usesJornada = (compFilter==='liga' || compFilter==='torneo');
+  var rows = games.map(function(g){
+    var p = (g.roster||[]).filter(function(r){ return r.dorsal===dorsal && r.name===name; })[0];
+    if(!p) return null;
+    var st = playerStats(g, p.id, null);
+    var min = minutesFor(g, p.id).total;
+    return { g:g, st:st, min:min, eff:eff(st) };
+  }).filter(Boolean);
+  rows.sort(function(a,b){
+    if(usesJornada) return (b.g.jornada||0)-(a.g.jornada||0);
+    return gameDateKey(b.g).localeCompare(gameDateKey(a.g));
+  });
+  var h = '<div class="label" style="margin:18px 2px 10px">Estadísticas por partido</div>';
+  h += '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Rival</th>';
+  cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
+  h += '</tr></thead><tbody>';
+  if(!rows.length){
+    h += '<tr><td colspan="'+(cols.length+1)+'" style="text-align:center;color:var(--text-dim);padding:20px">No hay partidos con este filtro.</td></tr>';
+  } else {
+    rows.forEach(function(r){
+      var g = r.g, st = r.st, pm = st.plusMinus;
+      var us = teamScore(g), them = rivalScore(g);
+      var res = us>them ? 'win' : (us<them ? 'loss' : '');
+      var resLabel = us>them ? 'G' : (us<them ? 'P' : 'E');
+      var kind = g.kind||'liga';
+      var badge, compLine = '';
+      if(kind==='torneo'){
+        badge = '<span class="rv-badge torneo">T</span>';
+        compLine = '<span class="rv-comp">'+esc(g.torneoName||'Torneo')+' &middot; J'+(g.jornada||1)+'</span>';
+      } else if(kind==='amistoso'){
+        badge = '<span class="rv-badge amistoso" onclick="event.stopPropagation();showToast(\'Amistoso\')">A</span>';
+      } else {
+        badge = '<span class="rv-jor">J'+(g.jornada||1)+'</span>';
+      }
+      h += '<tr><td class="stickycol"><div class="rivalcell"><div class="rv-top">'+badge+'<span class="rv-name">'+esc(g.rivalName||'Rival')+'</span></div>'+
+        compLine+
+        '<span class="rv-date">'+matchDateObj(g).toLocaleDateString('es-ES')+'</span>'+
+        '<span class="rv-res '+res+'">'+resLabel+' '+us+'&ndash;'+them+'</span></div></td>'+
+        '<td class="numcell">'+r.min+'\'</td>'+
+        '<td class="numcell">'+fg(st.fg2m+st.fg3m, st.fg2a+st.fg3a)+'</td>'+
+        '<td class="numcell">'+fg(st.fg2m,st.fg2a)+'</td>'+
+        '<td class="numcell">'+fg(st.fg3m,st.fg3a)+'</td>'+
+        '<td class="numcell">'+fg(st.ftm,st.fta)+'</td>'+
+        '<td class="numcell">'+st.rebO+'</td>'+
+        '<td class="numcell">'+st.rebD+'</td>'+
+        '<td class="numcell">'+(st.rebO+st.rebD)+'</td>'+
+        '<td class="numcell">'+st.ast+'</td>'+
+        '<td class="numcell">'+st.stl+'</td>'+
+        '<td class="numcell">'+st.blk+'</td>'+
+        '<td class="numcell">'+st.to+'</td>'+
+        '<td class="numcell">'+st.foulC+'</td>'+
+        '<td class="numcell">'+r.eff+'</td>'+
+        '<td class="numcell pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td>'+
+        '<td class="ptscell">'+st.pts+'</td>'+
+        '</tr>';
+    });
+    var pm = me.plusMinus;
+    h += '<tr class="totalrow"><td class="stickycol">Total</td>'+
+      '<td>'+me.min+'\'</td>'+
+      '<td>'+fg(me.fg2m+me.fg3m, me.fg2a+me.fg3a)+'</td>'+
+      '<td>'+fg(me.fg2m,me.fg2a)+'</td>'+
+      '<td>'+fg(me.fg3m,me.fg3a)+'</td>'+
+      '<td>'+fg(me.ftm,me.fta)+'</td>'+
+      '<td>'+me.rebO+'</td><td>'+me.rebD+'</td><td>'+me.reb+'</td>'+
+      '<td>'+me.ast+'</td><td>'+me.stl+'</td><td>'+me.blk+'</td><td>'+me.to+'</td><td>'+me.foulC+'</td>'+
+      '<td>'+me.eff+'</td><td class="pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td><td>'+me.pts+'</td>'+
+      '</tr>';
+  }
+  h += '</tbody></table></div>';
   return h;
 }
 function renderPlayerRadarPopup(){
@@ -9014,7 +9101,7 @@ function renderPlayerRadarPopup(){
     renderPlayerTrendCard(games, me.dorsal, me.name)
   ]);
   h += renderPlayerOriginCards(games, me.dorsal, me.name);
-  h += renderPlayerStatLine(me);
+  h += renderPlayerGameLogTable(games, me.dorsal, me.name, me, playerRadarFilter);
   h += '</div></div></div>';
   return h;
 }
