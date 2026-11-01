@@ -2902,9 +2902,9 @@ function periodDividerHtml(kind, a, b, scoreA, g, isFullGame){
     return '<div class="pbd1"><div class="pbd1-row pbd1-end">FIN '+PL+' '+a+' <span class="sc">'+scoreA+'</span>'+((isFullGame && g.finished) ? ' &middot; FIN DEL PARTIDO' : '')+'</div></div>';
   }
   return '<div class="pbd1">'+
-    '<div class="pbd1-row pbd1-end">FIN '+PL+' '+a+' <span class="sc">'+scoreA+'</span></div>'+
-    '<div class="pbd1-split"></div>'+
     '<div class="pbd1-row pbd1-start">EMPIEZA '+PL+' '+b+'</div>'+
+    '<div class="pbd1-split"></div>'+
+    '<div class="pbd1-row pbd1-end">FIN '+PL+' '+a+' <span class="sc">'+scoreA+'</span></div>'+
     '</div>';
 }
 
