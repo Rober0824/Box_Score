@@ -410,6 +410,24 @@
 
   .sortrow{ display:flex; align-items:center; justify-content:space-between; padding:14px 20px 0; flex-shrink:0; }
   .sortlabel{ font-size:10.5px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); }
+  .sortright{ display:flex; align-items:center; gap:8px; }
+  /* ---- botón de vídeo del partido, junto al selector de Vista ---- */
+  .videobtn{ width:38px; height:38px; border-radius:999px; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .videobtn:active{ opacity:0.85; }
+  .videoveil{ position:fixed; inset:0; max-width:460px; margin:0 auto; background:#000; z-index:30; display:flex; flex-direction:column; justify-content:center; }
+  .videoclose{ position:absolute; top:14px; right:14px; width:38px; height:38px; border-radius:999px; background:oklch(20% 0.016 55 / 70%); border:1px solid var(--border); color:var(--text); display:flex; align-items:center; justify-content:center; z-index:1; }
+  .videoframe{ position:relative; width:100%; aspect-ratio:16/9; }
+  .videoframe iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .vidhint{ font-size:10.5px; color:var(--text-dim); font-weight:600; line-height:1.5; padding:2px 2px 0; }
+  .vidhint.ok{ color:var(--good); font-weight:700; }
+  .vidhint.warn{ color:var(--bad); font-weight:700; }
+
+  /* ---- bandas de inicio/fin de periodo en Jugadas (Diseño 1) ---- */
+  .pbd1{ margin:2px 0; border-radius:12px; border:1.5px solid var(--accent); background:oklch(72% 0.18 45 / 10%); overflow:hidden; }
+  .pbd1-row{ display:flex; align-items:center; justify-content:center; gap:8px; padding:9px 10px; font-family:'Oswald',sans-serif; font-weight:700; font-size:12.5px; letter-spacing:0.03em; color:var(--accent); text-align:center; }
+  .pbd1-row .sc{ background:var(--accent); color:var(--accent-ink); border-radius:999px; padding:2px 9px; font-size:11.5px; }
+  .pbd1-split{ height:1px; background:var(--accent); opacity:0.35; }
+  .pbd1-start{ background:var(--accent); color:var(--accent-ink); }
 
   .periodsection{ padding:14px 20px 0; flex-shrink:0; }
   .periodchips{ display:grid; gap:6px; }
@@ -1776,6 +1794,10 @@ function newGame(){
     matchDate: todayISO(),
     teamName: clubSettings.team_name || 'Distrito Olímpico Arranz',
     rivalName: '',
+    // Enlace al vídeo del partido (YouTube), opcional -- se añade normalmente
+    // a posteriori desde "Editar partido" una vez grabado y subido, no al
+    // crear el partido. Ver youtubeIdFromUrl/openVideoOverlay.
+    videoUrl: '',
     kind: 'liga',
     jornada: null,
     // Enlace opcional a una fila del calendario (fase_id de clubSettings.fbm_fases
@@ -2750,29 +2772,61 @@ function renderPlayByPlay(g, opts){
   // pensado originalmente para la pantalla "en directo".
   var headStyle = opts.flowing ? ' style="padding:0 0 8px"' : '';
   var listStyle = opts.flowing ? ' style="padding:0;overflow:visible;flex:none"' : '';
-  var events = g.events.slice().reverse();
+  // opts.periods: mismo filtro de periodo que ya usan Equipo/Jugadoras (ver
+  // renderBox) -- antes esta vista lo ignoraba por completo y siempre
+  // mostraba el partido entero; ahora limita también qué jugadas se ven aquí.
+  var periods = (opts.periods && opts.periods.length) ? opts.periods : null;
+  var allEvents = periods ? g.events.filter(function(e){ return periods.indexOf(e.period)!==-1; }) : g.events.slice();
   var rscores = runningScoreMap(g);
   // Insertar jugadas/quintetos rivales en un punto concreto solo tiene sentido
   // en un partido YA FINALIZADO y con permiso de escritura (misma condición
   // que editar/borrar jugadas, ver canEditPlays) -- en la pantalla "en
   // directo" (g no finalizado) nunca se muestra, se sigue anotando al final.
-  var showInsert = !readOnly && !!g.finished;
+  // Con un filtro de periodo puesto se oculta también: el índice al que
+  // habría que insertar (ascIndex, sobre el g.events SIN filtrar) queda
+  // ambiguo en cuanto hay jugadas ocultas de por medio, así que para
+  // insertar hay que quitar antes el filtro.
+  var showInsert = !readOnly && !!g.finished && !periods;
   var h = '<div class="playhead"'+headStyle+'><div class="label" style="margin-bottom:0">Jugadas del partido</div>'+
-    '<div class="label" style="margin-bottom:0;color:var(--text-dim)">'+events.length+' jugada'+(events.length===1?'':'s')+'</div></div>';
+    '<div class="label" style="margin-bottom:0;color:var(--text-dim)">'+allEvents.length+' jugada'+(allEvents.length===1?'':'s')+'</div></div>';
   h += '<div class="playlist"'+listStyle+'>';
-  if(!events.length){
-    h += '<div class="emptyplays">Sin jugadas registradas todavía</div>';
+  if(!allEvents.length){
+    if(showInsert) h += pbpInsertGapHtml(g, 0);
+    h += '<div class="emptyplays">'+(periods ? 'Ninguna jugada en los periodos seleccionados' : 'Sin jugadas registradas todavía')+'</div>';
+    h += '</div>';
+    return h;
   }
-  var N = events.length;
-  for(var vi=0; vi<=N; vi++){
-    if(showInsert){
-      h += pbpInsertGapHtml(g, N-vi);
-    }
-    if(vi>=N) break;
-    var e = events[vi];
+
+  // Igual que antes, la lista se construye en orden ASCENDENTE (jugadas +,
+  // si hay más de un periodo, las bandas de inicio/fin de cada uno) y se
+  // voltea entera al final -- más reciente primero, como siempre.
+  var items = [];
+  if(g.periodsCount>1){
+    var curP = null;
+    allEvents.forEach(function(e){
+      if(curP===null){ items.push({div:true, kind:'start', b:e.period}); }
+      else if(e.period!==curP){ items.push({div:true, kind:'boundary', a:curP, b:e.period, scoreA: periodsAggregateScore(g, periods, curP)}); }
+      curP = e.period;
+      items.push({ev:e});
+    });
+    items.push({div:true, kind:'end', a:curP, scoreA: periodsAggregateScore(g, periods, curP)});
+  } else {
+    allEvents.forEach(function(e){ items.push({ev:e}); });
+  }
+  items.reverse();
+
+  items.forEach(function(it){
+    if(it.div){ h += periodDividerHtml(it.kind, it.a, it.b, it.scoreA, g, !periods); return; }
+    var e = it.ev;
+    // El hueco de "insertar" va siempre INMEDIATAMENTE ANTES de la jugada en
+    // pantalla -- su ascIndex es la posición de esta jugada en el g.events
+    // real (sin filtrar) + 1 (ver pbpInsertGapHtml/insertEventAt). Como
+    // showInsert solo es true sin filtro, allEvents===g.events aquí, así que
+    // el índice encontrado con indexOf siempre es el correcto.
+    if(showInsert){ h += pbpInsertGapHtml(g, g.events.indexOf(e)+1); }
     if(e.type==='lineup'){
       h += lineupRowHtml(e, g);
-      continue;
+      return;
     }
     var d = playRowData(e, g);
     h += '<div class="playrow'+(e.side==='rival'?' rival':'')+'">'+
@@ -2811,9 +2865,47 @@ function renderPlayByPlay(g, opts){
         '<button class="yes" onclick="pbpConfirmDelete(\''+e.id+'\',\''+g.id+'\')">Borrar</button></div>';
     }
     h += '</div>';
-  }
+  });
+  if(showInsert) h += pbpInsertGapHtml(g, 0);
   h += '</div>';
   return h;
+}
+// Suma el parcial (periodScores, NO acumulado) de los periodos 1..uptoPeriod
+// que estén dentro del filtro "periods" (null/vacío = partido entero) -- es
+// el marcador que se muestra en las bandas de fin/inicio de periodo del
+// play-by-play (periodDividerHtml). Con filtro activo, deliberadamente solo
+// suma los periodos elegidos (puede no coincidir con el marcador real del
+// partido si se ha saltado algún periodo -- ver periodDividerHtml).
+function periodsAggregateScore(g, periods, uptoPeriod){
+  var ps = periodScores(g);
+  var t=0, r=0;
+  for(var p=1;p<=uptoPeriod;p++){
+    if(periods && periods.indexOf(p)===-1) continue;
+    var s = ps[p]||{team:0,rival:0};
+    t += s.team; r += s.rival;
+  }
+  return t+'-'+r;
+}
+// Banda de inicio/fin de periodo en el play-by-play (Diseño 1, el que
+// eligió Rober): kind 'start' antes de la primera jugada mostrada, 'end'
+// tras la última, 'boundary' entre dos periodos consecutivos. isFullGame
+// (sin filtro de periodo activo) es lo único que decide si la banda final
+// puede decir "FIN DEL PARTIDO" -- con un filtro puesto, el marcador que se
+// ve ya no es el del partido completo, así que ese remate se omite para no
+// confundir.
+function periodDividerHtml(kind, a, b, scoreA, g, isFullGame){
+  var PL = (g.periodLabel||'Periodo').toUpperCase();
+  if(kind==='start'){
+    return '<div class="pbd1"><div class="pbd1-row pbd1-start">'+icon('flag',13)+' EMPIEZA '+PL+' '+b+'</div></div>';
+  }
+  if(kind==='end'){
+    return '<div class="pbd1"><div class="pbd1-row pbd1-end">FIN '+PL+' '+a+' <span class="sc">'+scoreA+'</span>'+((isFullGame && g.finished) ? ' &middot; FIN DEL PARTIDO' : '')+'</div></div>';
+  }
+  return '<div class="pbd1">'+
+    '<div class="pbd1-row pbd1-end">FIN '+PL+' '+a+' <span class="sc">'+scoreA+'</span></div>'+
+    '<div class="pbd1-split"></div>'+
+    '<div class="pbd1-row pbd1-start">EMPIEZA '+PL+' '+b+'</div>'+
+    '</div>';
 }
 
 /* ---------- routing ---------- */
@@ -4388,7 +4480,8 @@ function icon(name, size){
     pause:'<path d="M7 4.5h3.5v15H7zM13.5 4.5H17v15h-3.5z" fill="currentColor"/>',
     resetClock:'<path d="M4 4v6h6M3.5 13a8.5 8.5 0 108-9.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
     stats:'<path d="M4 20V10M12 20V4M20 20v-7" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>',
-    alert:'<path d="M12 4L3 20h18z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 10v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="17" r="0.9" fill="currentColor"/>'
+    alert:'<path d="M12 4L3 20h18z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 10v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="17" r="0.9" fill="currentColor"/>',
+    flag:'<path d="M5 3v18M5 4h12l-3 4 3 4H5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none">'+(icons[name]||'')+'</svg>';
 }
@@ -4549,6 +4642,7 @@ function render(){
   html += manualClasifOverlay();
   html += bracketSetupOverlay();
   html += bracketMatchOverlay();
+  html += videoOverlayHtml();
   html += toastHtml();
   html += foulBannerHtml();
   app.innerHTML = html;
@@ -5025,10 +5119,13 @@ function renderBox(){
   if(g.finished){
     chrome += periodScoreChipsHtml(g);
   }
-  chrome += '<div class="sortrow"><div class="sortlabel">Vista</div><div class="seg2" style="width:auto">'+
+  chrome += '<div class="sortrow"><div class="sortlabel">Vista</div><div class="sortright">'+
+       '<div class="seg2" style="width:auto">'+
        '<button class="opt'+(boxViewMode==='team'?' on':'')+'" onclick="setBoxView(\'team\')">Equipo</button>'+
        '<button class="opt'+(boxViewMode==='players'?' on':'')+'" onclick="setBoxView(\'players\')">Jugadores</button>'+
        '<button class="opt'+(boxViewMode==='plays'?' on':'')+'" onclick="setBoxView(\'plays\')">Jugadas</button>'+
+       '</div>'+
+       (g.videoUrl ? '<button class="videobtn" title="Ver vídeo del partido" onclick="openVideoOverlay(\''+g.id+'\')">'+icon('play',15)+'</button>' : '')+
        '</div></div>';
   chrome += '</div>'; // .boxstickystack
 
@@ -5038,7 +5135,7 @@ function renderBox(){
     // (uno en directo ya se edita in-situ en la pantalla "en directo") y solo si se tiene
     // permiso de escritura sobre la temporada -- ver pbpPickPlayer/editingPastGameId.
     var canEditPlays = !!(g.finished && canWriteCurrentSeason());
-    h = '<div class="boxcontent">'+chrome+'<div class="boxinner">'+renderPlayByPlay(g, {readOnly: !canEditPlays, flowing:true})+'</div></div>';
+    h = '<div class="boxcontent">'+chrome+'<div class="boxinner">'+renderPlayByPlay(g, {readOnly: !canEditPlays, flowing:true, periods: boxPeriods})+'</div></div>';
     h += '<div class="actions"><button class="abtn" onclick="exportPlaysPDF(\''+g.id+'\')">Exportar PDF</button><button class="abtn" onclick="sharePlaysByPlay(\''+g.id+'\')">Compartir</button></div>';
     return h;
   }
@@ -5816,12 +5913,35 @@ function matchRowHtml(g, isLive){
     (canManage?'<button class="rmbtn" style="margin-right:12px;flex-shrink:0" onclick="event.stopPropagation();confirmDeleteMatch(\''+g.id+'\')">'+icon('trash',15)+'</button>':'')+
     '</div>';
 }
+// ---- Vídeo del partido (enlace guardado en g.videoUrl, ver "Editar
+// partido") -- botón "▶" junto a Vista en el box score de un partido con
+// vídeo, abre el vídeo a pantalla completa sin saltar a ninguna jugada
+// (eso es otra cosa, para más adelante). Reconoce las formas habituales de
+// enlace de YouTube (watch?v=, enlaces cortos youtu.be, /live/, /embed/). ----
+function youtubeIdFromUrl(url){
+  if(!url) return '';
+  var m = (''+url).trim().match(/(?:youtube\.com\/(?:watch\?v=|live\/|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  return m ? m[1] : '';
+}
+var videoOverlayGameId = null;
+function openVideoOverlay(gid){ videoOverlayGameId = gid; render(); }
+function closeVideoOverlay(){ videoOverlayGameId = null; render(); }
+function videoOverlayHtml(){
+  if(!videoOverlayGameId) return '';
+  var g = getGameById(videoOverlayGameId);
+  var vid = g ? youtubeIdFromUrl(g.videoUrl) : '';
+  if(!g || !vid) return '';
+  return '<div class="videoveil">'+
+    '<button class="videoclose" onclick="closeVideoOverlay()">'+icon('x',18)+'</button>'+
+    '<div class="videoframe"><iframe src="https://www.youtube.com/embed/'+vid+'?autoplay=1&playsinline=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>'+
+    '</div>';
+}
 var editMatchDraft = null;
 function openEditMatch(id){
   if(!isAdmin()) return;
   var g = getGameById(id);
   if(!g) return;
-  editMatchDraft = { id:id, rivalName:g.rivalName||'', kind:g.kind||'liga', jornada:g.jornada||1, torneoName:g.torneoName||'', matchDate:matchDateStr(g), _origJornada: g.jornada };
+  editMatchDraft = { id:id, rivalName:g.rivalName||'', kind:g.kind||'liga', jornada:g.jornada||1, torneoName:g.torneoName||'', matchDate:matchDateStr(g), videoUrl:g.videoUrl||'', _origJornada: g.jornada };
   render();
 }
 function closeEditMatch(){ editMatchDraft = null; render(); }
@@ -5832,6 +5952,8 @@ function edField(field, value){
   else if(field==='rivalName'){ editMatchDraft.rivalName = value; } // typed via oninput -- no render() here, or the input loses focus/closes the mobile keyboard on every keystroke
   else if(field==='torneoName'){ editMatchDraft.torneoName = value; } // idem: sin render() por tecla
   else if(field==='matchDate'){ if(value) editMatchDraft.matchDate = value; render(); }
+  else if(field==='videoUrl'){ editMatchDraft.videoUrl = value; } // idem: sin render() por tecla (ver nota en rivalName)
+  else if(field==='videoUrlBlur'){ render(); } // al salir del campo (onblur) sí se repinta, para mostrar si el enlace se reconoce -- aquí no hay teclado que cerrar de golpe
 }
 async function saveEditMatch(){
   if(!editMatchDraft) return;
@@ -5843,6 +5965,7 @@ async function saveEditMatch(){
   g.jornada = editMatchDraft.kind==='amistoso' ? null : (editMatchDraft.jornada||1);
   g.torneoName = editMatchDraft.kind==='torneo' ? (editMatchDraft.torneoName||'') : '';
   g.matchDate = editMatchDraft.matchDate;
+  g.videoUrl = (editMatchDraft.videoUrl||'').trim();
   // Si se cambia el partido a Torneo/Amistoso, o se cambia su jornada, ya no
   // corresponde necesariamente a la fila de calendario con la que se creó --
   // se suelta el enlace para no dejarlo apuntando a un partido equivocado.
@@ -5874,6 +5997,11 @@ function editMatchOverlay(){
         '<button class="stepbtn" onclick="edField(\'jornadaStep\',1)">'+icon('plus',14)+'</button>'+
       '</div></div>') : '')+
       (d.kind==='torneo' ? ('<div class="rowcard"><div class="k">Torneo</div><input type="text" placeholder="Nombre del torneo" value="'+esc(d.torneoName||'')+'" oninput="edField(\'torneoName\',this.value)"></div>') : '')+
+    '</div>'+
+    '<div class="section"><div class="label">Vídeo</div>'+
+      '<div class="rowcard"><div class="k">Enlace</div><input type="text" placeholder="Enlace de YouTube" value="'+esc(d.videoUrl||'')+'" oninput="edField(\'videoUrl\',this.value)" onblur="edField(\'videoUrlBlur\',this.value)"></div>'+
+      (d.videoUrl ? ('<div class="vidhint '+(youtubeIdFromUrl(d.videoUrl)?'ok':'warn')+'">'+(youtubeIdFromUrl(d.videoUrl)?'Enlace de vídeo reconocido':'No se reconoce como enlace de YouTube')+'</div>') :
+        '<div class="vidhint">Pega aquí el enlace de YouTube del partido (puede ser privado u oculto; recuerda activar "Permitir inserciones" en YouTube Studio para ese vídeo). Déjalo en blanco si todavía no lo tienes.</div>')+
     '</div>'+
     '<button class="fullbtn" onclick="saveEditMatch()">Guardar cambios</button>'+
     '<div class="cancel" onclick="closeEditMatch()">Cancelar</div>'+
