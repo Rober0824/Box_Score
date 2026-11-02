@@ -2473,9 +2473,10 @@ function startSyncSendTicker(){
 function renderSyncedVideoScreen(g){
   var vid = youtubeIdFromUrl(g.videoUrl);
   var h = '';
-  h += topbarHtml(g, {showBox:true});
+  h += topbarHtml(g, {showBox:true, hideFinish:true});
   h += tabsHtml(g);
   h += '<div class="content" style="padding-top:14px">';
+  h += '<div class="helpbox">Este dispositivo solo está viendo el vídeo. Para terminar el partido, hazlo desde el dispositivo donde se anota.</div>';
   if(!vid){
     h += '<div class="helpbox">Todavía no hay un enlace de vídeo reconocido para este partido. Añádelo desde "Editar partido" (lápiz, en Partidos) y vuelve aquí.</div>';
   } else {
@@ -4552,6 +4553,18 @@ function finishGame(){
   // en S.games.
   if(editingPastGameId) return;
   var g = S.current;
+  // Guarda de seguridad: en "Ordenador + móvil sincronizados" el dispositivo con rol
+  // 'video' solo ve el partido -- su copia en memoria de g NUNCA recibe las jugadas
+  // que se anotan en el otro dispositivo (solo recibe el segundo del vídeo por el
+  // canal en tiempo real). Si este dispositivo finalizara el partido, subiría esa
+  // copia incompleta a la nube y borraría las jugadas ya guardadas por el otro
+  // dispositivo. El botón "Finalizar" ya está oculto en esa pantalla (ver
+  // renderSyncedVideoScreen); esto es el cierre de seguridad por si llega aquí de
+  // otra forma.
+  if(g && g.scoreMode==='synced' && syncDeviceRole(g.id)==='video'){
+    showToast('Este dispositivo solo ve el partido. Finaliza desde el dispositivo donde se anota.');
+    return;
+  }
   g.finished = true;
   g.finishedAt = Date.now();
   S.games.unshift(g);
@@ -4578,7 +4591,28 @@ function startNewGame(overrides){
   }
   begin();
 }
-function resumeCurrent(){ go(S.current.started ? 'live' : 'setup'); }
+// Antes de reanudar un partido "empezado" (g.started=true) hay que comprobar que
+// el quinteto inicial se confirmó REALMENTE -- g.started se marca en cuanto se pulsa
+// "Ir al quinteto en pista" (startGameFromSetup), antes de elegir a nadie. Si el
+// usuario se interrumpe justo ahí (cambia de pantalla, de dispositivo, recarga...) y
+// luego reanuda desde este botón, no debe caer directo en "en directo" con el
+// quinteto vacío -- debe volver a la pantalla de elegir quinteto. La señal fiable de
+// que sí se confirmó es el evento {type:'lineup', subKind:'start'} que empuja
+// confirmLineup() (no basta con onCourt.length>0: entre periodos puede estar vacío
+// legítimamente a mitad de una sustitución).
+function lineupStartConfirmed(g){
+  if(!g || !g.events) return false;
+  for(var i=0;i<g.events.length;i++){
+    var e = g.events[i];
+    if(e && e.type==='lineup' && e.subKind==='start') return true;
+  }
+  return false;
+}
+function resumeCurrent(){
+  var g = S.current;
+  if(g.started && !lineupStartConfirmed(g)){ go('lineup', {mode:'start'}); return; }
+  go(g.started ? 'live' : 'setup');
+}
 function maybeOfferResume(){
   if(resumePromptShown) return;
   resumePromptShown = true;
