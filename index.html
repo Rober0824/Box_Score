@@ -2579,6 +2579,10 @@ var syncVideoPlayer = null, syncVideoPanelEl = null, syncVideoLoading = false, s
 function destroySyncedVideoPlayer(){
   stopSyncSendTicker();
   if(syncVideoPlayer){ try{ syncVideoPlayer.destroy(); }catch(e){} syncVideoPlayer = null; }
+  // Por si destroy() no limpiara del todo su propio nodo (p.ej. si nunca llegó a
+  // terminar de cargar): syncVideoWrapEl es el contenedor persistente de verdad
+  // (ver mountSyncedVideoPlayer) y debe quedar vacío para el próximo partido.
+  while(syncVideoWrapEl.firstChild){ syncVideoWrapEl.removeChild(syncVideoWrapEl.firstChild); }
   syncVideoPanelEl = null; // el nodo vive dentro de #app -- se destruye solo en el próximo innerHTML=
   syncVideoLoading = false;
 }
@@ -2622,6 +2626,21 @@ function renderSyncedVideoScreen(g){
 // reinicie en cada render -- aquí SÍ hace falta porque, a diferencia del
 // panel flotante, este vive dentro de app.innerHTML, que se reemplaza
 // entero en cada render()).
+//
+// OJO: a YT.Player() NUNCA se le puede pasar directamente el nodo que
+// queremos conservar -- la API de YouTube no mete el iframe DENTRO de ese
+// nodo, lo SUSTITUYE por el iframe (lo saca del árbol y pone el suyo en su
+// lugar). Si le pasáramos syncVideoWrapEl directamente, en cuanto el vídeo
+// terminara de cargar, syncVideoWrapEl se quedaría vacío y fuera del árbol
+// -- y como ahora, con la sincronización de jugadas en tiempo real, cada
+// jugada nueva provoca un render() (ver handleRemoteGameState), eso pasaba
+// casi al momento: el vídeo desaparecía con la primera jugada, el "play" ya
+// no hacía nada (el reproductor real se había perdido) y lo que se
+// reinsertaba una y otra vez en un hueco cada vez más pequeño era ese nodo
+// vacío. Por eso el reproductor se monta en un hijo NUEVO (syncVideoMountEl)
+// dentro de syncVideoWrapEl: el hijo es el que YouTube sustituye por su
+// iframe, pero syncVideoWrapEl (el que de verdad se reinserta en cada
+// render) nunca se toca y se lleva el iframe con él al moverse.
 var syncVideoWrapEl = document.createElement('div');
 function mountSyncedVideoPlayer(g){
   var slot = document.getElementById('syncPlayerMount');
@@ -2633,7 +2652,9 @@ function mountSyncedVideoPlayer(g){
   syncVideoLoading = true;
   ensureYouTubeIframeApi(function(){
     if(!document.getElementById('syncPlayerMount')) { syncVideoLoading = false; return; } // salió de la pantalla mientras cargaba
-    syncVideoPlayer = new YT.Player(syncVideoWrapEl, {
+    var syncVideoMountEl = document.createElement('div');
+    syncVideoWrapEl.appendChild(syncVideoMountEl);
+    syncVideoPlayer = new YT.Player(syncVideoMountEl, {
       videoId: vid,
       playerVars: { rel:0, modestbranding:1 },
       events: { onReady: function(){ syncVideoLoading = false; startSyncSendTicker(); } }
