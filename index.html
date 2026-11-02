@@ -2295,6 +2295,30 @@ function seekLiveVideoTo(t){
   if(!liveVideoPlayer || !liveVideoPlayer.seekTo) return;
   try{ liveVideoPlayer.seekTo(t, true); }catch(e){}
 }
+// Tocar una jugada en el play-by-play para saltar el vídeo a ese momento --
+// hay DOS reproductores distintos según el modo, nunca los dos a la vez:
+// "Ordenador + vídeo" (liveVideoPlayer, panel flotante) o, en "Ordenador +
+// móvil sincronizados", el reproductor del dispositivo que ve el vídeo
+// (syncVideoPlayer, declarado más abajo -- en este punto del archivo var ya
+// existe aunque todavía valga undefined, así que referenciarlo aquí es
+// seguro). En el dispositivo que anota (rol 'score') no hay ningún
+// reproductor que saltar, así que ahí la jugada se queda como aviso fijo,
+// sin botón.
+function canSeekPbpVideo(g){
+  // No basta con que el modo/partido "debería" tener vídeo (liveVideoActive) --
+  // hace falta que el reproductor de ESTE dispositivo esté de verdad montado
+  // para este partido concreto (si no, el botón no tendría nada que saltar).
+  if(g && liveVideoActive(g) && liveVideoGameId===g.id && liveVideoPlayer) return true;
+  if(g && g.scoreMode==='synced' && syncDeviceRole(g.id)==='video' && syncVideoPlayer) return true;
+  return false;
+}
+function seekPbpVideoTo(t){
+  var g = S.current;
+  if(liveVideoActive(g)){ seekLiveVideoTo(t); return; }
+  if(syncVideoPlayer && syncVideoPlayer.seekTo){
+    try{ syncVideoPlayer.seekTo(t, true); if(syncVideoPlayer.playVideo) syncVideoPlayer.playVideo(); }catch(e){}
+  }
+}
 function startLiveVideoTicker(){
   if(liveVideoTicker) return;
   liveVideoTicker = setInterval(function(){
@@ -2417,6 +2441,15 @@ function syncRoleChangeLinkHtml(){
 }
 
 // ---- Canal en tiempo real (Supabase Realtime Broadcast) ----
+// Dos tipos de mensaje viajan por este mismo canal, en direcciones distintas:
+// 'time' (vídeo -> anota, ya existía) es el segundo del vídeo; 'state'
+// (anota -> vídeo, nuevo) es la copia de las jugadas/quinteto/finalizado del
+// partido, y 'request_state' (vídeo -> anota, nuevo) es la petición de un
+// "state" fresco -- la manda el dispositivo de vídeo nada más conectar, por
+// si se ha perdido algo mientras no estaba conectado (ver
+// requestRemoteGameStateWithRetry). Sin esto, el dispositivo que solo ve el
+// vídeo se quedaba para siempre con la foto del partido que tenía al entrar,
+// sin enterarse de jugadas nuevas ni de que se hubiera finalizado.
 var syncChannel = null, syncChannelGameId = null, syncConnState = 'idle'; // idle|connecting|connected|disconnected
 var lastSyncedSecond = null, lastSyncedAt = 0;
 function ensureSyncChannel(gameId){
@@ -2431,9 +2464,24 @@ function ensureSyncChannel(gameId){
     lastSyncedAt = Date.now();
     patchSyncStatusDom();
   });
+  syncChannel.on('broadcast', { event:'state' }, function(msg){
+    handleRemoteGameState(msg && msg.payload);
+  });
+  syncChannel.on('broadcast', { event:'request_state' }, function(){
+    handleStateRequest();
+  });
   syncChannel.subscribe(function(status){
     syncConnState = (status==='SUBSCRIBED') ? 'connected' : (['CLOSED','CHANNEL_ERROR','TIMED_OUT'].indexOf(status)!==-1 ? 'disconnected' : 'connecting');
     patchSyncStatusDom();
+    if(status==='SUBSCRIBED'){
+      var g = S.current;
+      // Nada más conectar, si este dispositivo es el que ve el vídeo, pide una
+      // foto fresca del partido -- cubre tanto la primera vez que entra como
+      // una reconexión tras cortarse la conexión.
+      if(g && g.id===gameId && g.scoreMode==='synced' && syncDeviceRole(gameId)==='video'){
+        requestRemoteGameStateWithRetry();
+      }
+    }
   });
   return syncChannel;
 }
@@ -2442,9 +2490,87 @@ function teardownSyncChannel(){
   syncChannel = null; syncChannelGameId = null; syncConnState = 'idle';
   lastSyncedSecond = null; lastSyncedAt = 0;
   stopSyncSendTicker();
+  stopStateRequestRetry();
 }
 function syncDataIsFresh(){
   return lastSyncedSecond!=null && (Date.now()-lastSyncedAt) < SYNC_STALE_MS;
+}
+
+// ---- 'state': jugadas/quinteto/finalizado, de 'score' a 'video' ----
+// Se manda tal cual tras cada pushEvent() (una jugada, un cambio, un quinteto
+// nuevo) y también al finalizar -- siempre la copia completa, no un "parche",
+// para que el dispositivo de vídeo quede exactamente igual que el que anota
+// aunque se haya perdido algún mensaje anterior por el camino.
+function broadcastGameState(g){
+  if(!g || g.scoreMode!=='synced') return;
+  if(!syncChannel || syncChannelGameId!==g.id || syncConnState!=='connected') return;
+  if(syncDeviceRole(g.id)!=='score') return; // solo lo manda quien anota
+  try{
+    syncChannel.send({ type:'broadcast', event:'state', payload:{
+      gameId: g.id,
+      events: g.events,
+      onCourt: g.onCourt,
+      currentPeriod: g.currentPeriod,
+      finished: !!g.finished,
+      finishedAt: g.finishedAt || null
+    }});
+  }catch(e){}
+}
+function handleRemoteGameState(payload){
+  var g = S.current;
+  if(!g || !payload || payload.gameId!==g.id) return;
+  if(g.scoreMode!=='synced' || syncDeviceRole(g.id)!=='video') return; // esto solo le interesa al dispositivo de vídeo
+  stopStateRequestRetry(); // ya ha llegado algo -- no hace falta seguir reintentando la petición
+  var wasFinished = !!g.finished;
+  g.events = payload.events || [];
+  g.onCourt = payload.onCourt || [];
+  g.currentPeriod = payload.currentPeriod || g.currentPeriod;
+  g.finished = !!payload.finished;
+  g.finishedAt = payload.finishedAt || null;
+  if(g.finished && !wasFinished){
+    retireFinishedRemoteGame(g);
+    return;
+  }
+  render();
+}
+// El partido ha terminado y nos hemos enterado por el canal (no lo hemos
+// finalizado nosotros): igual que finishGame(), pero SIN volver a subirlo a
+// la nube -- el dispositivo que anotó ya lo hizo, y subir otra vez desde
+// aquí podría pisar datos más nuevos si hay más de un mensaje en camino.
+function retireFinishedRemoteGame(g){
+  teardownSyncChannel();
+  destroySyncedVideoPlayer();
+  if(!S.games.some(function(x){ return x.id===g.id; })) S.games.unshift(g);
+  if(S.current && S.current.id===g.id) S.current = null;
+  go('box', {gameId: g.id});
+}
+
+// ---- 'request_state': lo manda 'video' al conectar, lo atiende 'score' ----
+function handleStateRequest(){
+  var g = S.current;
+  if(!g || g.scoreMode!=='synced' || syncDeviceRole(g.id)!=='score') return;
+  broadcastGameState(g);
+}
+var syncStateRequestTimer = null, syncStateRequestRetries = 0;
+function stopStateRequestRetry(){
+  if(syncStateRequestTimer){ clearTimeout(syncStateRequestTimer); syncStateRequestTimer = null; }
+  syncStateRequestRetries = 0;
+}
+function requestRemoteGameStateWithRetry(){
+  stopStateRequestRetry();
+  sendStateRequestAttempt();
+}
+function sendStateRequestAttempt(){
+  if(!syncChannel || syncConnState!=='connected') return;
+  try{ syncChannel.send({ type:'broadcast', event:'request_state', payload:{} }); }catch(e){}
+  if(syncStateRequestRetries>=2) return; // unos pocos intentos bastan -- si no hay nadie al otro lado, la próxima jugada real lo pondrá al día igualmente
+  syncStateRequestRetries++;
+  syncStateRequestTimer = setTimeout(function(){
+    var g = S.current;
+    if(g && g.scoreMode==='synced' && syncDeviceRole(g.id)==='video' && syncChannelGameId===g.id){
+      sendStateRequestAttempt();
+    }
+  }, 1500);
 }
 
 // ---- Dispositivo 'video': reproductor principal (no flotante, ocupa el
@@ -2611,6 +2737,12 @@ function pushEvent(g, ev){
   }
   g.events.push(ev);
   saveState();
+  // En "Ordenador + móvil sincronizados", el dispositivo que anota manda su
+  // copia de las jugadas al que solo ve el vídeo por el mismo canal en tiempo
+  // real que ya se usaba para el segundo del vídeo -- antes esa copia nunca
+  // viajaba, así que el dispositivo de vídeo se quedaba congelado con lo que
+  // tenía cargado al entrar (ver broadcastGameState).
+  broadcastGameState(g);
 }
 function lastActionLabel(g){
   if(!g.events.length) return 'Sin jugadas registradas todavía';
@@ -3246,15 +3378,20 @@ function renderPlayByPlay(g, opts){
       return;
     }
     var d = playRowData(e, g);
-    // Segundo del vídeo (modo "Ordenador + vídeo"): si la jugada lo tiene
-    // guardado (ver pushEvent), se muestra como una píldora -- tocable para
-    // saltar el vídeo ahí mismo mientras se sigue anotando en directo
-    // (liveVideoActive), o solo informativa si no hay reproductor activo
-    // (p.ej. consultando el box score de un partido ya finalizado).
+    // Segundo del vídeo: si la jugada lo tiene guardado (ver pushEvent), se
+    // muestra como una píldora -- tocable para saltar el vídeo ahí mismo si
+    // ESTE dispositivo tiene un reproductor activo que saltar (ver
+    // canSeekPbpVideo/seekPbpVideoTo: "Ordenador + vídeo", o el dispositivo
+    // que ve el vídeo en "Ordenador + móvil sincronizados" -- ahí SÍ debe
+    // poder tocarse aunque la lista se muestre en modo solo-lectura, porque
+    // "solo lectura" aquí quiere decir "no se pueden editar/borrar jugadas",
+    // no "no se puede saltar el vídeo"), o solo informativa en cualquier otro
+    // caso (p.ej. en el dispositivo que anota, o consultando el box score de
+    // un partido ya finalizado).
     var vidBadge = '';
     if(e.videoSecond!=null){
-      vidBadge = (!readOnly && liveVideoActive(g))
-        ? '<button class="playvidtime" onclick="event.stopPropagation();seekLiveVideoTo('+e.videoSecond+')" title="Saltar el vídeo a este momento">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</button>'
+      vidBadge = canSeekPbpVideo(g)
+        ? '<button class="playvidtime" onclick="event.stopPropagation();seekPbpVideoTo('+e.videoSecond+')" title="Saltar el vídeo a este momento">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</button>'
         : '<span class="playvidtime static">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</span>';
     }
     h += '<div class="playrow'+(e.side==='rival'?' rival':'')+'">'+
@@ -4577,6 +4714,11 @@ function finishGame(){
   }
   g.finished = true;
   g.finishedAt = Date.now();
+  // Avisa YA al dispositivo que solo ve el vídeo (si lo hay) de que el partido ha
+  // terminado -- ver broadcastGameState más abajo. Sin esto, ese dispositivo se
+  // quedaba para siempre con su última copia de las jugadas (nunca se entera de
+  // que se finalizó ni de las jugadas de los últimos minutos).
+  broadcastGameState(g);
   S.games.unshift(g);
   S.current = null;
   saveState(g);
