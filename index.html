@@ -69,6 +69,20 @@
   .chip{ padding:10px 14px; border-radius:10px; border:1px solid var(--border); background:var(--surface); font-size:13px; font-weight:700; color:var(--text-dim); }
   .chip.on{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
 
+  /* ---- tarjetas de modo de anotación (Nuevo partido) ---- */
+  .modecard{ display:flex; align-items:flex-start; gap:12px; background:var(--surface); border:1.5px solid var(--border); border-radius:14px; padding:13px 14px; text-align:left; width:100%; }
+  .modecard + .modecard{ margin-top:10px; }
+  .modecard.on{ border-color:var(--accent); background:oklch(72% 0.18 45 / 10%); }
+  .modeicon{ width:38px; height:38px; border-radius:10px; background:var(--surface-2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--text-dim); flex-shrink:0; }
+  .modecard.on .modeicon{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .modebody{ flex:1; min-width:0; }
+  .modetitlerow{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+  .modetitle{ font-size:14px; font-weight:800; color:var(--text); }
+  .modebadge{ font-size:9px; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:var(--accent); background:oklch(72% 0.18 45 / 14%); border:1px solid var(--accent); border-radius:999px; padding:2px 7px; flex-shrink:0; }
+  .modedesc{ font-size:12px; color:var(--text-dim); line-height:1.45; margin-top:3px; }
+  .modecheck{ width:20px; height:20px; border-radius:999px; border:1.5px solid var(--border); flex-shrink:0; margin-top:1px; display:flex; align-items:center; justify-content:center; color:var(--accent-ink); }
+  .modecard.on .modecheck{ background:var(--accent); border-color:var(--accent); }
+
   .chipswrap{ position:relative; margin-bottom:10px; }
   .fasechips{ display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
   .fasechips::-webkit-scrollbar{ display:none; }
@@ -421,6 +435,42 @@
   .vidhint{ font-size:10.5px; color:var(--text-dim); font-weight:600; line-height:1.5; padding:2px 2px 0; }
   .vidhint.ok{ color:var(--good); font-weight:700; }
   .vidhint.warn{ color:var(--bad); font-weight:700; }
+
+  /* ---- panel flotante del vídeo en directo (modo "Ordenador + vídeo"),
+     fuera de la columna de #app -- ver updateLiveVideoWidget() ---- */
+  .livevidpanel{ position:fixed; top:14px; right:14px; width:300px; max-width:calc(100vw - 28px); background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:10px; box-shadow:0 10px 30px -10px rgba(0,0,0,.6); z-index:15; }
+  .livevidhead{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .livevidtitle{ font-size:11px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); display:flex; align-items:center; gap:6px; }
+  .livevidtitle .dot{ width:7px; height:7px; border-radius:999px; background:var(--accent); flex-shrink:0; animation:livedotpulse 1.4s ease-in-out infinite; }
+  @keyframes livedotpulse{ 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .livevidtoggle{ width:26px; height:26px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--text-dim); flex-shrink:0; transition:transform .15s ease; }
+  .livevidpanel.collapsed .livevidtoggle{ transform:rotate(180deg); }
+  .livevidbody{ margin-top:8px; }
+  .livevidpanel.collapsed .livevidbody{ display:none; }
+  .livevidframe{ position:relative; width:100%; aspect-ratio:16/9; background:#000; border-radius:10px; overflow:hidden; }
+  .livevidframe #livePlayerMount{ position:absolute; inset:0; width:100%; height:100%; }
+  .livevidframe iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .livevidclock{ margin-top:7px; font-family:'Oswald',sans-serif; font-weight:700; font-size:13px; color:var(--accent); }
+  .livevidhint{ font-size:10px; color:var(--text-dim); font-weight:600; margin-top:3px; }
+
+  /* ---- segundo del vídeo guardado en una jugada (play-by-play) ---- */
+  .playvidtime{ font-family:'Oswald',sans-serif; font-weight:700; font-size:10.5px; color:var(--accent); background:oklch(72% 0.18 45 / 12%); border:1px solid var(--accent); border-radius:8px; padding:3px 7px; display:inline-flex; align-items:center; gap:3px; flex-shrink:0; }
+  .playvidtime.static{ opacity:0.85; }
+
+  /* ---- modo "Ordenador + móvil" (sincronizado) ---- */
+  .connToggleLink{ font-size:11px; color:var(--text-dim); text-decoration:underline; font-weight:700; cursor:pointer; }
+  .connpill{ display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:999px; font-size:10px; font-weight:800; background:var(--surface-2); border:1px solid var(--border); white-space:nowrap; vertical-align:middle; }
+  .connpill .cdot{ width:6px; height:6px; border-radius:999px; flex-shrink:0; }
+  .connpill.ok{ color:var(--good); } .connpill.ok .cdot{ background:var(--good); animation:livedotpulse 1.4s ease-in-out infinite; }
+  .connpill.bad{ color:var(--bad); } .connpill.bad .cdot{ background:var(--bad); }
+  .syncvidframe{ position:relative; width:100%; aspect-ratio:16/9; background:#000; border-radius:14px; overflow:hidden; border:1px solid var(--border); }
+  .syncvidframe iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
+  /* Barra de estado de sincronización, dentro del flujo normal (no flotante
+     -- este dispositivo es un móvil, ver syncStatusRowHtml). */
+  .syncstatusbar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 18px; background:var(--surface); border-bottom:1px solid var(--border); font-size:11px; }
+  .syncstatusbar.bad{ background:color-mix(in oklch, var(--bad) 10%, var(--surface)); }
+  .syncstatustext{ color:var(--text-dim); font-weight:600; flex:1; min-width:0; }
+  .syncstatustext b{ color:var(--text); font-family:'Oswald',sans-serif; }
 
   /* ---- bandas de inicio/fin de periodo en Jugadas (Diseño 1) ---- */
   .pbd1{ margin:2px 0; border-radius:12px; border:1.5px solid var(--accent); background:oklch(72% 0.18 45 / 10%); overflow:hidden; }
@@ -1794,10 +1844,19 @@ function newGame(){
     matchDate: todayISO(),
     teamName: clubSettings.team_name || 'Distrito Olímpico Arranz',
     rivalName: '',
-    // Enlace al vídeo del partido (YouTube), opcional -- se añade normalmente
-    // a posteriori desde "Editar partido" una vez grabado y subido, no al
-    // crear el partido. Ver youtubeIdFromUrl/openVideoOverlay.
+    // Enlace al vídeo del partido (YouTube). Se puede añadir ya al crear el
+    // partido (si el modo de anotación elegido lo usa, ver scoreMode más
+    // abajo) o más tarde desde "Editar partido" una vez grabado y subido.
+    // Ver youtubeIdFromUrl/openVideoOverlay.
     videoUrl: '',
+    // Cómo se va a anotar este partido, elegido en "Nuevo partido" (ver
+    // scoreModeCardsHtml()): 'mobile' = móvil sin vídeo (como siempre, es el
+    // valor por defecto para no afectar a partidos ya creados antes de que
+    // existiera esto); 'compvideo' = se ve el vídeo y se anota en el mismo
+    // ordenador, el segundo del vídeo se captura solo en cada jugada;
+    // 'synced' = el vídeo se ve en el ordenador y se anota desde el móvil,
+    // el segundo viaja de uno a otro por un canal en tiempo real.
+    scoreMode: 'mobile',
     kind: 'liga',
     jornada: null,
     // Enlace opcional a una fila del calendario (fase_id de clubSettings.fbm_fases
@@ -2193,6 +2252,339 @@ function maybeManageLiveClockTick(){
 }
 
 /* ---------- events ---------- */
+/* ---- Vídeo en directo (modo "Ordenador + vídeo", g.scoreMode==='compvideo') ----
+   Un panel flotante (fuera de la columna de 460px de #app, aprovechando el
+   espacio libre a los lados en una ventana de ordenador) con el reproductor
+   de YouTube de verdad (API oficial, no el iframe simple de
+   videoOverlayHtml/openVideoOverlay, que es solo para VER el vídeo después,
+   sin control por JS). Aparece en las pantallas de anotación en directo
+   (LIVE_VIDEO_ROUTES) mientras el partido en curso tiene este modo y un
+   enlace de vídeo reconocido; pushEvent() captura el segundo actual en cada
+   jugada, salvo las de quinteto. Es un nodo del DOM que se crea una sola vez
+   y vive fuera de app.innerHTML (igual que el truco ya usado en los mockups
+   de vídeo) para que el iframe no se reinicie en cada render(). */
+var LIVE_VIDEO_ROUTES = ['live','lineup','rivalLineup','stat','shotzone','assist','origin','rivalOrigin','rivalquick','rivalsheet','rivalPlayerSheet'];
+function liveVideoActive(g){
+  return !!(g && !g.finished && g.scoreMode==='compvideo' && youtubeIdFromUrl(g.videoUrl));
+}
+function fmtVideoTime(t){
+  t = Math.max(0, Math.round(t));
+  var m = Math.floor(t/60), s = t%60;
+  return m+':'+(s<10?'0':'')+s;
+}
+function ensureYouTubeIframeApi(cb){
+  if(window.YT && window.YT.Player){ cb(); return; }
+  window.__ytApiCallbacks = window.__ytApiCallbacks || [];
+  window.__ytApiCallbacks.push(cb);
+  if(window.__ytApiLoading) return;
+  window.__ytApiLoading = true;
+  var s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+  window.onYouTubeIframeAPIReady = function(){
+    (window.__ytApiCallbacks||[]).forEach(function(f){ f(); });
+    window.__ytApiCallbacks = [];
+  };
+}
+var liveVideoPlayer = null, liveVideoGameId = null, liveVideoPanelEl = null, liveVideoTicker = null, liveVideoCollapsed = false, liveVideoLoading = false;
+function currentLiveVideoSecond(){
+  if(!liveVideoPlayer || !liveVideoPlayer.getCurrentTime) return null;
+  try{ return liveVideoPlayer.getCurrentTime(); }catch(e){ return null; }
+}
+function seekLiveVideoTo(t){
+  if(!liveVideoPlayer || !liveVideoPlayer.seekTo) return;
+  try{ liveVideoPlayer.seekTo(t, true); }catch(e){}
+}
+function startLiveVideoTicker(){
+  if(liveVideoTicker) return;
+  liveVideoTicker = setInterval(function(){
+    var el = document.getElementById('livePlayerClock');
+    var s = currentLiveVideoSecond();
+    if(el && s!=null) el.textContent = fmtVideoTime(s);
+  }, 400);
+}
+function toggleLiveVideoCollapsed(){
+  liveVideoCollapsed = !liveVideoCollapsed;
+  if(liveVideoPanelEl) liveVideoPanelEl.classList.toggle('collapsed', liveVideoCollapsed);
+}
+function destroyLiveVideoWidget(){
+  if(liveVideoTicker){ clearInterval(liveVideoTicker); liveVideoTicker = null; }
+  if(liveVideoPlayer){ try{ liveVideoPlayer.destroy(); }catch(e){} liveVideoPlayer = null; }
+  if(liveVideoPanelEl && liveVideoPanelEl.parentNode){ liveVideoPanelEl.parentNode.removeChild(liveVideoPanelEl); }
+  liveVideoPanelEl = null; liveVideoGameId = null; liveVideoLoading = false;
+}
+function createLiveVideoPanel(g){
+  var vid = youtubeIdFromUrl(g.videoUrl);
+  if(!vid) return;
+  liveVideoLoading = true;
+  liveVideoGameId = g.id;
+  var panel = document.createElement('div');
+  panel.className = 'livevidpanel'+(liveVideoCollapsed?' collapsed':'');
+  panel.innerHTML =
+    '<div class="livevidhead"><div class="livevidtitle"><span class="dot"></span>Vídeo</div>'+
+    '<button class="livevidtoggle" onclick="toggleLiveVideoCollapsed()">'+icon('chevronDown',14)+'</button></div>'+
+    '<div class="livevidbody"><div class="livevidframe"><div id="livePlayerMount"></div></div>'+
+    '<div class="livevidclock"><span>En el <b id="livePlayerClock">0:00</b></span></div>'+
+    '<div class="livevidhint">Cada jugada guarda este segundo automáticamente</div></div>';
+  document.body.appendChild(panel);
+  liveVideoPanelEl = panel;
+  ensureYouTubeIframeApi(function(){
+    // Puede que mientras cargaba la API el usuario ya haya salido de las
+    // pantallas de anotación (p.ej. ha finalizado el partido) -- si el panel
+    // ya no está en el documento, no crear el reproductor.
+    if(!liveVideoPanelEl || !liveVideoPanelEl.parentNode) return;
+    liveVideoPlayer = new YT.Player(panel.querySelector('#livePlayerMount'), {
+      videoId: vid,
+      playerVars: { rel:0, modestbranding:1 },
+      events: { onReady: function(){ liveVideoLoading = false; startLiveVideoTicker(); } }
+    });
+  });
+}
+// Llamada al final de cada render() (ver render()): crea/destruye el panel
+// flotante según si el partido en curso usa vídeo y la pantalla actual es
+// una de anotación. No se intenta "reutilizar" el reproductor si cambia de
+// partido o de enlace -- se destruye y se vuelve a crear, más simple y sin
+// casos raros con un coste mínimo (el vídeo no estaba sonando de todas formas).
+function updateLiveVideoWidget(){
+  var g = S.current;
+  var shouldShow = liveVideoActive(g) && LIVE_VIDEO_ROUTES.indexOf(S.route)!==-1;
+  if(!shouldShow){
+    if(liveVideoPanelEl || liveVideoPlayer || liveVideoLoading) destroyLiveVideoWidget();
+    return;
+  }
+  if(liveVideoGameId===g.id && (liveVideoPanelEl || liveVideoLoading)) return; // ya está (o está cargando)
+  if(liveVideoPanelEl || liveVideoLoading) destroyLiveVideoWidget(); // era de otro partido
+  createLiveVideoPanel(g);
+}
+
+/* ---- Vídeo en directo (modo "Ordenador + móvil sincronizados",
+   g.scoreMode==='synced') ----
+   El mismo partido se abre en DOS dispositivos: uno ve el vídeo (rol
+   'video'), el otro anota (rol 'score'). Cada dispositivo elige su papel la
+   primera vez que entra a anotar este partido (renderSyncRoleChooser) y lo
+   recuerda en localStorage -- solo para ESE partido, así que si vuelves a
+   usar el mismo navegador en otro partido sincronizado te lo vuelve a
+   preguntar (puede ser el dispositivo contrario la próxima vez). El segundo
+   del vídeo viaja de un dispositivo a otro por un canal "broadcast" de
+   Supabase Realtime (efímero, no toca ninguna tabla ni necesita migración:
+   es simple mensajería en tiempo real entre quienes tengan el canal abierto
+   en ese momento) -- el dispositivo 'video' lo manda cada segundo, el
+   'score' se queda con el último recibido y lo usa en pushEvent(), con un
+   margen de frescura (SYNC_STALE_MS) para no usar un dato demasiado viejo
+   si la conexión se corta. ---- */
+var SYNC_STALE_MS = 4000;
+function syncDeviceRole(gameId){
+  try{ return localStorage.getItem('syncRole:'+gameId) || null; }catch(e){ return null; }
+}
+function setSyncDeviceRole(gameId, role){
+  try{ localStorage.setItem('syncRole:'+gameId, role); }catch(e){}
+}
+function clearSyncDeviceRole(gameId){
+  try{ localStorage.removeItem('syncRole:'+gameId); }catch(e){}
+}
+function chooseSyncRole(role){
+  if(!S.current) return;
+  setSyncDeviceRole(S.current.id, role);
+  render();
+}
+function changeSyncRole(){
+  if(!S.current) return;
+  clearSyncDeviceRole(S.current.id);
+  render();
+}
+function renderSyncRoleChooser(){
+  var g = S.current;
+  var h = '';
+  h += '<div class="header"><div class="header-row">'+
+        '<button class="iconbtn" onclick="go(\'games\')">'+icon('back',18)+'</button>'+
+        '<div class="htitles"><div class="title">Ordenador + móvil</div></div>'+
+       '</div></div>';
+  h += '<div class="content">';
+  h += '<div class="helpbox">Este partido se anota sincronizando dos dispositivos. ¿Qué vas a hacer en <b>este</b> dispositivo? El otro elige la otra opción.</div>';
+  h += '<div class="section">'+
+    '<button class="modecard" onclick="chooseSyncRole(\'video\')"><div class="modeicon">'+icon('monitor',19)+'</div>'+
+      '<div class="modebody"><div class="modetitlerow"><span class="modetitle">Ver el vídeo aquí</span></div>'+
+      '<div class="modedesc">Este dispositivo reproduce el vídeo del partido y manda el segundo al que anota.</div></div></button>'+
+    '<button class="modecard" onclick="chooseSyncRole(\'score\')"><div class="modeicon">'+icon('phone',19)+'</div>'+
+      '<div class="modebody"><div class="modetitlerow"><span class="modetitle">Anotar aquí</span></div>'+
+      '<div class="modedesc">Este dispositivo registra las jugadas, usando el segundo que llega del que reproduce el vídeo.</div></div></button>'+
+    '</div>';
+  h += '</div>';
+  return h;
+}
+function syncRoleChangeLinkHtml(){
+  return '<div class="caption" style="text-align:center;margin-top:10px"><span class="connToggleLink" onclick="changeSyncRole()">Este no es el dispositivo correcto -- cambiar</span></div>';
+}
+
+// ---- Canal en tiempo real (Supabase Realtime Broadcast) ----
+var syncChannel = null, syncChannelGameId = null, syncConnState = 'idle'; // idle|connecting|connected|disconnected
+var lastSyncedSecond = null, lastSyncedAt = 0;
+function ensureSyncChannel(gameId){
+  if(!sb) return null;
+  if(syncChannel && syncChannelGameId===gameId) return syncChannel;
+  if(syncChannel) teardownSyncChannel();
+  syncChannelGameId = gameId;
+  syncConnState = 'connecting';
+  syncChannel = sb.channel('matchsync-'+gameId, { config:{ broadcast:{ self:false } } });
+  syncChannel.on('broadcast', { event:'time' }, function(msg){
+    lastSyncedSecond = msg && msg.payload ? msg.payload.t : null;
+    lastSyncedAt = Date.now();
+    patchSyncStatusDom();
+  });
+  syncChannel.subscribe(function(status){
+    syncConnState = (status==='SUBSCRIBED') ? 'connected' : (['CLOSED','CHANNEL_ERROR','TIMED_OUT'].indexOf(status)!==-1 ? 'disconnected' : 'connecting');
+    patchSyncStatusDom();
+  });
+  return syncChannel;
+}
+function teardownSyncChannel(){
+  if(syncChannel && sb){ try{ sb.removeChannel(syncChannel); }catch(e){} }
+  syncChannel = null; syncChannelGameId = null; syncConnState = 'idle';
+  lastSyncedSecond = null; lastSyncedAt = 0;
+  stopSyncSendTicker();
+}
+function syncDataIsFresh(){
+  return lastSyncedSecond!=null && (Date.now()-lastSyncedAt) < SYNC_STALE_MS;
+}
+
+// ---- Dispositivo 'video': reproductor principal (no flotante, ocupa el
+// contenido de la pantalla) + ticker que manda el segundo por el canal. ----
+var syncVideoPlayer = null, syncVideoPanelEl = null, syncVideoLoading = false, syncSendTicker = null;
+function destroySyncedVideoPlayer(){
+  stopSyncSendTicker();
+  if(syncVideoPlayer){ try{ syncVideoPlayer.destroy(); }catch(e){} syncVideoPlayer = null; }
+  syncVideoPanelEl = null; // el nodo vive dentro de #app -- se destruye solo en el próximo innerHTML=
+  syncVideoLoading = false;
+}
+function stopSyncSendTicker(){
+  if(syncSendTicker){ clearInterval(syncSendTicker); syncSendTicker = null; }
+}
+function startSyncSendTicker(){
+  if(syncSendTicker) return;
+  syncSendTicker = setInterval(function(){
+    if(!syncVideoPlayer || !syncVideoPlayer.getCurrentTime || !syncChannel || syncConnState!=='connected') return;
+    var t;
+    try{ t = syncVideoPlayer.getCurrentTime(); }catch(e){ return; }
+    syncChannel.send({ type:'broadcast', event:'time', payload:{ t:t } });
+    var el = document.getElementById('syncSendClock');
+    if(el) el.textContent = fmtVideoTime(t);
+  }, 1000);
+}
+function renderSyncedVideoScreen(g){
+  var vid = youtubeIdFromUrl(g.videoUrl);
+  var h = '';
+  h += topbarHtml(g, {showBox:true});
+  h += tabsHtml(g);
+  h += '<div class="content" style="padding-top:14px">';
+  if(!vid){
+    h += '<div class="helpbox">Todavía no hay un enlace de vídeo reconocido para este partido. Añádelo desde "Editar partido" (lápiz, en Partidos) y vuelve aquí.</div>';
+  } else {
+    h += '<div class="syncvidframe"><div id="syncPlayerMount"></div></div>';
+    h += '<div class="livevidclock" style="margin-top:8px">Mandando el segundo <b id="syncSendClock">0:00</b> al dispositivo que anota'+
+      '<span class="connpill '+(syncConnState==='connected'?'ok':'bad')+'" style="margin-left:8px" id="syncConnPillVideo"><span class="cdot"></span>'+(syncConnState==='connected'?'Conectado':(syncConnState==='connecting'?'Conectando':'Sin conexión'))+'</span></div>';
+  }
+  h += syncRoleChangeLinkHtml();
+  h += '<div class="label" style="margin-top:22px">Jugadas registradas</div>';
+  h += renderPlayByPlay(g, { readOnly:true, flowing:true });
+  h += '</div>';
+  return h;
+}
+// Llamado tras cada render() cuando el rol de este dispositivo es 'video':
+// el nodo del reproductor se crea una sola vez y se reinserta en el hueco
+// #syncPlayerMount (igual que liveVideoPanelEl, para que el iframe no se
+// reinicie en cada render -- aquí SÍ hace falta porque, a diferencia del
+// panel flotante, este vive dentro de app.innerHTML, que se reemplaza
+// entero en cada render()).
+var syncVideoWrapEl = document.createElement('div');
+function mountSyncedVideoPlayer(g){
+  var slot = document.getElementById('syncPlayerMount');
+  if(!slot) return; // vídeo sin enlace -- no hay hueco que montar
+  if(syncVideoWrapEl.parentNode !== slot) slot.appendChild(syncVideoWrapEl);
+  if(syncVideoPlayer || syncVideoLoading) return; // ya creado/cargando para este render
+  var vid = youtubeIdFromUrl(g.videoUrl);
+  if(!vid) return;
+  syncVideoLoading = true;
+  ensureYouTubeIframeApi(function(){
+    if(!document.getElementById('syncPlayerMount')) { syncVideoLoading = false; return; } // salió de la pantalla mientras cargaba
+    syncVideoPlayer = new YT.Player(syncVideoWrapEl, {
+      videoId: vid,
+      playerVars: { rel:0, modestbranding:1 },
+      events: { onReady: function(){ syncVideoLoading = false; startSyncSendTicker(); } }
+    });
+  });
+}
+
+// ---- Dispositivo 'score': sin reproductor propio -- solo la barra de
+// estado inline (syncStatusRowHtml, dentro de topbarHtml) + pushEvent usa
+// lastSyncedSecond si está reciente (ver syncDataIsFresh). El reloj de esa
+// barra se mantiene al día con un parcheo directo de texto (igual que
+// liveClockTickTimer/maybeManageLiveClockTick ya hacen con el cronómetro del
+// partido), en vez de volver a llamar a render() cada medio segundo. ----
+function syncFreshLabel(){
+  if(syncConnState!=='connected') return 'sin conexión';
+  if(lastSyncedSecond==null) return 'esperando el ordenador…';
+  var s = (Date.now()-lastSyncedAt)/1000;
+  return 'hace '+(s<1 ? '<1' : s.toFixed(1))+'s';
+}
+// Parchea cualquier indicador de conexión presente en el DOM en este
+// momento -- la píldora del dispositivo 'score' (#syncConnPillScore, dentro
+// de la barra inline) y/o la del dispositivo 'video' (#syncConnPillVideo,
+// en renderSyncedVideoScreen). Como solo uno de los dos puede estar en
+// pantalla a la vez en cada dispositivo, no hay conflicto en tocar ambos.
+function patchConnPill(id){
+  var pillEl = document.getElementById(id);
+  if(!pillEl) return;
+  pillEl.className = 'connpill '+(syncConnState==='connected'?'ok':'bad');
+  pillEl.innerHTML = '<span class="cdot"></span>'+(syncConnState==='connected'?'Conectado':(syncConnState==='connecting'?'Conectando':'Sin conexión'));
+}
+function patchSyncStatusDom(){
+  var clockEl = document.getElementById('syncRecvClock');
+  var freshEl = document.getElementById('syncRecvFresh');
+  var pillEl = document.getElementById('syncConnPillScore');
+  var barEl = pillEl ? pillEl.closest('.syncstatusbar') : null;
+  var stale = !syncDataIsFresh();
+  if(clockEl) clockEl.textContent = lastSyncedSecond!=null ? fmtVideoTime(lastSyncedSecond) : '--:--';
+  if(freshEl) freshEl.textContent = syncFreshLabel();
+  patchConnPill('syncConnPillScore');
+  patchConnPill('syncConnPillVideo');
+  if(barEl) barEl.classList.toggle('bad', stale);
+}
+var syncStatusTickTimer = null;
+function stopSyncStatusTick(){
+  if(syncStatusTickTimer){ clearInterval(syncStatusTickTimer); syncStatusTickTimer = null; }
+}
+function maybeManageSyncStatusTick(){
+  var g = S.current;
+  var show = g && !g.finished && g.scoreMode==='synced' && !!syncDeviceRole(g.id) && LIVE_VIDEO_ROUTES.indexOf(S.route)!==-1;
+  if(show){ if(!syncStatusTickTimer) syncStatusTickTimer = setInterval(patchSyncStatusDom, 500); }
+  else { stopSyncStatusTick(); }
+}
+
+// Llamada al final de cada render() (ver render()), igual que
+// updateLiveVideoWidget() pero para el modo 'synced': gestiona el canal en
+// tiempo real y, según el rol de este dispositivo, el reproductor principal
+// ('video') o el panel de estado ('score').
+function updateSyncWidgets(){
+  var g = S.current;
+  var inScope = g && !g.finished && g.scoreMode==='synced' && LIVE_VIDEO_ROUTES.indexOf(S.route)!==-1;
+  var role = inScope ? syncDeviceRole(g.id) : null;
+  if(!inScope || !role){
+    teardownSyncChannel();
+    destroySyncedVideoPlayer();
+    maybeManageSyncStatusTick();
+    return;
+  }
+  if(syncChannelGameId!==g.id) teardownSyncChannel();
+  ensureSyncChannel(g.id);
+  patchSyncStatusDom(); // sin esperar al primer tick, para que la píldora de conexión no se quede un render por detrás
+  if(role==='video'){
+    mountSyncedVideoPlayer(g);
+  } else {
+    destroySyncedVideoPlayer();
+  }
+  maybeManageSyncStatusTick();
+}
+
 function pushEvent(g, ev){
   ev.id = uid();
   ev.ts = Date.now();
@@ -2202,6 +2594,20 @@ function pushEvent(g, ev){
   // ensureRivalOnCourt() devuelve [] si nunca se ha tocado el quinteto
   // rival, así que no rompe partidos donde no se usa esa parte.
   ev.rivalOnCourtSnapshot = ensureRivalOnCourt(g).slice();
+  // Segundo del vídeo en la jugada, según el modo de anotación (las jugadas
+  // de quinteto, lineup, no lo necesitan): "Ordenador + vídeo" lo lee del
+  // reproductor local (liveVideoGameId/currentLiveVideoSecond); "Ordenador +
+  // móvil" lo toma del último dato recibido por el canal en tiempo real, si
+  // es reciente -- si el ordenador se desconectó hace rato, la jugada se
+  // guarda igual pero SIN segundo (ver syncDataIsFresh), en vez de bloquear.
+  if(ev.type!=='lineup'){
+    if(liveVideoGameId===g.id){
+      var vs = currentLiveVideoSecond();
+      if(vs!=null) ev.videoSecond = vs;
+    } else if(g.scoreMode==='synced' && syncChannelGameId===g.id && syncDataIsFresh()){
+      ev.videoSecond = lastSyncedSecond;
+    }
+  }
   g.events.push(ev);
   saveState();
 }
@@ -2829,10 +3235,22 @@ function renderPlayByPlay(g, opts){
       return;
     }
     var d = playRowData(e, g);
+    // Segundo del vídeo (modo "Ordenador + vídeo"): si la jugada lo tiene
+    // guardado (ver pushEvent), se muestra como una píldora -- tocable para
+    // saltar el vídeo ahí mismo mientras se sigue anotando en directo
+    // (liveVideoActive), o solo informativa si no hay reproductor activo
+    // (p.ej. consultando el box score de un partido ya finalizado).
+    var vidBadge = '';
+    if(e.videoSecond!=null){
+      vidBadge = (!readOnly && liveVideoActive(g))
+        ? '<button class="playvidtime" onclick="event.stopPropagation();seekLiveVideoTo('+e.videoSecond+')" title="Saltar el vídeo a este momento">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</button>'
+        : '<span class="playvidtime static">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</span>';
+    }
     h += '<div class="playrow'+(e.side==='rival'?' rival':'')+'">'+
       '<div class="per">'+esc(g.periodLabel.charAt(0).toUpperCase())+e.period+'</div>'+
       '<div class="who">'+esc(d.who)+'</div>'+
       '<div class="what">'+esc(d.label)+'</div>'+
+      vidBadge+
       (d.deltaLabel ? '<div class="delta '+d.deltaCls+'">'+d.deltaLabel+'</div>' : '')+
       (rscores[e.id] ? '<div class="playscore">('+rscores[e.id]+')</div>' : '')+
       playOriginTagsHtml(e, g);
@@ -3058,6 +3476,18 @@ function stepMinutes(delta){
 function setRivalMode(full){
   S.current.trackRivalFull = full; saveState(); render();
 }
+// ---- Modo de anotación (ver scoreMode en newGame() para el significado de
+// cada valor). Al elegir un modo con vídeo, el campo de enlace se muestra
+// debajo pero es opcional aquí también -- igual que en "Editar partido", se
+// puede dejar vacío y añadir más tarde. El input usa el mismo patrón que
+// setRivalName (sin render() en cada tecla, para no cerrar el teclado del
+// móvil) y repinta al salir del campo (onblur) para mostrar si el enlace se
+// reconoce, con youtubeIdFromUrl() -- misma función que ya usa "Editar partido".
+function setScoreMode(mode){
+  S.current.scoreMode = mode; saveState(); render();
+}
+function setSetupVideoUrl(v){ S.current.videoUrl = v; }
+function setSetupVideoUrlBlur(){ saveState(); render(); }
 function setTeamName(v){ S.current.teamName = v; saveState(); }
 function setRivalName(v){ S.current.rivalName = v; saveState(); }
 function setMatchDate(v){ if(!v) return; S.current.matchDate = v; saveState(); render(); }
@@ -4481,7 +4911,10 @@ function icon(name, size){
     resetClock:'<path d="M4 4v6h6M3.5 13a8.5 8.5 0 108-9.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
     stats:'<path d="M4 20V10M12 20V4M20 20v-7" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>',
     alert:'<path d="M12 4L3 20h18z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 10v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="17" r="0.9" fill="currentColor"/>',
-    flag:'<path d="M5 3v18M5 4h12l-3 4 3 4H5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>'
+    flag:'<path d="M5 3v18M5 4h12l-3 4 3 4H5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+    phone:'<rect x="7" y="2.5" width="10" height="19" rx="2.2" stroke="currentColor" stroke-width="1.7"/><path d="M10.5 18.3h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+    monitor:'<rect x="2.5" y="4" width="19" height="13" rx="1.8" stroke="currentColor" stroke-width="1.7"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9.5 8.3v4.9l4.3-2.45z" fill="currentColor"/>',
+    link2:'<rect x="2.5" y="4.5" width="9.5" height="15" rx="1.8" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="2.5" width="8" height="11" rx="1.6" stroke="currentColor" stroke-width="1.7"/><path d="M13 9.5h2.3M13 9.5l2-1.6M13 9.5l2 1.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none">'+(icons[name]||'')+'</svg>';
 }
@@ -4513,6 +4946,28 @@ function topbarHtml(g, opts){
       '<div class="score">'+teamScore(g)+' – '+rivalScore(g)+'</div>'+
     '</div>'+
     '<div style="display:flex;align-items:center;gap:6px">'+boxBtn+finishBtn+'</div>'+
+  '</div>'+
+  syncStatusRowHtml(g);
+}
+// ---- Barra de estado de sincronización (modo "Ordenador + móvil", solo en
+// el dispositivo con rol 'score'): a diferencia del panel flotante del modo
+// "Ordenador + vídeo" (pensado para una pantalla de ordenador ancha, con
+// sitio libre a los lados), este dispositivo es un MÓVIL -- flotar un panel
+// fijo de 300px encima se solaparía con la cabecera. Va dentro del flujo
+// normal, justo debajo de topbar, en TODAS las pantallas que ya usan
+// topbarHtml (live, stat/asistencia, rival...). Se repinta con cada
+// render() como el resto de topbarHtml -- el reloj en vivo se mantiene al
+// día aparte con un parcheo directo del texto, ver maybeManageSyncStatusTick. ----
+function syncStatusRowHtml(g){
+  if(!g || g.finished || g.scoreMode!=='synced') return '';
+  if(syncDeviceRole(g.id)!=='score') return '';
+  if(LIVE_VIDEO_ROUTES.indexOf(S.route)===-1) return '';
+  var stale = !syncDataIsFresh();
+  var connLabel = syncConnState==='connected' ? 'Conectado' : (syncConnState==='connecting' ? 'Conectando' : 'Sin conexión');
+  return '<div class="syncstatusbar'+(stale?' bad':'')+'">'+
+    '<span class="connpill '+(syncConnState==='connected'?'ok':'bad')+'" id="syncConnPillScore"><span class="cdot"></span>'+connLabel+'</span>'+
+    '<span class="syncstatustext">Vídeo: <b id="syncRecvClock">'+(lastSyncedSecond!=null?fmtVideoTime(lastSyncedSecond):'--:--')+'</b> <span id="syncRecvFresh">'+syncFreshLabel()+'</span></span>'+
+    '<span class="connToggleLink" onclick="changeSyncRole()">Cambiar</span>'+
   '</div>';
 }
 function tabsHtml(g){
@@ -4595,6 +5050,18 @@ function render(){
     html = renderCompareTeamsPopup();
   } else if(S.route==='comparePlayers'){
     html = renderComparePlayersPopup();
+  } else if(S.current && !S.current.finished && S.current.scoreMode==='synced' && LIVE_VIDEO_ROUTES.indexOf(S.route)!==-1 && !syncDeviceRole(S.current.id)){
+    // Modo "Ordenador + móvil": este dispositivo todavía no ha elegido su
+    // papel para ESTE partido -- ver renderSyncRoleChooser arriba. Se
+    // comprueba aquí, antes que cualquier pantalla de anotación, para que
+    // nunca se llegue a ver el quinteto/jugadas sin saber antes si este
+    // aparato ve el vídeo o anota.
+    html = renderSyncRoleChooser();
+  } else if(S.current && !S.current.finished && S.current.scoreMode==='synced' && syncDeviceRole(S.current.id)==='video' && LIVE_VIDEO_ROUTES.indexOf(S.route)!==-1){
+    // Este dispositivo ya eligió "Ver el vídeo aquí": sea cual sea la ruta
+    // exacta (puede quedarse siempre en 'live'), se le muestra siempre la
+    // misma pantalla de espectador -- nunca la de anotar.
+    html = renderSyncedVideoScreen(S.current);
   } else {
     switch(S.route){
       case 'home': html = renderHome(); break;
@@ -4654,9 +5121,40 @@ function render(){
   setupSwipeHeights();
   setupBoxScroll();
   maybeManageLiveClockTick();
+  updateLiveVideoWidget();
+  updateSyncWidgets();
 }
 
 /* ---- setup ---- */
+// ---- Tarjetas de modo de anotación, en "Nuevo partido" (ver scoreMode en
+// newGame()). Al elegir un modo con vídeo se muestra debajo el mismo campo
+// de enlace que "Editar partido" (misma validación con youtubeIdFromUrl). ----
+var SCORE_MODES = [
+  { k:'mobile', icon:'phone', title:'Solo móvil', desc:'Anotas desde el móvil mientras ves el partido en directo. Sin vídeo -- como siempre.' },
+  { k:'compvideo', icon:'monitor', title:'Ordenador + vídeo', desc:'Ves el partido grabado en el ordenador y anotas ahí mismo. El segundo del vídeo se guarda solo en cada jugada.' },
+  { k:'synced', icon:'link2', title:'Ordenador + móvil', badge:'Nuevo', desc:'Ves el partido en el ordenador y anotas desde el móvil, sin mirar la pantalla grande. El segundo del vídeo viaja de uno a otro.' }
+];
+function scoreModeCardsHtml(g){
+  var mode = g.scoreMode || 'mobile';
+  var h = '';
+  SCORE_MODES.forEach(function(m){
+    var on = mode===m.k;
+    h += '<button class="modecard'+(on?' on':'')+'" onclick="setScoreMode(\''+m.k+'\')">'+
+      '<div class="modeicon">'+icon(m.icon,19)+'</div>'+
+      '<div class="modebody">'+
+        '<div class="modetitlerow"><span class="modetitle">'+m.title+'</span>'+(m.badge?'<span class="modebadge">'+m.badge+'</span>':'')+'</div>'+
+        '<div class="modedesc">'+m.desc+'</div>'+
+      '</div>'+
+      '<div class="modecheck">'+(on?icon('check',12):'')+'</div>'+
+    '</button>';
+  });
+  if(mode==='compvideo' || mode==='synced'){
+    h += '<div class="rowcard" style="margin-top:10px"><div class="k">Enlace del vídeo</div>'+
+      '<input type="text" placeholder="Puedes añadirlo luego" value="'+esc(g.videoUrl||'')+'" oninput="setSetupVideoUrl(this.value)" onblur="setSetupVideoUrlBlur()"></div>'+
+      (g.videoUrl ? ('<div class="vidhint '+(youtubeIdFromUrl(g.videoUrl)?'ok':'warn')+'">'+(youtubeIdFromUrl(g.videoUrl)?'Enlace de vídeo reconocido':'No se reconoce como enlace de YouTube')+'</div>') : '<div class="caption">Tiene que estar en YouTube como "Oculto" (no "Privado"), con "Permitir inserciones" activado, para poder verse aquí.</div>');
+  }
+  return h;
+}
 function renderSetup(){
   var g = ensureCurrentForSetup();
   if(!g.kind) g.kind = 'liga';
@@ -4676,6 +5174,8 @@ function renderSetup(){
        '<div class="rowcard"><div class="k">Rival</div><input type="text" placeholder="Nombre del rival" value="'+esc(g.rivalName)+'" oninput="setRivalName(this.value)"></div>'+
        '<div class="rowcard"><div class="k">Fecha</div><input type="date" value="'+esc(g.matchDate||todayISO())+'" onchange="setMatchDate(this.value)"></div>'+
        '</div>';
+
+  h += '<div class="section"><div class="label">Cómo vas a anotar este partido</div>'+ scoreModeCardsHtml(g) +'</div>';
 
   h += '<div class="section"><div class="label">Tipo de partido</div>'+
        '<div class="chiprow">'+
