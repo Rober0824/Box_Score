@@ -463,7 +463,16 @@
   .connpill .cdot{ width:6px; height:6px; border-radius:999px; flex-shrink:0; }
   .connpill.ok{ color:var(--good); } .connpill.ok .cdot{ background:var(--good); animation:livedotpulse 1.4s ease-in-out infinite; }
   .connpill.bad{ color:var(--bad); } .connpill.bad .cdot{ background:var(--bad); }
-  .syncvidframe{ position:relative; width:100%; aspect-ratio:16/9; background:#000; border-radius:14px; overflow:hidden; border:1px solid var(--border); }
+  /* flex-shrink:0 es la clave: ".content" es una columna flex con scroll
+     propio (overflow-y:auto), pero por defecto TODOS sus hijos tienen
+     flex-shrink:1 -- en cuanto la lista de jugadas (#syncPbpArea) crece y ya
+     no cabe todo en la pantalla sin hacer scroll, el navegador "resuelve" el
+     hueco que falta encogiendo TAMBIÉN el vídeo (en vez de simplemente dejar
+     que se pueda hacer scroll, que es lo que se quiere). Por eso el vídeo se
+     iba haciendo cada vez más pequeño según se metían jugadas, sin que hiciera
+     falta tocar el iframe para nada -- era un problema de maquetación (CSS),
+     no del reproductor ni de la sincronización. */
+  .syncvidframe{ position:relative; width:100%; aspect-ratio:16/9; background:#000; border-radius:14px; overflow:hidden; border:1px solid var(--border); flex-shrink:0; }
   .syncvidframe iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
   /* Barra de estado de sincronización, dentro del flujo normal (no flotante
      -- este dispositivo es un móvil, ver syncStatusRowHtml). */
