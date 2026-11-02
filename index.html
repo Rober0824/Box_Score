@@ -3449,20 +3449,30 @@ function renderPlayByPlay(g, opts){
     }
     var d = playRowData(e, g);
     // Segundo del vídeo: si la jugada lo tiene guardado (ver pushEvent), se
-    // muestra como una píldora -- tocable para saltar el vídeo ahí mismo si
-    // ESTE dispositivo tiene un reproductor activo que saltar (ver
-    // canSeekPbpVideo/seekPbpVideoTo: "Ordenador + vídeo", o el dispositivo
-    // que ve el vídeo en "Ordenador + móvil sincronizados" -- ahí SÍ debe
-    // poder tocarse aunque la lista se muestre en modo solo-lectura, porque
-    // "solo lectura" aquí quiere decir "no se pueden editar/borrar jugadas",
-    // no "no se puede saltar el vídeo"), o solo informativa en cualquier otro
-    // caso (p.ej. en el dispositivo que anota, o consultando el box score de
-    // un partido ya finalizado).
+    // muestra como una píldora tocable en DOS situaciones distintas:
+    // 1) Partido YA FINALIZADO con un vídeo reconocido: tocarla abre el vídeo
+    //    completo (el mismo overlay del botón "Ver vídeo del partido") pero
+    //    arrancando directamente en ese segundo -- esto funciona igual en
+    //    CUALQUIER dispositivo y en cualquier modo (móvil, ordenador, solo o
+    //    sincronizado), porque ya no depende de ningún reproductor en directo
+    //    montado, solo del vídeo guardado del partido.
+    // 2) Partido EN DIRECTO con un reproductor activo en ESTE dispositivo
+    //    (ver canSeekPbpVideo/seekPbpVideoTo: "Ordenador + vídeo", o el
+    //    dispositivo que ve el vídeo en "Ordenador + móvil sincronizados" --
+    //    ahí SÍ debe poder tocarse aunque la lista se muestre en modo
+    //    solo-lectura, porque "solo lectura" aquí quiere decir "no se pueden
+    //    editar/borrar jugadas", no "no se puede saltar el vídeo").
+    // En cualquier otro caso (p.ej. en directo desde el dispositivo que
+    // anota, o un partido finalizado sin vídeo) se queda solo informativa.
     var vidBadge = '';
     if(e.videoSecond!=null){
-      vidBadge = canSeekPbpVideo(g)
-        ? '<button class="playvidtime" onclick="event.stopPropagation();seekPbpVideoTo('+e.videoSecond+')" title="Saltar el vídeo a este momento">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</button>'
-        : '<span class="playvidtime static">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</span>';
+      if(g.finished && youtubeIdFromUrl(g.videoUrl)){
+        vidBadge = '<button class="playvidtime" onclick="event.stopPropagation();openVideoOverlay(\''+g.id+'\','+e.videoSecond+')" title="Ver el vídeo desde este momento">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</button>';
+      } else {
+        vidBadge = canSeekPbpVideo(g)
+          ? '<button class="playvidtime" onclick="event.stopPropagation();seekPbpVideoTo('+e.videoSecond+')" title="Saltar el vídeo a este momento">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</button>'
+          : '<span class="playvidtime static">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</span>';
+      }
     }
     h += '<div class="playrow'+(e.side==='rival'?' rival':'')+'">'+
       '<div class="per">'+esc(g.periodLabel.charAt(0).toUpperCase())+e.period+'</div>'+
@@ -6674,16 +6684,21 @@ function youtubeIdFromUrl(url){
   return m ? m[1] : '';
 }
 var videoOverlayGameId = null;
-function openVideoOverlay(gid){ videoOverlayGameId = gid; render(); }
-function closeVideoOverlay(){ videoOverlayGameId = null; render(); }
+var videoOverlayStartSecond = 0;
+// startSecond es opcional (lo manda el botón de una jugada concreta, una vez
+// finalizado el partido, para abrir el vídeo arrancando justo en ese
+// instante en vez de desde el principio -- ver vidBadge en renderPlayByPlay).
+function openVideoOverlay(gid, startSecond){ videoOverlayGameId = gid; videoOverlayStartSecond = (startSecond!=null && startSecond>=0) ? Math.floor(startSecond) : 0; render(); }
+function closeVideoOverlay(){ videoOverlayGameId = null; videoOverlayStartSecond = 0; render(); }
 function videoOverlayHtml(){
   if(!videoOverlayGameId) return '';
   var g = getGameById(videoOverlayGameId);
   var vid = g ? youtubeIdFromUrl(g.videoUrl) : '';
   if(!g || !vid) return '';
+  var startParam = videoOverlayStartSecond>0 ? ('&start='+videoOverlayStartSecond) : '';
   return '<div class="videoveil">'+
     '<button class="videoclose" onclick="closeVideoOverlay()">'+icon('x',18)+'</button>'+
-    '<div class="videoframe"><iframe src="https://www.youtube.com/embed/'+vid+'?autoplay=1&playsinline=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>'+
+    '<div class="videoframe"><iframe src="https://www.youtube.com/embed/'+vid+'?autoplay=1&playsinline=1&rel=0'+startParam+'" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>'+
     '</div>';
 }
 var editMatchDraft = null;
