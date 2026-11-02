@@ -1054,6 +1054,19 @@ function loadState(){
 function saveState(game){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }catch(e){}
   scheduleCloudSave(game || S.current);
+  // En "Ordenador + móvil sincronizados", TODO lo que el dispositivo que anota
+  // guarda (una jugada nueva, un cambio, BORRAR o corregir una jugada, un
+  // quinteto, finalizar...) se manda también al dispositivo que solo ve el
+  // vídeo, por el mismo canal en tiempo real que ya se usaba para el segundo
+  // del vídeo -- ver broadcastGameState más abajo (función declarada después
+  // en el archivo, pero accesible aquí por el hoisting normal de funciones).
+  // saveState() es el ÚNICO sitio por el que pasan de verdad TODOS los
+  // cambios del partido, así que enganchar el aviso aquí -- en vez de en cada
+  // función suelta que toca g.events -- es la única forma de no dejarse
+  // ninguno por el camino: la primera vez solo avisé desde pushEvent() y
+  // finishGame(), y borrar una jugada (que no pasa por pushEvent) se quedaba
+  // sin avisar, exactamente el fallo que Rober encontró.
+  broadcastGameState(game || S.current);
 }
 
 var S = loadState();
@@ -2531,7 +2544,12 @@ function handleRemoteGameState(payload){
     retireFinishedRemoteGame(g);
     return;
   }
-  render();
+  // A propósito NO se llama a render() aquí -- ver la nota junto a
+  // renderSyncedVideoScreen/patchSyncedVideoDynamicAreas: machacar
+  // app.innerHTML entero en cada jugada es lo que rompía el vídeo. Si por lo
+  // que sea esta pantalla no está montada ahora mismo, sí hace falta un
+  // render normal para que los datos nuevos se vean donde corresponda.
+  if(!patchSyncedVideoDynamicAreas(g)) render();
 }
 // El partido ha terminado y nos hemos enterado por el canal (no lo hemos
 // finalizado nosotros): igual que finishGame(), pero SIN volver a subirlo a
@@ -2600,11 +2618,23 @@ function startSyncSendTicker(){
     if(el) el.textContent = fmtVideoTime(t);
   }, 1000);
 }
+// Dos zonas con id propio para poder ACTUALIZARLAS A MANO (ver
+// patchSyncedVideoDynamicAreas) sin pasar por un render() completo cuando
+// llega una jugada nueva del dispositivo que anota: el marcador/pestañas
+// (#syncTopArea) y la lista de jugadas (#syncPbpArea) cambian con cada
+// jugada, pero el vídeo (.syncvidframe/#syncPlayerMount) NO debe tocarse en
+// esas actualizaciones -- si se reinserta en el árbol, aunque sea el mismo
+// nodo (ver mountSyncedVideoPlayer), el navegador recarga el iframe de
+// YouTube desde cero. Eso es lo que causaba que el vídeo se encogiera con
+// cada jugada y que salir de pantalla completa pasara solo en cuanto
+// llegaba una jugada: un render() completo (como hacía antes
+// handleRemoteGameState) reemplaza TODO app.innerHTML, así que aunque el
+// nodo del vídeo se recupere después, ya se ha desconectado y reconectado
+// de por medio -- justo lo que un iframe no tolera bien.
 function renderSyncedVideoScreen(g){
   var vid = youtubeIdFromUrl(g.videoUrl);
   var h = '';
-  h += topbarHtml(g, {showBox:true, hideFinish:true});
-  h += tabsHtml(g);
+  h += '<div id="syncTopArea">'+topbarHtml(g, {showBox:true, hideFinish:true})+tabsHtml(g)+'</div>';
   h += '<div class="content" style="padding-top:14px">';
   h += '<div class="helpbox">Este dispositivo solo está viendo el vídeo. Para terminar el partido, hazlo desde el dispositivo donde se anota.</div>';
   if(!vid){
@@ -2615,10 +2645,26 @@ function renderSyncedVideoScreen(g){
       '<span class="connpill '+(syncConnState==='connected'?'ok':'bad')+'" style="margin-left:8px" id="syncConnPillVideo"><span class="cdot"></span>'+(syncConnState==='connected'?'Conectado':(syncConnState==='connecting'?'Conectando':'Sin conexión'))+'</span></div>';
   }
   h += syncRoleChangeLinkHtml();
-  h += '<div class="label" style="margin-top:22px">Jugadas registradas</div>';
-  h += renderPlayByPlay(g, { readOnly:true, flowing:true });
+  h += '<div id="syncPbpArea">'+syncedVideoPbpAreaHtml(g)+'</div>';
   h += '</div>';
   return h;
+}
+function syncedVideoPbpAreaHtml(g){
+  return '<div class="label" style="margin-top:22px">Jugadas registradas</div>'+
+    renderPlayByPlay(g, { readOnly:true, flowing:true });
+}
+// Actualiza SOLO el marcador/pestañas y la lista de jugadas, dejando el
+// vídeo completamente intacto (ver nota más arriba). Devuelve false si esta
+// pantalla no está montada ahora mismo (p.ej. el dispositivo navegó a otro
+// sitio mientras tanto) -- en ese caso el llamador debe hacer un render()
+// normal en su lugar.
+function patchSyncedVideoDynamicAreas(g){
+  var topEl = document.getElementById('syncTopArea');
+  var pbpEl = document.getElementById('syncPbpArea');
+  if(!topEl || !pbpEl) return false;
+  topEl.innerHTML = topbarHtml(g, {showBox:true, hideFinish:true})+tabsHtml(g);
+  pbpEl.innerHTML = syncedVideoPbpAreaHtml(g);
+  return true;
 }
 // Llamado tras cada render() cuando el rol de este dispositivo es 'video':
 // el nodo del reproductor se crea una sola vez y se reinserta en el hueco
@@ -2757,13 +2803,7 @@ function pushEvent(g, ev){
     }
   }
   g.events.push(ev);
-  saveState();
-  // En "Ordenador + móvil sincronizados", el dispositivo que anota manda su
-  // copia de las jugadas al que solo ve el vídeo por el mismo canal en tiempo
-  // real que ya se usaba para el segundo del vídeo -- antes esa copia nunca
-  // viajaba, así que el dispositivo de vídeo se quedaba congelado con lo que
-  // tenía cargado al entrar (ver broadcastGameState).
-  broadcastGameState(g);
+  saveState(); // saveState() ya avisa al dispositivo de vídeo -- ver broadcastGameState ahí dentro
 }
 function lastActionLabel(g){
   if(!g.events.length) return 'Sin jugadas registradas todavía';
@@ -4735,14 +4775,9 @@ function finishGame(){
   }
   g.finished = true;
   g.finishedAt = Date.now();
-  // Avisa YA al dispositivo que solo ve el vídeo (si lo hay) de que el partido ha
-  // terminado -- ver broadcastGameState más abajo. Sin esto, ese dispositivo se
-  // quedaba para siempre con su última copia de las jugadas (nunca se entera de
-  // que se finalizó ni de las jugadas de los últimos minutos).
-  broadcastGameState(g);
   S.games.unshift(g);
   S.current = null;
-  saveState(g);
+  saveState(g); // saveState() ya avisa al dispositivo de vídeo de que el partido ha terminado -- ver broadcastGameState ahí dentro
   go('box', {gameId: g.id});
 }
 function confirmFinishGame(){
