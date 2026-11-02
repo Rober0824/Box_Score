@@ -3216,7 +3216,17 @@ function renderPlayByPlay(g, opts){
       curP = e.period;
       items.push({ev:e});
     });
-    items.push({div:true, kind:'end', a:curP, scoreA: periodsAggregateScore(g, periods, curP)});
+    // La banda "FIN <sexto actual>" de remate SOLO tiene sentido si el partido
+    // ya ha terminado de verdad (g.finished) -- mientras se sigue anotando en
+    // directo, el sexto en curso NO ha acabado todavía, así que no debe
+    // aparecer (antes se añadía siempre, con lo que se veía "Fin sexto X" fijo
+    // arriba del todo desde la primera jugada, tapando el hueco donde deberían
+    // ir apareciendo las jugadas nuevas según se anotan). El cambio real de
+    // sexto ya lo muestra la banda 'boundary' de arriba en cuanto aparece la
+    // primera jugada del siguiente periodo -- esto es solo el remate final.
+    if(g.finished){
+      items.push({div:true, kind:'end', a:curP, scoreA: periodsAggregateScore(g, periods, curP)});
+    }
   } else {
     allEvents.forEach(function(e){ items.push({ev:e}); });
   }
