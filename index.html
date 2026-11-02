@@ -5372,7 +5372,6 @@ function renderLive(){
   h += topbarHtml(g, editingPastGameId ? {showBox:true, hideFinish:true, backAction:'exitPastGameEdit()'} : {showBox:true});
   h += tabsHtml(g);
   h += renderPlayByPlay(g);
-  h += renderGameClockWidget(g);
   // Los tiles se quedan EXACTAMENTE donde estaban (un único grid3, debajo del
   // cronómetro) para no quitarle protagonismo al play-by-play -- lo que
   // cambia con "Completas" + plantilla rival es que la casilla "Rival" ya no
