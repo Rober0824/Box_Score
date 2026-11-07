@@ -2289,6 +2289,12 @@ var LIVE_VIDEO_ROUTES = ['live','lineup','rivalLineup','stat','shotzone','assist
 function liveVideoActive(g){
   return !!(g && !g.finished && g.scoreMode==='compvideo' && youtubeIdFromUrl(g.videoUrl));
 }
+// Margen que se resta al segundo del vídeo capturado en cada jugada (ver
+// pushEvent), para compensar que quien anota siempre marca la jugada un
+// poco DESPUÉS de que suceda de verdad (primero la ve, luego toca el botón).
+// 3 segundos es un término medio razonable: suficiente para no perderse el
+// principio de la jugada, sin irse tan atrás que parezca otra jugada distinta.
+var VIDEO_SEEK_LEAD_SECONDS = 3;
 function fmtVideoTime(t){
   t = Math.max(0, Math.round(t));
   var m = Math.floor(t/60), s = t%60;
@@ -2803,12 +2809,17 @@ function pushEvent(g, ev){
   // móvil" lo toma del último dato recibido por el canal en tiempo real, si
   // es reciente -- si el ordenador se desconectó hace rato, la jugada se
   // guarda igual pero SIN segundo (ver syncDataIsFresh), en vez de bloquear.
+  // VIDEO_SEEK_LEAD_SECONDS se resta aquí: quien anota ve la jugada suceder
+  // y luego la marca, así que el segundo "en vivo" en el momento de tocar ya
+  // es un poco posterior a la jugada de verdad. Restando unos segundos de
+  // margen, cuando luego se salta el vídeo a ese momento (en directo o tras
+  // finalizar) se ve la jugada completa en vez de ya pasada.
   if(ev.type!=='lineup'){
     if(liveVideoGameId===g.id){
       var vs = currentLiveVideoSecond();
-      if(vs!=null) ev.videoSecond = vs;
+      if(vs!=null) ev.videoSecond = Math.max(0, vs - VIDEO_SEEK_LEAD_SECONDS);
     } else if(g.scoreMode==='synced' && syncChannelGameId===g.id && syncDataIsFresh()){
-      ev.videoSecond = lastSyncedSecond;
+      ev.videoSecond = Math.max(0, lastSyncedSecond - VIDEO_SEEK_LEAD_SECONDS);
     }
   }
   g.events.push(ev);
