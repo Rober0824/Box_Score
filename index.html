@@ -2967,7 +2967,14 @@ function pbpApplyRivalPoints(id, pts, gameId){
   var g = resolveEditGame(gameId);
   if(!g) return;
   var e = byId(g.events, id);
-  if(e){ e.side='rival'; e.type='rivalpts'; e.points=pts; delete e.playerId; delete e.zone; delete e.assistPlayerId; }
+  if(e){
+    e.side='rival'; e.type='rivalpts'; e.points=pts; delete e.playerId; delete e.zone; delete e.assistPlayerId;
+    // 1 punto = tiro libre, que nunca lleva "origen" (ver qualifiesForRivalOriginTag)
+    // -- si la jugada tenía marcado robo/rebote of./contraataque de cuando
+    // tenía más puntos, al bajarla a 1 hay que quitarlo para no dejar una
+    // etiqueta que ya no tiene sentido.
+    if(pts===1) delete e.origin;
+  }
   pbpEditingId = null; pbpEditRivalId = null;
   saveState(g); render();
 }
@@ -4745,7 +4752,13 @@ function openRival(){
    igual que "origen" para las jugadas del propio equipo: anotas -> aparece
    esta pregunta -> vuelves a "en directo". */
 function qualifiesForRivalOriginTag(e){
-  return !!(e && e.side==='rival' && e.points>0 && (e.type==='rivalpts' || e.type==='2m' || e.type==='3m' || e.type==='ftm'));
+  // Un tiro libre (1 punto) nunca tiene "origen" en este sentido -- viene de
+  // una falta, no de un robo/rebote ofensivo/contraataque -- así que no debe
+  // llevar esta pregunta, sea cual sea el tipo de jugada que lo registre: ni
+  // el tiro libre explícito ("ftm", desde el marcador completo) ni el
+  // marcador rápido "+1" (type 'rivalpts' con points=1, desde rivalquick).
+  // Por eso se excluye points===1 en vez de solo quitar 'ftm' de la lista.
+  return !!(e && e.side==='rival' && e.points>0 && e.points!==1 && (e.type==='rivalpts' || e.type==='2m' || e.type==='3m'));
 }
 function rivalOriginChipsHtml(e){
   var cur = e.origin || 'static';
