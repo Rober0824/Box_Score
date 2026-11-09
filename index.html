@@ -3538,12 +3538,11 @@ function renderPlayByPlay(g, opts){
     : (allEvents.length+' jugada'+(allEvents.length===1?'':'s'));
   var h = '<div class="playhead"'+headStyle+'><div class="label" style="margin-bottom:0">Jugadas del partido</div>'+
     '<div class="label" style="margin-bottom:0;color:var(--text-dim)">'+countLabel+'</div></div>';
-  if(filterable){
-    var activeCount = pbpFilterPlayers.length + pbpFilterTypes.length;
-    h += '<div class="pbpfilterrow"><button class="pbpfilterbtn'+(activeCount?' on':'')+'" onclick="togglePbpFilterPanel()">'+icon('filter',13)+'Filtrar'+
-      (activeCount ? '<span class="cnt">'+activeCount+'</span>' : '')+'</button></div>';
-    if(pbpFilterPanelOpen) h += pbpFilterPanelHtml(g);
-  }
+  // El botón "Filtrar" ahora vive arriba del todo, en la fila Equipo/
+  // Jugadores/Jugadas (ver renderBox/chrome, sustituye a "Vista" cuando se
+  // está en la pestaña Jugadas) -- aquí solo queda el panel desplegable,
+  // que se abre/cierra con ese botón de arriba (pbpFilterPanelOpen).
+  if(filterable && pbpFilterPanelOpen) h += pbpFilterPanelHtml(g);
   h += '<div class="playlist"'+listStyle+'>';
   if(!allEvents.length){
     if(showInsert) h += pbpInsertGapHtml(g, 0);
@@ -5995,6 +5994,12 @@ function renderBox(){
   var gid = S.routeParams.gameId || (S.current && S.current.id);
   var g = getGameById(gid);
   if(!g) return renderGames();
+  // Si ya estamos en la pestaña Jugadas, resetear aquí (antes de construir la
+  // cabecera) el filtro jugadora/tipo cuando se ha cambiado de partido --
+  // así el botón "Filtrar" de la fila Equipo/Jugadores/Jugadas (ver chrome
+  // más abajo) muestra ya el contador correcto en este mismo render, en vez
+  // de uno desfasado del partido anterior.
+  if(boxViewMode==='plays') resetPbpFilterIfNewGame(g.id);
   // filtro de periodo (chips de arriba): se calcula una vez y se usa tanto en
   // la vista "Equipo" como en "Jugadores", para que las dos respeten el mismo filtro.
   var boxPeriods = (g.finished && ensureBoxPeriodFilter(g.id).length) ? ensureBoxPeriodFilter(g.id) : null;
@@ -6031,7 +6036,13 @@ function renderBox(){
   if(g.finished){
     chrome += periodScoreChipsHtml(g);
   }
-  chrome += '<div class="sortrow"><div class="sortlabel">Vista</div><div class="sortright">'+
+  var pbpActiveCount = pbpFilterPlayers.length + pbpFilterTypes.length;
+  chrome += '<div class="sortrow">'+
+       (boxViewMode==='plays'
+         ? '<button class="pbpfilterbtn'+(pbpActiveCount?' on':'')+'" onclick="togglePbpFilterPanel()">'+icon('filter',13)+'Filtrar'+
+           (pbpActiveCount ? '<span class="cnt">'+pbpActiveCount+'</span>' : '')+'</button>'
+         : '<div class="sortlabel">Vista</div>')+
+       '<div class="sortright">'+
        '<div class="seg2" style="width:auto">'+
        '<button class="opt'+(boxViewMode==='team'?' on':'')+'" onclick="setBoxView(\'team\')">Equipo</button>'+
        '<button class="opt'+(boxViewMode==='players'?' on':'')+'" onclick="setBoxView(\'players\')">Jugadores</button>'+
