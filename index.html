@@ -170,6 +170,12 @@
   .pbpfilterbtn{ display:flex; align-items:center; gap:6px; padding:7px 12px; border-radius:999px; background:var(--surface); border:1px solid var(--border); color:var(--text-dim); font-size:11.5px; font-weight:800; }
   .pbpfilterbtn.on{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
   .pbpfilterbtn .cnt{ background:var(--accent-ink); color:var(--accent); border-radius:999px; min-width:16px; height:16px; padding:0 4px; font-size:9.5px; display:flex; align-items:center; justify-content:center; }
+  /* Variante solo-icono: la usa la fila Equipo/Jugadores/Jugadas (ver chrome
+     en renderBox), donde el botón "Filtrar" comparte sitio con el selector y
+     el botón de vídeo -- con texto quedaba todo apretado, así que aquí es un
+     círculo a juego con .videobtn y el contador se sale como insignia. */
+  .pbpfilterbtn.icononly{ width:38px; height:38px; padding:0; justify-content:center; flex-shrink:0; position:relative; }
+  .pbpfilterbtn.icononly .cnt{ position:absolute; top:-4px; right:-4px; }
   .pbpfilterpanel{ margin:0 18px 10px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:14px; flex-shrink:0; }
   .pbpfiltersectitle{ font-size:10px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; }
   .pbpfiltersubtitle{ font-size:10px; font-weight:700; color:var(--text-dim); margin-bottom:6px; }
@@ -6039,7 +6045,7 @@ function renderBox(){
   var pbpActiveCount = pbpFilterPlayers.length + pbpFilterTypes.length;
   chrome += '<div class="sortrow">'+
        (boxViewMode==='plays'
-         ? '<button class="pbpfilterbtn'+(pbpActiveCount?' on':'')+'" onclick="togglePbpFilterPanel()">'+icon('filter',13)+'Filtrar'+
+         ? '<button class="pbpfilterbtn icononly'+(pbpActiveCount?' on':'')+'" title="Filtrar jugadas" onclick="togglePbpFilterPanel()">'+icon('filter',16)+
            (pbpActiveCount ? '<span class="cnt">'+pbpActiveCount+'</span>' : '')+'</button>'
          : '<div class="sortlabel">Vista</div>')+
        '<div class="sortright">'+
