@@ -165,6 +165,25 @@
 
   .playhead{ display:flex; align-items:center; justify-content:space-between; padding:0 18px 8px; flex-shrink:0; }
   .playlist{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 18px 10px; display:flex; flex-direction:column; gap:7px; min-height:0; }
+  /* ---- filtro de jugadas por jugadora/tipo (ver renderPlayByPlay, opts.filterable) ---- */
+  .pbpfilterrow{ display:flex; justify-content:flex-end; padding:0 18px 8px; flex-shrink:0; }
+  .pbpfilterbtn{ display:flex; align-items:center; gap:6px; padding:7px 12px; border-radius:999px; background:var(--surface); border:1px solid var(--border); color:var(--text-dim); font-size:11.5px; font-weight:800; }
+  .pbpfilterbtn.on{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .pbpfilterbtn .cnt{ background:var(--accent-ink); color:var(--accent); border-radius:999px; min-width:16px; height:16px; padding:0 4px; font-size:9.5px; display:flex; align-items:center; justify-content:center; }
+  .pbpfilterpanel{ margin:0 18px 10px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:14px; flex-shrink:0; }
+  .pbpfiltersectitle{ font-size:10px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; }
+  .pbpfiltersubtitle{ font-size:10px; font-weight:700; color:var(--text-dim); margin-bottom:6px; }
+  .pbpfiltersubtitle.rival{ color:var(--rival); }
+  .pbpfilterscroll{ display:flex; gap:7px; overflow-x:auto; scrollbar-width:none; }
+  .pbpfilterscroll::-webkit-scrollbar{ display:none; }
+  .pbpplayerchip{ display:flex; align-items:center; gap:7px; padding:6px 11px 6px 6px; border-radius:999px; background:var(--bg); border:1px solid var(--border); color:var(--text); font-size:12px; font-weight:700; flex-shrink:0; white-space:nowrap; }
+  .pbpplayerchip.on{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .pbpplayerchip .dot{ width:24px; height:24px; border-radius:999px; background:var(--surface-2); color:var(--text); font-family:'Oswald',sans-serif; font-weight:700; font-size:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .pbpplayerchip.on .dot{ background:var(--accent-ink); color:var(--accent); }
+  .pbpfilterfoot{ display:flex; align-items:center; justify-content:space-between; padding-top:2px; }
+  .pbpfilterclear{ font-size:12px; font-weight:700; color:var(--text-dim); text-decoration:underline; }
+  .pbpfilterapply{ padding:10px 20px; border-radius:11px; background:var(--accent); color:var(--accent-ink); font-family:'Oswald',sans-serif; font-weight:700; font-size:12.5px; text-transform:uppercase; letter-spacing:0.02em; }
+  .pbpfiltersummary{ padding:0 18px 8px; font-size:11.5px; color:var(--text-dim); font-weight:600; flex-shrink:0; }
   .playrow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:9px 10px; }
   .playrow .per{ font-family:'Oswald',sans-serif; font-size:10.5px; font-weight:700; color:var(--text-dim); width:20px; text-align:center; flex-shrink:0; }
   .playrow .who{ font-weight:800; font-size:12.5px; flex-shrink:0; }
@@ -3389,6 +3408,91 @@ function pbpInsertSaveQuinteto(ascIndex, gameId){
   saveState(g);
   pbpCancelInsert();
 }
+/* ---- filtro de jugadas por jugadora y tipo de jugada (box score > Jugadas) ----
+   Multiselección en los dos grupos a la vez (p.ej. "Nº5 Lucía" + "Puntos"),
+   combinando ambos con Y: solo se ven las jugadas que cumplen los dos filtros
+   activos (dentro de cada grupo es O: cualquiera de las jugadoras marcadas).
+   Estado global, no por partido -- se resetea sola al entrar a ver las
+   jugadas de un partido DISTINTO (ver resetPbpFilterIfNewGame), para no
+   arrastrar un filtro de un partido a otro sin darse cuenta. */
+var pbpFilterPlayers = [], pbpFilterTypes = [], pbpFilterPanelOpen = false, pbpFilterGameId = null;
+function resetPbpFilterIfNewGame(gameId){
+  if(pbpFilterGameId!==gameId){ pbpFilterGameId = gameId; pbpFilterPlayers = []; pbpFilterTypes = []; pbpFilterPanelOpen = false; }
+}
+function togglePbpFilterPanel(){ pbpFilterPanelOpen = !pbpFilterPanelOpen; render(); }
+function closePbpFilterPanel(){ pbpFilterPanelOpen = false; render(); }
+function togglePbpFilterPlayer(id){
+  var i = pbpFilterPlayers.indexOf(id);
+  if(i===-1) pbpFilterPlayers.push(id); else pbpFilterPlayers.splice(i,1);
+  render();
+}
+function togglePbpFilterType(key){
+  var i = pbpFilterTypes.indexOf(key);
+  if(i===-1) pbpFilterTypes.push(key); else pbpFilterTypes.splice(i,1);
+  render();
+}
+function clearPbpFilters(){ pbpFilterPlayers = []; pbpFilterTypes = []; render(); }
+var PBP_STAT_TYPES = [
+  {key:'puntos', label:'Puntos'},
+  {key:'rebotes', label:'Rebotes'},
+  {key:'robos', label:'Robos'},
+  {key:'perdidas', label:'Pérdidas'},
+  {key:'asistencias', label:'Asistencias'},
+  {key:'tapones', label:'Tapones'},
+  {key:'faltas', label:'Faltas'}
+];
+// A qué categoría de "tipo de jugada" pertenece un evento, para el filtro --
+// el mismo vocabulario de types vale para jugadas propias Y rivales (ambos
+// bandos usan 'stl'/'to'/'ast'/'blk'/'rebO'/'rebD'/'foulC'/'foulR'), así que
+// una sola función cubre los dos casos. Un tiro libre SÍ cuenta como
+// "Puntos" aquí (a diferencia de qualifiesForRivalOriginTag, que es sobre
+// "origen de la canasta" -- una pregunta distinta de "¿cuánto ha anotado
+// esta jugadora/el rival?", que es lo que filtra esto).
+function playStatCategory(e){
+  if((e.type==='2m'||e.type==='3m'||e.type==='ftm'||e.type==='rivalpts') && e.points>0) return 'puntos';
+  if(e.type==='rebO'||e.type==='rebD') return 'rebotes';
+  if(e.type==='stl') return 'robos';
+  if(e.type==='to') return 'perdidas';
+  if(e.type==='ast') return 'asistencias';
+  if(e.type==='blk') return 'tapones';
+  if(e.type==='foulC'||e.type==='foulR') return 'faltas';
+  return null;
+}
+function pbpFilterPlayerChipHtml(p, selected, onclickJs, displayName){
+  return '<button class="pbpplayerchip'+(selected?' on':'')+'" onclick="'+onclickJs+'">'+
+    '<span class="dot">'+p.dorsal+'</span>'+esc(firstName(displayName))+'</button>';
+}
+function pbpFilterPanelHtml(g){
+  var ownRoster = g.roster.slice().sort(function(a,b){ return a.dorsal-b.dorsal; });
+  var rivalRoster = sortedRivalRoster(g);
+  var h = '<div class="pbpfilterpanel">';
+  h += '<div><div class="pbpfiltersectitle">Jugadoras</div>';
+  h += '<div class="pbpfiltersubtitle">Mi equipo</div>';
+  h += '<div class="pbpfilterscroll" style="margin-bottom:'+(rivalRoster.length?'12px':'0')+'">';
+  ownRoster.forEach(function(p){
+    h += pbpFilterPlayerChipHtml(p, pbpFilterPlayers.indexOf(p.id)!==-1, 'togglePbpFilterPlayer(\''+p.id+'\')', p.name);
+  });
+  h += '</div>';
+  if(rivalRoster.length){
+    h += '<div class="pbpfiltersubtitle rival">Plantilla rival</div>';
+    h += '<div class="pbpfilterscroll">';
+    rivalRoster.forEach(function(p){
+      h += pbpFilterPlayerChipHtml(p, pbpFilterPlayers.indexOf(p.id)!==-1, 'togglePbpFilterPlayer(\''+p.id+'\')', rivalPlayerDisplayName(p));
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  h += '<div><div class="pbpfiltersectitle">Tipo de jugada</div><div style="display:flex;flex-wrap:wrap;gap:7px">';
+  PBP_STAT_TYPES.forEach(function(t){
+    h += '<button class="chip'+(pbpFilterTypes.indexOf(t.key)!==-1?' on':'')+'" onclick="togglePbpFilterType(\''+t.key+'\')">'+t.label+'</button>';
+  });
+  h += '</div></div>';
+  h += '<div class="pbpfilterfoot">';
+  h += (pbpFilterPlayers.length+pbpFilterTypes.length) ? '<button class="pbpfilterclear" onclick="clearPbpFilters()">Limpiar filtros</button>' : '<span></span>';
+  h += '<button class="pbpfilterapply" onclick="closePbpFilterPanel()">Aplicar</button>';
+  h += '</div></div>';
+  return h;
+}
 function renderPlayByPlay(g, opts){
   opts = opts || {};
   var readOnly = !!opts.readOnly;
@@ -3403,23 +3507,47 @@ function renderPlayByPlay(g, opts){
   // renderBox) -- antes esta vista lo ignoraba por completo y siempre
   // mostraba el partido entero; ahora limita también qué jugadas se ven aquí.
   var periods = (opts.periods && opts.periods.length) ? opts.periods : null;
-  var allEvents = periods ? g.events.filter(function(e){ return periods.indexOf(e.period)!==-1; }) : g.events.slice();
+  var periodEvents = periods ? g.events.filter(function(e){ return periods.indexOf(e.period)!==-1; }) : g.events.slice();
+  // opts.filterable: solo la pestaña "Jugadas" del box score pasa esto --
+  // habilita el botón "Filtrar" (jugadora + tipo de jugada, ver
+  // pbpFilterPanelHtml) por encima del filtro de periodo de arriba. Las
+  // jugadas de quinteto (lineup) no son filtrables por jugadora/tipo -- se
+  // ocultan en cuanto hay algún filtro de este tipo activo.
+  var filterable = !!opts.filterable;
+  if(filterable) resetPbpFilterIfNewGame(g.id);
+  var hasPlayFilter = filterable && (pbpFilterPlayers.length>0 || pbpFilterTypes.length>0);
+  var allEvents = hasPlayFilter ? periodEvents.filter(function(e){
+    if(e.type==='lineup') return false;
+    var okP = !pbpFilterPlayers.length || (e.playerId && pbpFilterPlayers.indexOf(e.playerId)!==-1);
+    var cat = playStatCategory(e);
+    var okT = !pbpFilterTypes.length || (cat && pbpFilterTypes.indexOf(cat)!==-1);
+    return okP && okT;
+  }) : periodEvents;
   var rscores = runningScoreMap(g);
   // Insertar jugadas/quintetos rivales en un punto concreto solo tiene sentido
   // en un partido YA FINALIZADO y con permiso de escritura (misma condición
   // que editar/borrar jugadas, ver canEditPlays) -- en la pantalla "en
   // directo" (g no finalizado) nunca se muestra, se sigue anotando al final.
-  // Con un filtro de periodo puesto se oculta también: el índice al que
-  // habría que insertar (ascIndex, sobre el g.events SIN filtrar) queda
-  // ambiguo en cuanto hay jugadas ocultas de por medio, así que para
-  // insertar hay que quitar antes el filtro.
-  var showInsert = !readOnly && !!g.finished && !periods;
+  // Con un filtro de periodo O de jugadora/tipo puesto se oculta también: el
+  // índice al que habría que insertar (ascIndex, sobre el g.events SIN
+  // filtrar) queda ambiguo en cuanto hay jugadas ocultas de por medio, así
+  // que para insertar hay que quitar antes cualquier filtro.
+  var showInsert = !readOnly && !!g.finished && !periods && !hasPlayFilter;
+  var countLabel = hasPlayFilter
+    ? (allEvents.length+' de '+periodEvents.length+' jugada'+(periodEvents.length===1?'':'s'))
+    : (allEvents.length+' jugada'+(allEvents.length===1?'':'s'));
   var h = '<div class="playhead"'+headStyle+'><div class="label" style="margin-bottom:0">Jugadas del partido</div>'+
-    '<div class="label" style="margin-bottom:0;color:var(--text-dim)">'+allEvents.length+' jugada'+(allEvents.length===1?'':'s')+'</div></div>';
+    '<div class="label" style="margin-bottom:0;color:var(--text-dim)">'+countLabel+'</div></div>';
+  if(filterable){
+    var activeCount = pbpFilterPlayers.length + pbpFilterTypes.length;
+    h += '<div class="pbpfilterrow"><button class="pbpfilterbtn'+(activeCount?' on':'')+'" onclick="togglePbpFilterPanel()">'+icon('filter',13)+'Filtrar'+
+      (activeCount ? '<span class="cnt">'+activeCount+'</span>' : '')+'</button></div>';
+    if(pbpFilterPanelOpen) h += pbpFilterPanelHtml(g);
+  }
   h += '<div class="playlist"'+listStyle+'>';
   if(!allEvents.length){
     if(showInsert) h += pbpInsertGapHtml(g, 0);
-    h += '<div class="emptyplays">'+(periods ? 'Ninguna jugada en los periodos seleccionados' : 'Sin jugadas registradas todavía')+'</div>';
+    h += '<div class="emptyplays">'+(hasPlayFilter ? 'Ninguna jugada con los filtros seleccionados' : (periods ? 'Ninguna jugada en los periodos seleccionados' : 'Sin jugadas registradas todavía'))+'</div>';
     h += '</div>';
     return h;
   }
@@ -5919,7 +6047,7 @@ function renderBox(){
     // (uno en directo ya se edita in-situ en la pantalla "en directo") y solo si se tiene
     // permiso de escritura sobre la temporada -- ver pbpPickPlayer/editingPastGameId.
     var canEditPlays = !!(g.finished && canWriteCurrentSeason());
-    h = '<div class="boxcontent">'+chrome+'<div class="boxinner">'+renderPlayByPlay(g, {readOnly: !canEditPlays, flowing:true, periods: boxPeriods})+'</div></div>';
+    h = '<div class="boxcontent">'+chrome+'<div class="boxinner">'+renderPlayByPlay(g, {readOnly: !canEditPlays, flowing:true, periods: boxPeriods, filterable:true})+'</div></div>';
     h += '<div class="actions"><button class="abtn" onclick="exportPlaysPDF(\''+g.id+'\')">Exportar PDF</button><button class="abtn" onclick="sharePlaysByPlay(\''+g.id+'\')">Compartir</button></div>';
     return h;
   }
