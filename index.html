@@ -5255,19 +5255,39 @@ function teamAggregates(g, side, eventsOverride){
   });
   return a;
 }
+// BUG encontrado por Rober (nov-2026): sin filtro de periodo, las
+// estadísticas detalladas del rival aparecían todas a 0 aunque el marcador
+// y la vista CON filtro sí las mostraban bien. Causa real: en modo
+// "Completas" cada jugada rival se guarda DOS veces -- como evento normal en
+// g.events (de donde ya se recalculaba todo correctamente en cuanto había
+// un filtro de periodo de por medio) Y, por separado, incrementando a mano
+// un contador plano g.rivalAgg (pensado solo para el partido completo). Ese
+// contador plano es el que se desincroniza con los eventos reales -- por
+// ejemplo, en "Ordenador + móvil sincronizados" el dispositivo que ve el
+// vídeo recibe por el canal en tiempo real las jugadas (g.events) pero
+// nunca g.rivalAgg (ver broadcastGameState), así que si ese dispositivo
+// llega a quedarse con la copia del partido, sus eventos son correctos pero
+// su contador plano se queda a 0. La jugada en sí nunca se pierde -- solo
+// el resumen plano que dependía de él.
+// Arreglo: dejar de confiar en g.rivalAgg salvo para partidos ANTIGUOS que
+// de verdad no tengan ninguna jugada rival detallada por evento (de antes de
+// que existiera este desglose) -- siempre que haya al menos una jugada
+// rival con tipo real (no el genérico 'rivalpts' de "Solo marcador"), se
+// recalcula a partir de g.events, la única fuente que nunca se desincroniza.
 function rivalAggAsTeamShape(g, periods){
-  if(!periods || !periods.length){
-    var r = g.rivalAgg;
-    return {fgM:r.twoM+r.threeM, fgA:r.twoA+r.threeA, p3M:r.threeM, p3A:r.threeA, ftM:r.ftM, ftA:r.ftA,
-      rebO:r.rebO, rebD:r.rebD, ast:r.ast, blk:r.blk, stl:r.stl, to:r.to, foulC:r.foulC};
+  var pool = (periods && periods.length)
+    ? g.events.filter(function(e){ return e.side==='rival' && periods.indexOf(e.period)!==-1; })
+    : g.events.filter(function(e){ return e.side==='rival'; });
+  var hasDetailedEvents = pool.some(function(e){ return e.type!=='rivalpts'; });
+  if(hasDetailedEvents || (periods && periods.length)){
+    return teamAggregates(g, 'rival', pool);
   }
-  // Con un filtro de periodo activo, g.rivalAgg no sirve -- es un total plano
-  // de TODO el partido, sin desglose por periodo. En modo "Completas" cada
-  // jugada rival también se guarda como evento normal (con su periodo, ver
-  // recordRivalFull), así que para respetar el filtro se recalcula a partir
-  // de esos eventos en vez de usar ese total.
-  var filtered = g.events.filter(function(e){ return e.side==='rival' && periods.indexOf(e.period)!==-1; });
-  return teamAggregates(g, 'rival', filtered);
+  // Red de seguridad SOLO para partidos sin ninguna jugada rival detallada
+  // por evento (temporadas anteriores a este desglose): se sigue usando el
+  // contador plano, igual que siempre.
+  var r = g.rivalAgg;
+  return {fgM:r.twoM+r.threeM, fgA:r.twoA+r.threeA, p3M:r.threeM, p3A:r.threeA, ftM:r.ftM, ftA:r.ftA,
+    rebO:r.rebO, rebD:r.rebD, ast:r.ast, blk:r.blk, stl:r.stl, to:r.to, foulC:r.foulC};
 }
 function pct(m,a){ return a>0 ? (m/a*100).toFixed(1) : '0.0'; }
 function firstWord(s){ return (s||'').split(' ')[0]; }
