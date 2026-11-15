@@ -2943,6 +2943,18 @@ function playOriginTagsText(e, g){
   return tags.join(', ');
 }
 var pbpEditingId = null, pbpConfirmingId = null, pbpEditRivalId = null;
+// Id de la jugada cuyo lápiz/papelera están visibles ahora mismo (se tocan
+// tanto espacio junto al marcador/tiempo/nombre que, a partir de Rober,
+// pedido por él: se ocultan por defecto y solo aparecen al tocar la jugada
+// una vez -- igual que ya se ocultan del todo para quien no tiene permiso de
+// escritura, ver readOnly). Tocar la misma jugada otra vez, u otra distinta,
+// cierra esto (y cualquier panel de editar/borrar que tuviera abierto).
+var pbpRevealedId = null;
+function pbpToggleReveal(id){
+  pbpRevealedId = (pbpRevealedId===id) ? null : id;
+  pbpEditingId = null; pbpConfirmingId = null; pbpEditRivalId = null;
+  render();
+}
 // id de un partido ya FINALIZADO (en S.games) cuyo play-by-play se está reeditando desde
 // la pestaña "Jugadas" del box score, reutilizando las mismas pantallas de anotar en
 // directo (stat/shotzone/assist/origin) -- ver pbpPickPlayer y exitPastGameEdit.
@@ -3625,7 +3637,15 @@ function renderPlayByPlay(g, opts){
           : '<span class="playvidtime static">'+icon('play',9)+' '+fmtVideoTime(e.videoSecond)+'</span>';
       }
     }
-    h += '<div class="playrow'+(e.side==='rival'?' rival':'')+'">'+
+    // Lápiz/papelera ocultos por defecto -- solo aparecen al tocar la
+    // jugada una vez (pbpToggleReveal), para dejarle sitio al resto de la
+    // fila (pedido por Rober al notar que, con el futuro tirador de
+    // arrastre -- solo visible para el admin -- ya no cabía todo). El
+    // onclick va en la fila entera, no en un botón nuevo, así no hace falta
+    // tocar un sitio concreto; los botones/badges que SÍ hacen algo propio
+    // (vídeo, lápiz, papelera) cortan la propagación para no abrir/cerrar
+    // esto sin querer de paso.
+    h += '<div class="playrow'+(e.side==='rival'?' rival':'')+'"'+(!readOnly?' onclick="pbpToggleReveal(\''+e.id+'\')"':'')+'>'+
       '<div class="per">'+esc(g.periodLabel.charAt(0).toUpperCase())+e.period+'</div>'+
       '<div class="who">'+esc(d.who)+'</div>'+
       '<div class="what">'+esc(d.label)+'</div>'+
@@ -3633,13 +3653,19 @@ function renderPlayByPlay(g, opts){
       (d.deltaLabel ? '<div class="delta '+d.deltaCls+'">'+d.deltaLabel+'</div>' : '')+
       (rscores[e.id] ? '<div class="playscore">('+rscores[e.id]+')</div>' : '')+
       playOriginTagsHtml(e, g);
-    if(!readOnly){
-      h += '<button class="playbtn" onclick="pbpToggleEdit(\''+e.id+'\')">'+icon('pencil',14)+'</button>'+
-        '<button class="playbtn" onclick="pbpAskDelete(\''+e.id+'\')">'+icon('trash',14)+'</button>';
+    if(!readOnly && pbpRevealedId===e.id){
+      h += '<button class="playbtn" onclick="event.stopPropagation();pbpToggleEdit(\''+e.id+'\')">'+icon('pencil',14)+'</button>'+
+        '<button class="playbtn" onclick="event.stopPropagation();pbpAskDelete(\''+e.id+'\')">'+icon('trash',14)+'</button>';
     }
+    // event.stopPropagation() en estos dos paneles (editar/confirmar borrado):
+    // viven DENTRO de la propia fila, que ahora tiene su propio onclick para
+    // mostrar/ocultar el lápiz y la papelera (ver pbpToggleReveal arriba) --
+    // sin cortar la propagación aquí, cualquier toque dentro del panel
+    // (elegir jugadora, cancelar, confirmar...) burbujearía hasta la fila y
+    // la cerraría de golpe a la vez.
     if(!readOnly && pbpEditingId===e.id){
       if(pbpEditRivalId===e.id){
-        h += '<div class="editpanel"><div class="editlabel">¿Cuántos puntos ha anotado el rival?</div>'+
+        h += '<div class="editpanel" onclick="event.stopPropagation()"><div class="editlabel">¿Cuántos puntos ha anotado el rival?</div>'+
           '<div class="editchip back" onclick="pbpBackToPlayers()">'+icon('back',12)+' Jugadoras</div>';
         [1,2,3].forEach(function(v){
           h += '<div class="editchip'+(e.type==='rivalpts'&&e.points===v?' sel':'')+'" onclick="pbpApplyRivalPoints(\''+e.id+'\','+v+',\''+g.id+'\')">+'+v+'</div>';
@@ -3647,7 +3673,7 @@ function renderPlayByPlay(g, opts){
         h += '</div>';
       } else {
         var snapshotPlayers = (e.onCourtSnapshot||[]).map(function(id2){return byId(g.roster,id2);}).filter(Boolean).sort(function(a,b){return a.dorsal-b.dorsal;});
-        h += '<div class="editpanel"><div class="editlabel">¿Quién hizo esta jugada? Elige para volver a marcar la acción entera</div>';
+        h += '<div class="editpanel" onclick="event.stopPropagation()"><div class="editlabel">¿Quién hizo esta jugada? Elige para volver a marcar la acción entera</div>';
         snapshotPlayers.forEach(function(p){
           var isCur = (e.side!=='rival' && e.playerId===p.id);
           h += '<div class="editchip'+(isCur?' sel':'')+'" onclick="pbpPickPlayer(\''+e.id+'\',\''+p.id+'\',\''+g.id+'\')">Nº'+p.dorsal+' '+esc(firstName(p.name))+'</div>';
@@ -3657,7 +3683,7 @@ function renderPlayByPlay(g, opts){
       }
     }
     if(!readOnly && pbpConfirmingId===e.id){
-      h += '<div class="delconfirm"><div class="msg">¿Borrar esta jugada?</div>'+
+      h += '<div class="delconfirm" onclick="event.stopPropagation()"><div class="msg">¿Borrar esta jugada?</div>'+
         '<button class="no" onclick="pbpCancelDelete()">Cancelar</button>'+
         '<button class="yes" onclick="pbpConfirmDelete(\''+e.id+'\',\''+g.id+'\')">Borrar</button></div>';
     }
