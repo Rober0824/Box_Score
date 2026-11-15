@@ -164,7 +164,7 @@
   .feedbar .v b{ color:var(--accent); }
 
   .playhead{ display:flex; align-items:center; justify-content:space-between; padding:0 18px 8px; flex-shrink:0; }
-  .playlist{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 18px 10px; display:flex; flex-direction:column; gap:7px; min-height:0; }
+  .playlist{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 18px 10px; display:flex; flex-direction:column; gap:7px; min-height:0; position:relative; }
   /* ---- filtro de jugadas por jugadora/tipo (ver renderPlayByPlay, opts.filterable) ---- */
   .pbpfilterrow{ display:flex; justify-content:flex-end; padding:0 18px 8px; flex-shrink:0; }
   .pbpfilterbtn{ display:flex; align-items:center; gap:6px; padding:7px 12px; border-radius:999px; background:var(--surface); border:1px solid var(--border); color:var(--text-dim); font-size:11.5px; font-weight:800; }
@@ -190,7 +190,13 @@
   .pbpfilterclear{ font-size:12px; font-weight:700; color:var(--text-dim); text-decoration:underline; }
   .pbpfilterapply{ padding:10px 20px; border-radius:11px; background:var(--accent); color:var(--accent-ink); font-family:'Oswald',sans-serif; font-weight:700; font-size:12.5px; text-transform:uppercase; letter-spacing:0.02em; }
   .pbpfiltersummary{ padding:0 18px 8px; font-size:11.5px; color:var(--text-dim); font-weight:600; flex-shrink:0; }
-  .playrow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:9px 10px; }
+  .playrow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:9px 10px; touch-action:pan-y; }
+  /* ---- mover una jugada arrastrando (ver renderPlayByPlay/pbpStartDrag) ---- */
+  .playrow.reorderable{ padding-left:6px; }
+  .pbpdraghandle{ width:26px; height:34px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:var(--text-dim); touch-action:none; cursor:grab; }
+  .pbpdraghandle svg{ display:block; }
+  .playrow.pbpdragging{ position:relative; z-index:5; box-shadow:0 10px 24px -8px rgba(0,0,0,0.6); border-color:var(--accent); background:var(--surface-2); transition:none !important; }
+  .playrow.pbpdragging .pbpdraghandle{ color:var(--accent); }
   .playrow .per{ font-family:'Oswald',sans-serif; font-size:10.5px; font-weight:700; color:var(--text-dim); width:20px; text-align:center; flex-shrink:0; }
   .playrow .who{ font-weight:800; font-size:12.5px; flex-shrink:0; }
   .playrow .what{ flex:1; min-width:0; font-size:12.5px; color:var(--text-dim); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -3156,6 +3162,165 @@ function insertEventAt(g, idx, ev){
   ev.rivalOnCourtSnapshot = rivalOnCourtBeforeInsertIndex(g, idx);
   g.events.splice(idx, 0, ev);
 }
+// Mover una jugada YA EXISTENTE a otra posición de la lista (arrastrar y
+// soltar, ver pbpStartDrag/pbpOnDragEnd más abajo): se saca de su sitio
+// actual y se vuelve a colocar justo donde se ha soltado, recalculando su
+// periodo y sus quintetos (propio/rival) EXACTAMENTE igual que si se
+// insertara de nuevo ahí (las mismas tres funciones de arriba que usa
+// insertEventAt) -- el resto (marcador, +/- de cada jugadora, estadísticas
+// del equipo/rival...) sale solo porque siempre se calculan a partir del
+// ORDEN de g.events, nunca se guardan ni se recalculan aparte.
+// Se da uno de los dos (nunca ambos): beforeId = debe quedar justo antes de
+// esa jugada; afterId = debe quedar justo después. Mutador puro: no guarda
+// ni redibuja, eso lo hace quien llame (ver pbpOnDragEnd).
+function moveEventTo(g, movedId, beforeId, afterId){
+  var fromIdx = g.events.findIndex(function(e){ return e.id===movedId; });
+  if(fromIdx===-1) return false;
+  var ev = g.events.splice(fromIdx, 1)[0];
+  var insertIdx;
+  if(afterId){
+    var ai = g.events.findIndex(function(e){ return e.id===afterId; });
+    insertIdx = (ai===-1) ? g.events.length : ai+1;
+  } else if(beforeId){
+    var bi = g.events.findIndex(function(e){ return e.id===beforeId; });
+    insertIdx = (bi===-1) ? g.events.length : bi;
+  } else {
+    insertIdx = g.events.length;
+  }
+  ev.period = periodForInsertIndex(g, insertIdx);
+  ev.onCourtSnapshot = onCourtBeforeInsertIndex(g, insertIdx);
+  ev.rivalOnCourtSnapshot = rivalOnCourtBeforeInsertIndex(g, insertIdx);
+  g.events.splice(insertIdx, 0, ev);
+  return true;
+}
+/* ---- arrastrar una jugada para moverla (ver renderPlayByPlay, el tirador de
+   6 puntitos "pbpdraghandle"): mismo algoritmo probado en el mockup que vio
+   Rober (mockup_mover_jugada.html), adaptado a las filas reales. Solo se
+   muestra/activa en las mismas condiciones que el hueco de insertar
+   (showInsert: partido finalizado, con permiso de escritura y sin ningún
+   filtro de periodo/jugadora/tipo puesto -- con un filtro activo el índice
+   real dentro de g.events queda ambiguo). Pointer Events + FLIP para que las
+   demás filas se deslicen suavemente al hacer sitio. */
+var pbpDragState = null;
+function pbpStartDrag(e, id, gameId){
+  e.preventDefault();
+  var handle = e.currentTarget;
+  var row = handle.closest('.playrow');
+  var list = row && row.closest('.playlist');
+  if(!row || !list) return;
+  var rows = Array.prototype.slice.call(list.querySelectorAll('.playrow[data-pbpid]'));
+  // Orden DESCENDENTE (como se ve en pantalla, más reciente primero) de solo
+  // las jugadas que se pueden arrastrar -- quintetos y bandas de periodo no
+  // entran aquí, no tienen tirador. Se usa para detectar intercambios en
+  // vivo y, al soltar, para saber entre qué dos jugadas ha quedado la que se
+  // ha movido (ver pbpOnDragEnd).
+  var order = rows.map(function(r){ return r.dataset.pbpid; });
+  row.classList.add('pbpdragging');
+  pbpDragState = { row:row, list:list, gameId:gameId, movedId:id, startY:e.clientY, order:order, startOrder:order.slice() };
+  if(row.setPointerCapture){ try{ row.setPointerCapture(e.pointerId); }catch(err){} }
+  document.onpointermove = pbpOnDragMove;
+  document.onpointerup = pbpOnDragEnd;
+}
+// BUG encontrado por Rober probando el mockup: al arrastrar, en cuanto se
+// intercambiaba con una vecina, la fila arrastrada "saltaba" sola hasta el
+// final (o el principio) de la lista. Causa real: al mover la fila de sitio
+// en el DOM (insertBefore), su posición NATURAL cambia, pero se seguía
+// aplicando el mismo translateY calculado desde donde EMPEZÓ el arrastre --
+// eso daba un salto de golpe que cruzaba el punto medio de la SIGUIENTE
+// vecina de inmediato y encadenaba un intercambio detrás de otro sin que el
+// dedo se moviera apenas. Arreglo (ya probado y confirmado por Rober en el
+// mockup): cada vez que se intercambia, se recalcula también el offset (y
+// el punto de referencia startY) de la fila arrastrada para que, en ese
+// instante, su posición visual no cambie ni un pixel.
+function pbpOnDragMove(e){
+  if(!pbpDragState) return;
+  var st = pbpDragState, row = st.row, list = st.list;
+  row.style.transition = 'none';
+  row.style.transform = 'translateY('+(e.clientY - st.startY)+'px)';
+
+  // puede hacer falta más de un intercambio por cada movimiento del dedo
+  // (arrastre rápido) -- se repite mientras siga cruzando el punto medio de
+  // alguna vecina, con un tope de seguridad.
+  for(var guard=0; guard<20; guard++){
+    var rowsNow = Array.prototype.slice.call(list.querySelectorAll('.playrow[data-pbpid]'));
+    var idx = rowsNow.indexOf(row);
+    var rect = row.getBoundingClientRect();
+    var centerY = rect.top + rect.height/2;
+    var swapped = false;
+
+    for(var di=0; di<2; di++){
+      var dir = di===0 ? -1 : 1;
+      var sib = rowsNow[idx+dir];
+      if(!sib || sib===row) continue;
+      var sr = sib.getBoundingClientRect();
+      var sibCenter = sr.top + sr.height/2;
+      var crossed = dir===-1 ? centerY < sibCenter : centerY > sibCenter;
+      if(!crossed) continue;
+
+      var id = row.dataset.pbpid, sibId = sib.dataset.pbpid;
+      var oi = st.order.indexOf(id), oj = st.order.indexOf(sibId);
+      st.order[oi]=sibId; st.order[oj]=id;
+
+      var rowVisualBefore = row.getBoundingClientRect();
+      var sibVisualBefore = sib.getBoundingClientRect();
+
+      if(dir===-1) list.insertBefore(row, sib); else list.insertBefore(row, sib.nextSibling);
+
+      // vecina: FLIP normal (no está siendo arrastrada, no tiene transform propio)
+      var sibNatural = sib.getBoundingClientRect();
+      var sibDiff = sibVisualBefore.top - sibNatural.top;
+      sib.style.transition = 'none';
+      sib.style.transform = 'translateY('+sibDiff+'px)';
+      (function(sibEl){
+        requestAnimationFrame(function(){ sibEl.style.transition='transform .18s'; sibEl.style.transform=''; });
+      })(sib);
+
+      // fila arrastrada: recalcular su offset para que SIGA en el mismo
+      // sitio visual de antes, y ajustar startY para que los próximos
+      // movimientos del dedo partan de ahí -- así no vuelve a saltar.
+      row.style.transition = 'none';
+      row.style.transform = 'none';
+      var rowNatural = row.getBoundingClientRect();
+      var newDy = rowVisualBefore.top - rowNatural.top;
+      row.style.transform = 'translateY('+newDy+'px)';
+      st.startY = e.clientY - newDy;
+
+      swapped = true;
+      break;
+    }
+    if(!swapped) break;
+  }
+}
+function pbpOnDragEnd(e){
+  if(!pbpDragState) return;
+  var st = pbpDragState;
+  var row = st.row;
+  row.classList.remove('pbpdragging');
+  row.style.transform = '';
+  row.style.transition = '';
+  document.onpointermove = null;
+  document.onpointerup = null;
+  pbpDragState = null;
+
+  var changed = st.order.join(',') !== st.startOrder.join(',');
+  if(changed){
+    var g = resolveEditGame(st.gameId);
+    if(g){
+      // st.order está en orden DESCENDENTE (como se ve en pantalla, más
+      // reciente primero) -- se voltea para encontrar los vecinos
+      // cronológicos reales de la jugada movida y colocarla en g.events
+      // justo ahí (ver moveEventTo).
+      var asc = st.order.slice().reverse();
+      var i = asc.indexOf(st.movedId);
+      var beforeId = (i>=0 && i<asc.length-1) ? asc[i+1] : null;
+      var afterId = (i>0) ? asc[i-1] : null;
+      if(moveEventTo(g, st.movedId, beforeId, afterId)){
+        saveState(g);
+      }
+    }
+  }
+  render();
+}
 // Espejo de recordRivalFull(): g.rivalAgg es un contador aparte (no se
 // calcula a partir de g.events), así que al insertar una jugada rival real
 // ("Completas") hay que incrementarlo a mano igual que si se hubiera
@@ -3645,7 +3810,20 @@ function renderPlayByPlay(g, opts){
     // tocar un sitio concreto; los botones/badges que SÍ hacen algo propio
     // (vídeo, lápiz, papelera) cortan la propagación para no abrir/cerrar
     // esto sin querer de paso.
-    h += '<div class="playrow'+(e.side==='rival'?' rival':'')+'"'+(!readOnly?' onclick="pbpToggleReveal(\''+e.id+'\')"':'')+'>'+
+    // Tirador de arrastre (6 puntitos) para mover la jugada de sitio --
+    // mismas condiciones que el hueco de insertar (showInsert: partido
+    // finalizado, con permiso de escritura y sin filtro de periodo ni de
+    // jugadora/tipo puesto, ver más arriba) porque necesita exactamente lo
+    // mismo: un índice sin ambigüedad dentro de g.events. Solo lo ve quien
+    // puede editar (el administrador), pedido así por Rober.
+    var dragHandleHtml = showInsert
+      ? '<button type="button" class="pbpdraghandle" title="Mantener pulsado y arrastrar para mover esta jugada" '+
+        'onpointerdown="event.stopPropagation();pbpStartDrag(event,\''+e.id+'\',\''+g.id+'\')" onclick="event.stopPropagation()">'+
+        '<svg width="14" height="18" viewBox="0 0 14 18" fill="none"><circle cx="4" cy="3" r="1.6" fill="currentColor"/><circle cx="10" cy="3" r="1.6" fill="currentColor"/><circle cx="4" cy="9" r="1.6" fill="currentColor"/><circle cx="10" cy="9" r="1.6" fill="currentColor"/><circle cx="4" cy="15" r="1.6" fill="currentColor"/><circle cx="10" cy="15" r="1.6" fill="currentColor"/></svg>'+
+        '</button>'
+      : '';
+    h += '<div class="playrow'+(e.side==='rival'?' rival':'')+(showInsert?' reorderable':'')+'" data-pbpid="'+e.id+'"'+(!readOnly?' onclick="pbpToggleReveal(\''+e.id+'\')"':'')+'>'+
+      dragHandleHtml+
       '<div class="per">'+esc(g.periodLabel.charAt(0).toUpperCase())+e.period+'</div>'+
       '<div class="who">'+esc(d.who)+'</div>'+
       '<div class="what">'+esc(d.label)+'</div>'+
