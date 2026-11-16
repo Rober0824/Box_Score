@@ -6344,7 +6344,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
     return out + renderRivalPlayersTable(g, periods);
   }
 
-  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
+  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FC','FR','EFF','+/-','PTS'];
   var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
@@ -6372,6 +6372,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
     h += '<td class="numcell">'+st.blk+'</td>';
     h += '<td class="numcell">'+st.to+'</td>';
     h += '<td class="numcell">'+st.foulC+'</td>';
+    h += '<td class="numcell">'+st.foulR+'</td>';
     h += '<td class="numcell">'+r.eff+'</td>';
     h += '<td class="numcell pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td>';
     h += '<td class="ptscell">'+st.pts+'</td>';
@@ -6379,11 +6380,11 @@ function renderPlayersTable(g, rows, teamTotal, periods){
   });
 
   // team totals row
-  var tot = {min:0,fg2m:0,fg2a:0,fg3m:0,fg3a:0,ftm:0,fta:0,rebO:0,rebD:0,ast:0,stl:0,blk:0,to:0,foulC:0,eff:0,pts:0};
+  var tot = {min:0,fg2m:0,fg2a:0,fg3m:0,fg3a:0,ftm:0,fta:0,rebO:0,rebD:0,ast:0,stl:0,blk:0,to:0,foulC:0,foulR:0,eff:0,pts:0};
   rows.forEach(function(r){
     tot.min+=r.min; tot.fg2m+=r.st.fg2m; tot.fg2a+=r.st.fg2a; tot.fg3m+=r.st.fg3m; tot.fg3a+=r.st.fg3a;
     tot.ftm+=r.st.ftm; tot.fta+=r.st.fta; tot.rebO+=r.st.rebO; tot.rebD+=r.st.rebD; tot.ast+=r.st.ast;
-    tot.stl+=r.st.stl; tot.blk+=r.st.blk; tot.to+=r.st.to; tot.foulC+=r.st.foulC; tot.eff+=r.eff; tot.pts+=r.st.pts;
+    tot.stl+=r.st.stl; tot.blk+=r.st.blk; tot.to+=r.st.to; tot.foulC+=r.st.foulC; tot.foulR+=r.st.foulR; tot.eff+=r.eff; tot.pts+=r.st.pts;
   });
   h += '<tr class="totalrow">'+
     '<td class="stickycol">Total</td>'+
@@ -6393,7 +6394,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
     '<td>'+fg(tot.fg3m,tot.fg3a)+'</td>'+
     '<td>'+fg(tot.ftm,tot.fta)+'</td>'+
     '<td>'+tot.rebO+'</td><td>'+tot.rebD+'</td><td>'+(tot.rebO+tot.rebD)+'</td>'+
-    '<td>'+tot.ast+'</td><td>'+tot.stl+'</td><td>'+tot.blk+'</td><td>'+tot.to+'</td><td>'+tot.foulC+'</td>'+
+    '<td>'+tot.ast+'</td><td>'+tot.stl+'</td><td>'+tot.blk+'</td><td>'+tot.to+'</td><td>'+tot.foulC+'</td><td>'+tot.foulR+'</td>'+
     '<td>'+tot.eff+'</td><td>—</td><td>'+tot.pts+'</td>'+
     '</tr>';
 
@@ -6416,12 +6417,12 @@ function renderPlayersTable(g, rows, teamTotal, periods){
         '<td>'+fg(a.p3M,a.p3A)+'</td>'+
         '<td>'+fg(a.ftM,a.ftA)+'</td>'+
         '<td>'+a.rebO+'</td><td>'+a.rebD+'</td><td>'+(a.rebO+a.rebD)+'</td>'+
-        '<td>'+a.ast+'</td><td>'+a.stl+'</td><td>'+a.blk+'</td><td>'+a.to+'</td><td>'+a.foulC+'</td>'+
+        '<td>'+a.ast+'</td><td>'+a.stl+'</td><td>'+a.blk+'</td><td>'+a.to+'</td><td>'+a.foulC+'</td><td>—</td>'+
         '<td>'+effFromTeamShape(a)+'</td><td>—</td><td>'+rivalPts+'</td>'+
         '</tr>';
     } else {
       h += '<tr class="rivalrow"><td class="stickycol">'+esc(g.rivalName||'Rival')+'</td>'+
-        '<td colspan="15" style="text-align:left;color:var(--text-dim);font-weight:600">Solo marcador registrado</td>'+
+        '<td colspan="16" style="text-align:left;color:var(--text-dim);font-weight:600">Solo marcador registrado</td>'+
         '<td>'+rivalScore(g)+'</td></tr>';
     }
   }
@@ -6508,7 +6509,7 @@ function renderMatchPlayerStatLine(st, effVal){
   h += row(st.rebO, 'Rebotes ofensivos');
   h += row(st.rebD, 'Rebotes defensivos');
   h += '<div class="teamstat-divider"></div>';
-  h += row(st.ast,'Asistencias'); h += row(st.stl,'Balones robados'); h += row(st.blk,'Bloqueos'); h += row(st.to,'Balones perdidos'); h += row(st.foulC,'Faltas personales'); h += row(effVal,'Eficiencia (EFF)');
+  h += row(st.ast,'Asistencias'); h += row(st.stl,'Balones robados'); h += row(st.blk,'Bloqueos'); h += row(st.to,'Balones perdidos'); h += row(st.foulC,'Faltas personales'); h += row(st.foulR,'Faltas recibidas'); h += row(effVal,'Eficiencia (EFF)');
   h += '</div>';
   return h;
 }
