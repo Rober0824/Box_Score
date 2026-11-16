@@ -2128,11 +2128,16 @@ function rivalPlayerStats(g, rivalPlayerId, periods){
   });
   return st;
 }
+// Fórmula de "Valoración" (la misma que usan ACB/Euroliga y FEB -- distinta del
+// EFF de la NBA, que nunca incluye faltas): suma 1 por cada falta recibida y
+// resta 1 por cada falta cometida, además de lo de siempre. ||0 por si el
+// objeto de estadísticas que llega no trae esos dos campos (p.ej. algún
+// agregado antiguo) -- así nunca rompe, simplemente no suma/resta nada.
 function eff(st){
   var made = st.fg2m+st.fg3m+st.ftm;
   var attempted = st.fg2a+st.fg3a+st.fta;
   var missed = attempted-made;
-  return (st.pts+st.rebO+st.rebD+st.ast+st.stl+st.blk) - (missed+st.to);
+  return (st.pts+st.rebO+st.rebD+st.ast+st.stl+st.blk+(st.foulR||0)) - (missed+st.to+(st.foulC||0));
 }
 // Misma fórmula que eff(), pero a partir de la forma "de equipo" que devuelve
 // teamAggregates/rivalAggAsTeamShape (fgM/fgA/p3M/p3A en vez de fg2m/fg2a por
@@ -2142,11 +2147,11 @@ function effFromTeamShape(t){
   var fg2m = t.fgM - t.p3M, fg2a = t.fgA - t.p3A;
   var pts = fg2m*2 + t.p3M*3 + t.ftM;
   return eff({fg2m:fg2m, fg2a:fg2a, fg3m:t.p3M, fg3a:t.p3A, ftm:t.ftM, fta:t.ftA, pts:pts,
-    rebO:t.rebO, rebD:t.rebD, ast:t.ast, stl:t.stl, blk:t.blk, to:t.to});
+    rebO:t.rebO, rebD:t.rebD, ast:t.ast, stl:t.stl, blk:t.blk, to:t.to, foulC:t.foulC, foulR:t.foulR});
 }
 // MVP del partido: entre las jugadoras que llegaron a jugar algún minuto (las
-// que se quedaron en el banco todo el partido no entran, o empatarían a 0 EFF
-// con quien sí jugó poco), la de mejor Eficiencia (EFF) de todo el partido
+// que se quedaron en el banco todo el partido no entran, o empatarían a 0 VAL
+// con quien sí jugó poco), la de mejor Valoración (VAL) de todo el partido
 // (siempre estadísticas completas del partido, nunca filtradas por periodo).
 function gameMvp(g){
   if(!g.roster || !g.roster.length) return null;
@@ -5437,7 +5442,7 @@ function evoChartCardHtml(g, periods){
 
 /* ---------- team-level aggregates (for the "Equipo" box score view) ---------- */
 function teamAggregates(g, side, eventsOverride){
-  var a = {fgM:0,fgA:0,p3M:0,p3A:0,ftM:0,ftA:0,rebO:0,rebD:0,ast:0,blk:0,stl:0,to:0,foulC:0};
+  var a = {fgM:0,fgA:0,p3M:0,p3A:0,ftM:0,ftA:0,rebO:0,rebD:0,ast:0,blk:0,stl:0,to:0,foulC:0,foulR:0};
   (eventsOverride || g.events).forEach(function(e){
     if(e.side!==side) return;
     switch(e.type){
@@ -5454,6 +5459,7 @@ function teamAggregates(g, side, eventsOverride){
       case 'stl': a.stl++; break;
       case 'to': a.to++; break;
       case 'foulC': a.foulC++; break;
+      case 'foulR': a.foulR++; break;
     }
     if(side==='team' && e.assistPlayerId) a.ast++;
   });
@@ -5491,7 +5497,7 @@ function rivalAggAsTeamShape(g, periods){
   // contador plano, igual que siempre.
   var r = g.rivalAgg;
   return {fgM:r.twoM+r.threeM, fgA:r.twoA+r.threeA, p3M:r.threeM, p3A:r.threeA, ftM:r.ftM, ftA:r.ftA,
-    rebO:r.rebO, rebD:r.rebD, ast:r.ast, blk:r.blk, stl:r.stl, to:r.to, foulC:r.foulC};
+    rebO:r.rebO, rebD:r.rebD, ast:r.ast, blk:r.blk, stl:r.stl, to:r.to, foulC:r.foulC, foulR:r.foulR||0};
 }
 function pct(m,a){ return a>0 ? (m/a*100).toFixed(1) : '0.0'; }
 function firstWord(s){ return (s||'').split(' ')[0]; }
@@ -6315,7 +6321,7 @@ function renderBox(){
         '<div style="min-width:0;flex:1">'+
         '<div class="mb-k">'+icon('star',10)+'MVP del partido</div>'+
         '<div class="mb-name">'+esc(boxMvp.p.name)+'</div>'+
-        '<div class="mb-stats">'+boxMvp.st.pts+' PTS · '+(boxMvp.st.rebO+boxMvp.st.rebD)+' REB · '+boxMvp.st.ast+' AST · '+boxMvp.eff+' EFF</div>'+
+        '<div class="mb-stats">'+boxMvp.st.pts+' PTS · '+(boxMvp.st.rebO+boxMvp.st.rebD)+' REB · '+boxMvp.st.ast+' AST · '+boxMvp.eff+' VAL</div>'+
         '</div></div>';
     }
   }
@@ -6344,7 +6350,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
     return out + renderRivalPlayersTable(g, periods);
   }
 
-  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FC','FR','EFF','+/-','PTS'];
+  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FC','FR','VAL','+/-','PTS'];
   var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
@@ -6437,7 +6443,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
    del total del equipo rival y se añade como fila "Total" al final. */
 function renderRivalPlayersTable(g, periods){
   var roster = sortedRivalRoster(g);
-  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
+  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','VAL','+/-','PTS'];
   var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora rival</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
@@ -6509,7 +6515,7 @@ function renderMatchPlayerStatLine(st, effVal){
   h += row(st.rebO, 'Rebotes ofensivos');
   h += row(st.rebD, 'Rebotes defensivos');
   h += '<div class="teamstat-divider"></div>';
-  h += row(st.ast,'Asistencias'); h += row(st.stl,'Balones robados'); h += row(st.blk,'Bloqueos'); h += row(st.to,'Balones perdidos'); h += row(st.foulC,'Faltas personales'); h += row(st.foulR,'Faltas recibidas'); h += row(effVal,'Eficiencia (EFF)');
+  h += row(st.ast,'Asistencias'); h += row(st.stl,'Balones robados'); h += row(st.blk,'Bloqueos'); h += row(st.to,'Balones perdidos'); h += row(st.foulC,'Faltas personales'); h += row(st.foulR,'Faltas recibidas'); h += row(effVal,'Valoración (VAL)');
   h += '</div>';
   return h;
 }
@@ -6743,7 +6749,7 @@ function shareBoxScore(gid){
   lines.push(g.teamName+' '+teamScore(g)+' – '+rivalScore(g)+' '+(g.rivalName||'Rival'));
   lines.push(g.periodsCount+' '+g.periodLabel.toLowerCase()+(g.periodsCount!==1?'s':'')+(g.finished?' · Final':' · En curso'));
   if(topScorer && topScorer.st.pts>0) lines.push('Máxima anotadora: '+topScorer.p.name+' ('+topScorer.st.pts+' pts)');
-  if(topEff && topEff.eff>0) lines.push('Mejor eficiencia: '+topEff.p.name+' ('+topEff.eff+' EFF)');
+  if(topEff && topEff.eff>0) lines.push('Mejor valoración: '+topEff.p.name+' ('+topEff.eff+' VAL)');
   var text = lines.join('\n');
   if(navigator.share){
     navigator.share({title:'Box score', text:text}).catch(function(){});
@@ -8058,7 +8064,7 @@ var RANK_STATS = [
   {key:'fg2pct', label:'% de 2'},
   {key:'fg3pct', label:'% de 3'},
   {key:'ftpct', label:'% de TL'},
-  {key:'eff_pg', label:'Eficiencia'},
+  {key:'eff_pg', label:'Valoración'},
   {key:'blk_pg', label:'Tapones'},
   {key:'min_pg', label:'Minutos'}
 ];
@@ -8070,13 +8076,13 @@ function aggregatePlayers(games){
       var st = playerStats(g, p.id);
       var mf = minutesFor(g, p.id);
       var key = p.dorsal+'|'+p.name;
-      if(!byKey[key]) byKey[key] = { dorsal:p.dorsal, name:p.name, pts:0, reb:0, rebO:0, rebD:0, ast:0, stl:0, blk:0, to:0, foulC:0, fg2m:0, fg2a:0, fg3m:0, fg3a:0, ftm:0, fta:0, plusMinus:0, gp:0, min:0 };
+      if(!byKey[key]) byKey[key] = { dorsal:p.dorsal, name:p.name, pts:0, reb:0, rebO:0, rebD:0, ast:0, stl:0, blk:0, to:0, foulC:0, foulR:0, fg2m:0, fg2a:0, fg3m:0, fg3a:0, ftm:0, fta:0, plusMinus:0, gp:0, min:0 };
       var a = byKey[key];
-      a.pts += st.pts; a.reb += (st.rebO+st.rebD); a.rebO += st.rebO; a.rebD += st.rebD; a.ast += st.ast; a.stl += st.stl; a.blk += st.blk; a.to += st.to; a.foulC += st.foulC;
+      a.pts += st.pts; a.reb += (st.rebO+st.rebD); a.rebO += st.rebO; a.rebD += st.rebD; a.ast += st.ast; a.stl += st.stl; a.blk += st.blk; a.to += st.to; a.foulC += st.foulC; a.foulR += st.foulR;
       a.fg2m += st.fg2m; a.fg2a += st.fg2a; a.fg3m += st.fg3m; a.fg3a += st.fg3a; a.ftm += st.ftm; a.fta += st.fta;
       a.plusMinus += st.plusMinus;
       a.min += mf.total;
-      if(st.fg2a||st.fg3a||st.fta||st.pts||st.rebO||st.rebD||st.ast||st.stl||st.blk||st.to||st.foulC) a.gp += 1;
+      if(st.fg2a||st.fg3a||st.fta||st.pts||st.rebO||st.rebD||st.ast||st.stl||st.blk||st.to||st.foulC||st.foulR) a.gp += 1;
     });
   });
   var list = Object.keys(byKey).map(function(k){ return byKey[k]; });
@@ -8085,7 +8091,7 @@ function aggregatePlayers(games){
     a.fg3pct = a.fg3a>0 ? Math.round(a.fg3m/a.fg3a*100) : 0;
     a.ftpct = a.fta>0 ? Math.round(a.ftm/a.fta*100) : 0;
     a.fgpct = (a.fg2a+a.fg3a)>0 ? Math.round((a.fg2m+a.fg3m)/(a.fg2a+a.fg3a)*100) : 0;
-    a.eff = eff({pts:a.pts,fg2m:a.fg2m,fg2a:a.fg2a,fg3m:a.fg3m,fg3a:a.fg3a,ftm:a.ftm,fta:a.fta,rebO:a.reb,rebD:0,ast:a.ast,stl:a.stl,blk:a.blk,to:a.to});
+    a.eff = eff({pts:a.pts,fg2m:a.fg2m,fg2a:a.fg2a,fg3m:a.fg3m,fg3a:a.fg3a,ftm:a.ftm,fta:a.fta,rebO:a.reb,rebD:0,ast:a.ast,stl:a.stl,blk:a.blk,to:a.to,foulC:a.foulC,foulR:a.foulR});
     // per-game averages, so comparing players with a different number of games played is fair
     // (used by the radar chart; the text stat cards elsewhere still show season totals)
     a.pts_pg = a.gp>0 ? a.pts/a.gp : 0;
@@ -8228,7 +8234,7 @@ function fmtRankVal(val, isPct){
 }
 // MVP (tarjeta de Inicio): entre las jugadoras con partidos en el periodo
 // elegido -- el mes en curso, la semana en curso, o toda la temporada --
-// la que tiene mejor media de Eficiencia (EFF) por partido. La temporada no
+// la que tiene mejor media de Valoración (VAL) por partido. La temporada no
 // se filtra por mes/semana: son TODOS los partidos de la temporada que se
 // esté viendo (S.games ya viene filtrado a la temporada seleccionada), así
 // que al cerrar la temporada esa media deja de moverse y queda como el MVP
@@ -9429,7 +9435,7 @@ function renderHome(){
         '<span><b>'+fmtRankVal(mvp.pts_pg)+'</b>PTS</span>'+
         '<span><b>'+fmtRankVal(mvp.reb_pg)+'</b>REB</span>'+
         '<span><b>'+fmtRankVal(mvp.ast_pg)+'</b>AST</span>'+
-        '<span><b>'+fmtRankVal(mvp.eff_pg)+'</b>EFF</span>'+
+        '<span><b>'+fmtRankVal(mvp.eff_pg)+'</b>VAL</span>'+
       '</div></div></div></div>';
   } else {
     h += '<div style="font-size:12px;color:var(--text-dim);padding:2px 0">Todavía no hay partidos en este periodo.</div>';
@@ -9516,7 +9522,7 @@ function rankFilterSheetOverlay(){
 function renderMvpHistoryPopup(){
   var mvps = mvpHistoryList(mvpHistoryMode);
   var h = '<div class="veilfull"><div class="sheet">';
-  h += '<div class="sheethead"><div><div class="shtitle">MVP</div><div class="shsub">Por Eficiencia (EFF) media</div></div>'+
+  h += '<div class="sheethead"><div><div class="shtitle">MVP</div><div class="shsub">Por Valoración (VAL) media</div></div>'+
     '<button class="iconbtn" onclick="go(\'home\')">'+icon('x',15)+'</button></div>';
   h += '<div style="padding:12px 20px 0"><div class="seg2">'+
     ['month','week'].map(function(m){
@@ -10065,7 +10071,7 @@ function renderTeamPanelAggregate(games){
 }
 function renderPlayersTableAggregate(games){
   var list = aggregatePlayers(games).sort(function(a,b){ return a.dorsal-b.dorsal; });
-  var cols = ['PJ','MIN','FG','2PT','3PT','FT','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
+  var cols = ['PJ','MIN','FG','2PT','3PT','FT','REB','AST','ROB','TAP','PÉR','FAL','VAL','+/-','PTS'];
   var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
@@ -10261,7 +10267,7 @@ function gameDateKey(g){ return matchDateStr(g); }
    "Jugadores" del box score, pero la celda pegajosa es la del RIVAL (con su
    insignia de jornada/torneo/amistoso y el resultado) en vez de la jugadora. */
 function renderPlayerGameLogTable(games, dorsal, name, me, compFilter){
-  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','EFF','+/-','PTS'];
+  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','VAL','+/-','PTS'];
   function fg(m,a){ return m+'-'+a; }
   // La jornada manda sobre la fecha (puede haber partidos aplazados/adelantados
   // que se jueguen fuera de orden) cuando el filtro es Liga o Torneo -- ambos
@@ -10722,7 +10728,7 @@ function renderComparePlayersPopup(){
   h += pgRow('blk','Tapones / partido', a.blk, b.blk);
   h += pgRow('to','Pérdidas / partido', a.to, b.to);
   h += pgRow('foulC','Faltas / partido', a.foulC, b.foulC);
-  h += pgRow('eff','Eficiencia (EFF) / partido', a.eff, b.eff);
+  h += pgRow('eff','Valoración (VAL) / partido', a.eff, b.eff);
   h += '</div>';
   h += '<div class="cmpfoot">Con el filtro de arriba de Estadísticas · pulsa una fila para desplegar el detalle</div>';
   h += '</div></div></div>';
