@@ -4459,6 +4459,9 @@ function recordTeamStat(type){
       var fname = 'Nº'+fp.dorsal+' '+firstName(fp.name);
       var fTitle = fc>=FOUL_OUT_LIMIT ? '¡'+fc+'ª falta personal!' : fc+'ª falta personal';
       showFoulBanner(fTitle, fname);
+if(fc===FOUL_OUT_LIMIT){
+askConfirm('Jugador con 5 faltas', fname+' ya tiene 5 faltas personales.', 'Cambiar', openSubs, 'Continuar');
+}
     }
   }
   liveOrExit();
