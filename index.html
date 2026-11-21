@@ -6365,7 +6365,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
     var isMvp = mvp && mvp.p.id===r.p.id;
     h += '<tr>';
     h += '<td class="stickycol" style="cursor:pointer" onclick="openMatchPlayerPopup(\''+g.id+'\',\''+r.p.id+'\','+fromGamesFlag+')"><div class="tcell-player">'+(isMvp?('<span style="color:var(--accent);display:flex;flex-shrink:0" title="MVP del partido">'+icon('star',11)+'</span>'):'')+'<span class="dorsal" style="width:22px;height:22px;font-size:11px">'+r.p.dorsal+'</span><span>'+esc(r.p.name)+'</span></div></td>';
-    h += '<td class="numcell">'+r.min+'\' <button class="minbtn" onclick="openMinutes(\''+r.p.id+'\')">'+icon('pencil',10)+'</button></td>';
+    h += '<td class="numcell">'+fmtMinSec(r.min)+' <button class="minbtn" onclick="openMinutes(\''+r.p.id+'\')">'+icon('pencil',10)+'</button></td>';
     h += '<td class="numcell">'+fg(st.fg2m+st.fg3m, st.fg2a+st.fg3a)+'</td>';
     h += '<td class="numcell">'+fg(st.fg2m,st.fg2a)+'</td>';
     h += '<td class="numcell">'+fg(st.fg3m,st.fg3a)+'</td>';
@@ -6394,7 +6394,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
   });
   h += '<tr class="totalrow">'+
     '<td class="stickycol">Total</td>'+
-    '<td>'+tot.min+'\'</td>'+
+    '<td>'+fmtMinSec(tot.min)+'</td>'+
     '<td>'+fg(tot.fg2m+tot.fg3m, tot.fg2a+tot.fg3a)+'</td>'+
     '<td>'+fg(tot.fg2m,tot.fg2a)+'</td>'+
     '<td>'+fg(tot.fg3m,tot.fg3a)+'</td>'+
@@ -6539,7 +6539,7 @@ function renderMatchPlayerPopup(){
   var st = playerStats(g, pid);
   var mf = minutesFor(g, pid);
   var h = '<div class="veilfull"><div class="sheet">';
-  h += '<div class="sheethead"><div><div class="shtitle">'+esc(p.name)+'</div><div class="shsub">Dorsal '+p.dorsal+' &middot; '+mf.total+'\' jugados en este partido</div></div>'+
+  h += '<div class="sheethead"><div><div class="shtitle">'+esc(p.name)+'</div><div class="shsub">Dorsal '+p.dorsal+' &middot; '+fmtMinSec(mf.total)+' jugados en este partido</div></div>'+
     '<button class="iconbtn" onclick="'+backDest+'">'+icon('x',15)+'</button></div>';
   h += '<div class="content">';
   h += renderShotMap(playerZoneStats([g], p.dorsal, p.name));
@@ -8232,6 +8232,15 @@ function rankLeader(list, key, rulesActive){
 function fmtRankVal(val, isPct){
   return isPct ? Math.round(val) : (Math.round(val*10)/10).toLocaleString('es-ES', {minimumFractionDigits:1, maximumFractionDigits:1});
 }
+// Minutos jugados en formato mm:ss (en vez de solo minutos con un
+// apostrofe) -- mismo dato de siempre (sextos completos, o el cronometro
+// opcional si se uso en algun sexto), solo cambia como se muestra.
+function fmtMinSec(totalMin){
+  var m = Math.floor(totalMin);
+  var s = Math.round((totalMin - m) * 60);
+  if(s===60){ s=0; m+=1; }
+  return m+':'+(s<10?'0'+s:s);
+}
 // MVP (tarjeta de Inicio): entre las jugadoras con partidos en el periodo
 // elegido -- el mes en curso, la semana en curso, o toda la temporada --
 // la que tiene mejor media de Valoración (VAL) por partido. La temporada no
@@ -9447,7 +9456,7 @@ function renderHome(){
     var isPct = rs.key.indexOf('pct')!==-1;
     h += '<button class="ranktile" onclick="openRanking(\''+rs.key+'\')"><div class="rt-top"><span class="rt-label">'+rs.label+'</span>'+
       '<svg class="rt-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div>'+
-      '<div class="rt-leader">'+(leader?('<span class="rt-name">'+esc(leader.name)+'</span><span class="rt-val">'+fmtRankVal(leader[rs.key],isPct)+(isPct?'%':'')+'</span>'):'<span class="rt-name" style="color:var(--text-dim)">Sin datos</span>')+'</div>'+
+      '<div class="rt-leader">'+(leader?('<span class="rt-name">'+esc(leader.name)+'</span><span class="rt-val">'+(rs.key==='min_pg'?fmtMinSec(leader[rs.key]):fmtRankVal(leader[rs.key],isPct))+(isPct?'%':'')+'</span>'):'<span class="rt-name" style="color:var(--text-dim)">Sin datos</span>')+'</div>'+
       '</button>';
   });
   h += '</div></div>';
@@ -9483,7 +9492,7 @@ function renderRankingPopup(){
     var detail = detailFor(a);
     return '<div class="lrow'+(i===0 && !dim?' top':'')+(dim?' dim':'')+'"><span class="lrank">'+(dim?'–':(i+1))+'</span><span class="dorsal" style="width:30px;height:30px;font-size:12.5px">'+a.dorsal+'</span>'+
       '<span class="lname">'+esc(a.name)+'</span>'+(detail?'<span class="ldetail">'+detail+'</span>':'')+
-      '<span class="lval">'+fmtRankVal(a[key],isPct)+(isPct?'%':'')+'</span></div>';
+      '<span class="lval">'+(key==='min_pg'?fmtMinSec(a[key]):fmtRankVal(a[key],isPct))+(isPct?'%':'')+'</span></div>';
   }
   qualified.forEach(function(a,i){ h += rowHtml(a, i, false); });
   // Jugadoras con algo de actividad en esta categoría pero que todavía no
@@ -10080,7 +10089,7 @@ function renderPlayersTableAggregate(games){
     var pm = a.plusMinus;
     h += '<tr style="cursor:pointer" onclick="openPlayerRadar(\''+(a.dorsal+'|'+a.name).replace(/\'/g,"\\\\'")+'\',\'stats\')"><td class="stickycol"><div class="tcell-player"><span class="dorsal" style="width:22px;height:22px;font-size:11px">'+a.dorsal+'</span><span>'+esc(a.name)+'</span></div></td>'+
       '<td class="numcell">'+a.gp+'</td>'+
-      '<td class="numcell">'+a.min+'\'</td>'+
+      '<td class="numcell">'+fmtMinSec(a.min)+'</td>'+
       '<td class="numcell">'+fg(a.fg2m+a.fg3m, a.fg2a+a.fg3a)+'</td>'+
       '<td class="numcell">'+fg(a.fg2m,a.fg2a)+'</td>'+
       '<td class="numcell">'+fg(a.fg3m,a.fg3a)+'</td>'+
@@ -10312,7 +10321,7 @@ function renderPlayerGameLogTable(games, dorsal, name, me, compFilter){
         compLine+
         '<span class="rv-date">'+matchDateObj(g).toLocaleDateString('es-ES')+'</span>'+
         '<span class="rv-res '+res+'">'+resLabel+' '+us+'&ndash;'+them+'</span></div></td>'+
-        '<td class="numcell">'+r.min+'\'</td>'+
+        '<td class="numcell">'+fmtMinSec(r.min)+'</td>'+
         '<td class="numcell">'+fg(st.fg2m+st.fg3m, st.fg2a+st.fg3a)+'</td>'+
         '<td class="numcell">'+fg(st.fg2m,st.fg2a)+'</td>'+
         '<td class="numcell">'+fg(st.fg3m,st.fg3a)+'</td>'+
@@ -10332,7 +10341,7 @@ function renderPlayerGameLogTable(games, dorsal, name, me, compFilter){
     });
     var pm = me.plusMinus;
     h += '<tr class="totalrow"><td class="stickycol">Total</td>'+
-      '<td>'+me.min+'\'</td>'+
+      '<td>'+fmtMinSec(me.min)+'</td>'+
       '<td>'+fg(me.fg2m+me.fg3m, me.fg2a+me.fg3a)+'</td>'+
       '<td>'+fg(me.fg2m,me.fg2a)+'</td>'+
       '<td>'+fg(me.fg3m,me.fg3a)+'</td>'+
