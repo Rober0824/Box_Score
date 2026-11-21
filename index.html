@@ -6377,7 +6377,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
     return out + renderRivalPlayersTable(g, periods);
   }
 
-  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FC','FR','VAL','+/-','PTS'];
+  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FC','FR','PTS','+/-','VAL'];
   var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
@@ -6406,9 +6406,9 @@ function renderPlayersTable(g, rows, teamTotal, periods){
     h += '<td class="numcell">'+st.to+'</td>';
     h += '<td class="numcell">'+st.foulC+'</td>';
     h += '<td class="numcell">'+st.foulR+'</td>';
-    h += '<td class="numcell">'+r.eff+'</td>';
-    h += '<td class="numcell pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td>';
     h += '<td class="ptscell">'+st.pts+'</td>';
+    h += '<td class="numcell pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td>';
+    h += '<td class="numcell">'+r.eff+'</td>';
     h += '</tr>';
   });
 
@@ -6428,7 +6428,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
     '<td>'+fg(tot.ftm,tot.fta)+'</td>'+
     '<td>'+tot.rebO+'</td><td>'+tot.rebD+'</td><td>'+(tot.rebO+tot.rebD)+'</td>'+
     '<td>'+tot.ast+'</td><td>'+tot.stl+'</td><td>'+tot.blk+'</td><td>'+tot.to+'</td><td>'+tot.foulC+'</td><td>'+tot.foulR+'</td>'+
-    '<td>'+tot.eff+'</td><td>—</td><td>'+tot.pts+'</td>'+
+    '<td>'+tot.pts+'</td><td>—</td><td>'+tot.eff+'</td>'+
     '</tr>';
 
   // rival row (only meaningful stats when tracked fully; otherwise just points) --
@@ -6451,7 +6451,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
         '<td>'+fg(a.ftM,a.ftA)+'</td>'+
         '<td>'+a.rebO+'</td><td>'+a.rebD+'</td><td>'+(a.rebO+a.rebD)+'</td>'+
         '<td>'+a.ast+'</td><td>'+a.stl+'</td><td>'+a.blk+'</td><td>'+a.to+'</td><td>'+a.foulC+'</td><td>—</td>'+
-        '<td>'+effFromTeamShape(a)+'</td><td>—</td><td>'+rivalPts+'</td>'+
+        '<td>'+rivalPts+'</td><td>—</td><td>'+effFromTeamShape(a)+'</td>'+
         '</tr>';
     } else {
       h += '<tr class="rivalrow"><td class="stickycol">'+esc(g.rivalName||'Rival')+'</td>'+
@@ -6470,7 +6470,7 @@ function renderPlayersTable(g, rows, teamTotal, periods){
    del total del equipo rival y se añade como fila "Total" al final. */
 function renderRivalPlayersTable(g, periods){
   var roster = sortedRivalRoster(g);
-  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','VAL','+/-','PTS'];
+  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','PTS','+/-','VAL'];
   var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora rival</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
@@ -6495,9 +6495,9 @@ function renderRivalPlayersTable(g, periods){
     h += '<td class="numcell">'+st.blk+'</td>';
     h += '<td class="numcell">'+st.to+'</td>';
     h += '<td class="numcell">'+st.foulC+'</td>';
-    h += '<td class="numcell">'+eff(st)+'</td>';
-    h += '<td class="numcell pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td>';
     h += '<td class="ptscell">'+st.pts+'</td>';
+    h += '<td class="numcell pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td>';
+    h += '<td class="numcell">'+eff(st)+'</td>';
     h += '</tr>';
   });
   var a = rivalAggAsTeamShape(g, periods);
@@ -6512,7 +6512,7 @@ function renderRivalPlayersTable(g, periods){
     '<td>'+fg(a.ftM,a.ftA)+'</td>'+
     '<td>'+a.rebO+'</td><td>'+a.rebD+'</td><td>'+(a.rebO+a.rebD)+'</td>'+
     '<td>'+a.ast+'</td><td>'+a.stl+'</td><td>'+a.blk+'</td><td>'+a.to+'</td><td>'+a.foulC+'</td>'+
-    '<td>'+effFromTeamShape(a)+'</td><td>—</td><td>'+rivalPts+'</td>'+
+    '<td>'+rivalPts+'</td><td>—</td><td>'+effFromTeamShape(a)+'</td>'+
     '</tr>';
   h += '</tbody></table></div>';
   return h;
@@ -10116,7 +10116,7 @@ function renderTeamPanelAggregate(games){
 }
 function renderPlayersTableAggregate(games){
   var list = aggregatePlayers(games).sort(function(a,b){ return a.dorsal-b.dorsal; });
-  var cols = ['PJ','MIN','FG','2PT','3PT','FT','REB','AST','ROB','TAP','PÉR','FAL','VAL','+/-','PTS'];
+  var cols = ['PJ','MIN','FG','2PT','3PT','FT','REB','AST','ROB','TAP','PÉR','FAL','PTS','+/-','VAL'];
   var h = '<div class="tablewrap"><table class="stattable"><thead><tr><th class="stickycol">Jugadora</th>';
   cols.forEach(function(c){ h += '<th>'+c+'</th>'; });
   h += '</tr></thead><tbody>';
@@ -10136,9 +10136,9 @@ function renderPlayersTableAggregate(games){
       '<td class="numcell">'+a.blk+'</td>'+
       '<td class="numcell">'+a.to+'</td>'+
       '<td class="numcell">'+a.foulC+'</td>'+
-      '<td class="numcell">'+a.eff+'</td>'+
+      '<td class="ptscell">'+a.pts+'</td>'+
       '<td class="numcell pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td>'+
-      '<td class="ptscell">'+a.pts+'</td></tr>';
+      '<td class="numcell">'+a.eff+'</td></tr>';
   });
   h += '</tbody></table></div>';
   return h;
@@ -10312,7 +10312,7 @@ function gameDateKey(g){ return matchDateStr(g); }
    "Jugadores" del box score, pero la celda pegajosa es la del RIVAL (con su
    insignia de jornada/torneo/amistoso y el resultado) en vez de la jugadora. */
 function renderPlayerGameLogTable(games, dorsal, name, me, compFilter){
-  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','VAL','+/-','PTS'];
+  var cols = ['MIN','FG','2PT','3PT','FT','O-REB','D-REB','REB','AST','ROB','TAP','PÉR','FAL','PTS','+/-','VAL'];
   function fg(m,a){ return m+'-'+a; }
   // La jornada manda sobre la fecha (puede haber partidos aplazados/adelantados
   // que se jueguen fuera de orden) cuando el filtro es Liga o Torneo -- ambos
@@ -10370,9 +10370,9 @@ function renderPlayerGameLogTable(games, dorsal, name, me, compFilter){
         '<td class="numcell">'+st.blk+'</td>'+
         '<td class="numcell">'+st.to+'</td>'+
         '<td class="numcell">'+st.foulC+'</td>'+
-        '<td class="numcell">'+r.eff+'</td>'+
-        '<td class="numcell pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td>'+
         '<td class="ptscell">'+st.pts+'</td>'+
+        '<td class="numcell pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td>'+
+        '<td class="numcell">'+r.eff+'</td>'+
         '</tr>';
     });
     var pm = me.plusMinus;
@@ -10384,7 +10384,7 @@ function renderPlayerGameLogTable(games, dorsal, name, me, compFilter){
       '<td>'+fg(me.ftm,me.fta)+'</td>'+
       '<td>'+me.rebO+'</td><td>'+me.rebD+'</td><td>'+me.reb+'</td>'+
       '<td>'+me.ast+'</td><td>'+me.stl+'</td><td>'+me.blk+'</td><td>'+me.to+'</td><td>'+me.foulC+'</td>'+
-      '<td>'+me.eff+'</td><td class="pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td><td>'+me.pts+'</td>'+
+      '<td>'+me.pts+'</td><td class="pmcell '+(pm>=0?'pos':'neg')+'">'+(pm>=0?'+':'−')+Math.abs(pm)+'</td><td>'+me.eff+'</td>'+
       '</tr>';
   }
   h += '</tbody></table></div>';
