@@ -7009,7 +7009,7 @@ var stepperInner = (minutesEditInput===per)
 var auto = appear[pid] && appear[pid].indexOf(per)!==-1;
     var overridden = ov[pid] && ov[pid][per]!=null;
     h += '<div class="stepperrow"><div class="k">'+esc(g.periodLabel)+' '+per+'<span class="auto">'+(overridden?'Editado a mano':(auto?'Calculado automático':'Sin datos · editar a mano'))+'</span></div>'+
-      '<div class="stepper">+stepperInner+</div></div>';
+      '<div class="stepper">'+stepperInner+'</div></div>';
   }
   h += '<div class="totalsrow" style="margin-top:6px"><div class="tk">Total</div><div class="tv">'+fmtMinSec(mf.total)+'</div></div>';
   h += '</div>';
