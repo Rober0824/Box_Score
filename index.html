@@ -113,6 +113,11 @@
   .stepbtn{ width:32px; height:32px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; }
   .stepbtn:active{ background:var(--border); }
   .stepval{ font-family:'Oswald',sans-serif; font-size:18px; font-weight:600; min-width:34px; text-align:center; }
+.minsec-chip{ font-family:'Oswald',sans-serif; font-size:18px; font-weight:600; display:flex; align-items:center; gap:6px; cursor:pointer; }
+.minsec-input{ width:40px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; color:var(--text); text-align:center; font-family:'Oswald',sans-serif; font-weight:600; font-size:16px; padding:6px 2px; }
+.minsec-input::-webkit-outer-spin-button, .minsec-input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+.minsec-colon{ font-weight:700; color:var(--text-dim); }
+.minsec-ok{ color:#3ecf5e; }
 
   .seg2{ display:flex; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:4px; gap:4px; }
   .seg2 .opt{ flex:1; text-align:center; padding:10px 6px; border-radius:9px; font-size:12.5px; font-weight:700; color:var(--text-dim); }
@@ -5503,8 +5508,8 @@ function pct(m,a){ return a>0 ? (m/a*100).toFixed(1) : '0.0'; }
 function firstWord(s){ return (s||'').split(' ')[0]; }
 
 /* ---------- minutes editing ---------- */
-function openMinutes(pid){ go('minutes', {playerId: pid, gameId: (S.routeParams.gameId||(S.current&&S.current.id)), fromGames: S.routeParams.fromGames}); }
-function openRivalMinutes(pid){ go('minutes', {playerId: pid, gameId: (S.routeParams.gameId||(S.current&&S.current.id)), fromGames: S.routeParams.fromGames, rival:true}); }
+function openMinutes(pid){ minutesEditInput = null; go('minutes', {playerId: pid, gameId: (S.routeParams.gameId||(S.current&&S.current.id)), fromGames: S.routeParams.fromGames}); }
+function openRivalMinutes(pid){ minutesEditInput = null; go('minutes', {playerId: pid, gameId: (S.routeParams.gameId||(S.current&&S.current.id)), fromGames: S.routeParams.fromGames, rival:true}); }
 function stepMinuteOverride(pid, period, delta){
   var g = getGameById(S.routeParams.gameId);
   var isRival = !!S.routeParams.rival;
@@ -5522,9 +5527,31 @@ function stepMinuteOverride(pid, period, delta){
 function saveMinutes(){
   go('box', {gameId: S.routeParams.gameId, fromGames: S.routeParams.fromGames});
 }
+function startMinuteEdit(period){ minutesEditInput = period; render(); }
+function cancelMinuteEdit(){ minutesEditInput = null; render(); }
+function confirmMinuteEdit(period){
+var gid = S.routeParams.gameId;
+var pid = S.routeParams.playerId;
+var isRival = !!S.routeParams.rival;
+var g = getGameById(gid);
+var mEl = document.getElementById('mmin-'+period);
+var sEl = document.getElementById('msec-'+period);
+var mins = parseInt(mEl && mEl.value, 10); if(isNaN(mins)) mins = 0;
+var secs = parseInt(sEl && sEl.value, 10); if(isNaN(secs)) secs = 0;
+mins = Math.max(0, mins);
+secs = Math.max(0, Math.min(59, secs));
+var val = mins + secs/60;
+val = Math.max(0, Math.min(g.periodMinutes, val));
+var ov = isRival ? ensureRivalMinutesOverride(g) : g.minutesOverride;
+if(!ov[pid]) ov[pid] = {};
+ov[pid][period] = val;
+minutesEditInput = null;
+saveState(g); render();
+}
 
 /* ---------- menu ---------- */
 var menuOpen = false;
+var minutesEditInput = null;
 function toggleMenu(){ menuOpen = !menuOpen; render(); }
 function closeMenu(){ menuOpen=false; }
 
@@ -6961,21 +6988,30 @@ function renderMinutes(){
         '<div class="htitles"><div class="title">Minutos por '+esc(g.periodLabel.toLowerCase())+'</div>'+
         '<div class="subtitle">Opcional · se puede rellenar después del partido</div></div>'+
        '</div></div>';
-  h += '<div class="pheader"><div class="av"'+(isRival?' style="background:var(--surface-2);border:1px solid var(--rival);color:var(--rival)"':'')+'>'+p.dorsal+'</div><div><div class="nm">'+esc(isRival?rivalPlayerDisplayName(p):p.name)+'</div><div class="sub">'+mf.total+'\' totales registrados</div></div></div>';
+  h += '<div class="pheader"><div class="av"'+(isRival?' style="background:var(--surface-2);border:1px solid var(--rival);color:var(--rival)"':'')+'>'+p.dorsal+'</div><div><div class="nm">'+esc(isRival?rivalPlayerDisplayName(p):p.name)+'</div><div class="sub">'+fmtMinSec(mf.total)+' totales registrados</div></div></div>';
   h += '<div class="helpbox" style="margin:14px 20px 0">'+(isRival
       ? 'Si marcaste el quinteto rival en pista durante el partido, estos minutos ya vienen <b>calculados automáticamente</b> (periodo completo si estuvo en pista). En partidos antiguos sin ese dato aparecerán a 0 -- puedes ajustarlos a mano.'
       : 'Si registraste los cambios de quinteto en directo, estos minutos ya vienen <b>calculados automáticamente</b> (periodo completo si estuvo en pista). Puedes ajustarlos a mano en cualquier momento.')+'</div>';
   h += '<div class="label" style="padding:20px 20px 10px">Minutos jugados</div>';
   h += '<div class="content" style="padding-top:0">';
   for(var per=1; per<=g.periodsCount; per++){
-    var auto = appear[pid] && appear[pid].indexOf(per)!==-1;
+    var curVal = mf.perPeriod[per]||0;
+var curM = Math.floor(curVal);
+var curS = Math.round((curVal-curM)*60);
+if(curS===60){ curS=0; curM+=1; }
+var stepperInner = (minutesEditInput===per)
+? ('<input id="mmin-'+per+'" type="number" inputmode="numeric" min="0" max="'+g.periodMinutes+'" value="'+curM+'" class="minsec-input">'+
+   '<span class="minsec-colon">:</span>'+
+   '<input id="msec-'+per+'" type="number" inputmode="numeric" min="0" max="59" value="'+(curS<10?('0'+curS):curS)+'" class="minsec-input">'+
+   '<button class="stepbtn minsec-ok" onclick="confirmMinuteEdit('+per+')">'+icon('check',13)+'</button>'+
+   '<button class="stepbtn" onclick="cancelMinuteEdit()">'+icon('x',13)+'</button>')
+: ('<div class="minsec-chip" onclick="startMinuteEdit('+per+')">'+fmtMinSec(curVal)+' '+icon('pencil',12)+'</div>');
+var auto = appear[pid] && appear[pid].indexOf(per)!==-1;
     var overridden = ov[pid] && ov[pid][per]!=null;
     h += '<div class="stepperrow"><div class="k">'+esc(g.periodLabel)+' '+per+'<span class="auto">'+(overridden?'Editado a mano':(auto?'Calculado automático':'Sin datos · editar a mano'))+'</span></div>'+
-      '<div class="stepper"><button class="stepbtn" onclick="stepMinuteOverride(\''+pid+'\','+per+',-1)">'+icon('minus',13)+'</button>'+
-      '<div class="stepval">'+mf.perPeriod[per]+'\'</div>'+
-      '<button class="stepbtn" onclick="stepMinuteOverride(\''+pid+'\','+per+',1)">'+icon('plus',13)+'</button></div></div>';
+      '<div class="stepper">+stepperInner+</div></div>';
   }
-  h += '<div class="totalsrow" style="margin-top:6px"><div class="tk">Total</div><div class="tv">'+mf.total+'\'</div></div>';
+  h += '<div class="totalsrow" style="margin-top:6px"><div class="tk">Total</div><div class="tv">'+fmtMinSec(mf.total)+'</div></div>';
   h += '</div>';
   h += '<div class="ctabar"><button class="cta" onclick="saveMinutes()">Guardar minutos</button></div>';
   return h;
