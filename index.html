@@ -7932,13 +7932,27 @@ async function loadAnalyticsData(){
   if(!sb || !isAdmin()) return;
   analyticsLoading = true; render();
   try{
-    var q = sb.from('screen_visits').select('user_id, route, entered_at, duration_seconds, detail, profiles(id,name,email,role)').order('entered_at', {ascending:false});
-    if(analyticsRangeDays){
-      var cutoff = new Date(Date.now() - analyticsRangeDays*86400000);
-      q = q.gte('entered_at', cutoff.toISOString());
+    // Supabase/PostgREST solo devuelve 1000 filas por llamada como maximo -- con
+    // mas de 1000 visitas guardadas en total, una sola llamada se queda corta y
+    // recorta silenciosamente las visitas mas antiguas (las mas recientes siempre
+    // entran primero porque se pide ordenado por entered_at desc). Para traer TODAS
+    // las filas del periodo elegido (incluido 'Todo'), se pide por paginas de 1000
+    // hasta que una pagina vuelva incompleta.
+    var PAGE_SIZE = 1000;
+    var rows = [];
+    var from = 0;
+    while(true){
+      var q = sb.from('screen_visits').select('user_id, route, entered_at, duration_seconds, detail, profiles(id,name,email,role)').order('entered_at', {ascending:false}).range(from, from+PAGE_SIZE-1);
+      if(analyticsRangeDays){
+        var cutoff = new Date(Date.now() - analyticsRangeDays*86400000);
+        q = q.gte('entered_at', cutoff.toISOString());
+      }
+      var res = await q;
+      var pageRows = (res && res.data) || [];
+      rows = rows.concat(pageRows);
+      if(pageRows.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
     }
-    var res = await q;
-    var rows = (res && res.data) || [];
     var byUser = {};
     var visits = {};
     rows.forEach(function(r){
